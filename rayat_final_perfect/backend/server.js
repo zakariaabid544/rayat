@@ -1,0 +1,208 @@
+const express = require('express');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const path = require('path');
+const jwt = require('jsonwebtoken');
+const { testConnection, query } = require('./config/database');
+const { ensurePlatformSchema } = require('./utils/platform-schema');
+const {
+    extractAdminSessionToken,
+    isPrivilegedAdminRole,
+    normalizeAdminRole
+} = require('./utils/admin-auth');
+
+// Carica variabili ambiente
+dotenv.config();
+
+// Inizializza Express
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors({
+    origin: process.env.CORS_ORIGIN || '*',
+    credentials: true
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Logger middleware
+app.use((req, res, next) => {
+    if (process.env.NODE_ENV !== 'production') {
+        console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    }
+    next();
+});
+
+const rateLimit = require('express-rate-limit');
+
+const iotLimiter = rateLimit({
+  windowMs: 60 * 1000,   // 1 minuto
+  max: 60,               // max 60 richieste per minuto per IP
+  message: { error: 'Troppe richieste, riprova tra un minuto' }
+});
+
+// Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/sensors/simple', require('./routes/simple')); // Simplified API format - registered broad first
+app.use('/api/sensors', require('./routes/sensors'));
+app.use('/api/iot/upload', iotLimiter);
+app.use('/api/iot', require('./routes/iot'));
+app.use('/api/admin', require('./routes/admin'));
+
+const adminIndexPath = path.join(__dirname, '../admin/index.html');
+
+async function requireProtectedAdminPage(req, res, next) {
+    const token = extractAdminSessionToken(req);
+    if (!token) {
+        return res.redirect('/admin/');
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const rows = await query(
+            'SELECT id, role, active FROM users WHERE id = ?',
+            [decoded.id]
+        );
+
+        if (!rows.length || !rows[0].active) {
+            return res.redirect('/admin/');
+        }
+
+        const normalizedRole = normalizeAdminRole(rows[0].role);
+        if (!isPrivilegedAdminRole(normalizedRole)) {
+            return res.redirect('/admin/');
+        }
+
+        req.adminPageUser = {
+            id: rows[0].id,
+            role: normalizedRole
+        };
+        next();
+    } catch (error) {
+        return res.redirect('/admin/');
+    }
+}
+
+app.get(
+    ['/admin/recent-clients', '/admin/recent-clients/', '/admin/recent-clients.html'],
+    requireProtectedAdminPage,
+    (req, res) => {
+        res.sendFile(adminIndexPath);
+    }
+);
+
+// Admin Panel static files
+app.use('/admin', express.static(path.join(__dirname, '../admin')));
+
+// Public site static files (icons, manifest, sw.js, etc.)
+app.use('/icons', express.static(path.join(__dirname, '../icons')));
+app.use(express.static(path.join(__dirname, '../'), {
+    index: false  // we handle / manually below
+}));
+
+// Root → serve the public Rayat site
+app.get(['/', '/login', '/login/', '/register', '/register/', '/demo', '/demo/', '/services', '/services/', '/chi-siamo', '/chi-siamo/', '/contatti', '/contatti/', '/privacy', '/privacy/', '/terms', '/terms/', '/reset-password', '/reset-password/'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../index.html'));
+});
+
+// API info (moved to /api)
+app.get('/api', (req, res) => {
+    res.json({
+        name: 'Rayat IoT API',
+        version: '1.0.0',
+        status: 'running',
+        endpoints: {
+            auth: '/api/auth',
+            sensors: '/api/sensors',
+            iot: '/api/iot'
+        }
+    });
+});
+
+// Health check endpoint
+app.get('/health', async (req, res) => {
+    const dbConnected = await testConnection();
+    res.json({
+        status: 'ok',
+        database: dbConnected ? 'connected' : 'disconnected',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// 404 handler
+app.use((req, res) => {
+    res.status(404).json({ error: 'Endpoint non trovato' });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+    console.error('Error:', err);
+    res.status(500).json({
+        error: 'Errore interno del server',
+        message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+});
+
+// Avvia server
+async function startServer() {
+    try {
+        // Test connessione database
+        const dbConnected = await testConnection();
+
+        if (!dbConnected) {
+            console.warn('⚠️  ATTENZIONE: Database non connesso. Alcune funzionalità potrebbero non funzionare.');
+            console.warn('   Verifica le credenziali in .env e assicurati che MySQL sia in esecuzione.');
+        } else {
+            try {
+                const schemaChanges = await ensurePlatformSchema();
+                if (schemaChanges.length > 0) {
+                    console.log(`🛠️  Schema Rayat aggiornato: ${schemaChanges.join(', ')}`);
+                }
+            } catch (schemaError) {
+                console.warn('⚠️  Impossibile completare l\'allineamento automatico dello schema:', schemaError.message);
+            }
+        }
+
+        // Avvia server
+        app.listen(PORT, () => {
+            console.log('');
+            console.log('🌾 ========================================');
+            console.log('   RAYAT IoT Platform - Backend API');
+            console.log('   ========================================');
+            console.log('');
+            console.log(`   🚀 Server in esecuzione su: http://localhost:${PORT}`);
+            console.log(`   📊 Health check: http://localhost:${PORT}/health`);
+            console.log(`   🔐 Auth endpoint: http://localhost:${PORT}/api/auth`);
+            console.log(`   📡 Sensors endpoint: http://localhost:${PORT}/api/sensors`);
+            console.log(`   🌐 IoT endpoint: http://localhost:${PORT}/api/iot`);
+            console.log('');
+            console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+            console.log(`   Database: ${dbConnected ? '✅ Connected' : '❌ Disconnected'}`);
+            console.log('');
+            console.log('   Premi CTRL+C per fermare il server');
+            console.log('========================================');
+            console.log('');
+        });
+
+    } catch (error) {
+        console.error('❌ Errore avvio server:', error);
+        process.exit(1);
+    }
+}
+
+// Gestione shutdown graceful
+process.on('SIGTERM', () => {
+    console.log('SIGTERM ricevuto, chiusura server...');
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    console.log('\nSIGINT ricevuto, chiusura server...');
+    process.exit(0);
+});
+
+// Avvia server
+startServer();
+
+module.exports = app;
