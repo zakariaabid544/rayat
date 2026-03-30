@@ -455,7 +455,7 @@
                 return {
                     level: 'normal',
                     badge: '',
-                    label: 'Normal',
+                    label: t('statusNormal'),
                     cssModifier: '',
                     borderColor: 'rgba(148, 163, 184, 0.18)',
                     accentColor: '#22c55e'
@@ -466,7 +466,7 @@
                 return {
                     level: 'normal',
                     badge: '',
-                    label: 'Normal',
+                    label: t('statusNormal'),
                     cssModifier: '',
                     borderColor: 'rgba(34, 197, 94, 0.14)',
                     accentColor: '#22c55e'
@@ -478,8 +478,8 @@
 
             return {
                 level: isAlert ? 'alert' : 'attention',
-                badge: isAlert ? '🚨 Alert' : '⚠ Attention',
-                label: isAlert ? 'Alert' : 'Attention',
+                badge: getAlertBadgeLabel(isAlert ? 'alert' : 'attention', true),
+                label: getAlertBadgeLabel(isAlert ? 'alert' : 'attention'),
                 cssModifier: isAlert ? 'rayat-metric-card--alert' : 'rayat-metric-card--attention',
                 borderColor: isAlert ? 'rgba(239, 68, 68, 0.28)' : 'rgba(245, 158, 11, 0.28)',
                 accentColor: isAlert ? '#ef4444' : '#f59e0b'
@@ -790,10 +790,10 @@
                 home: 'Home', services: 'Servizi', aboutUs: 'Chi Siamo', demo: 'Demo', login: 'Accedi', logout: 'Logout',
                 hero: 'Terreno Sano = Raccolto Ricco', heroSub: 'Monitoraggio 24/7 con sensori intelligenti Rayat',
                 heroEyebrow: 'Rayat Smart Monitoring',
-                heroTitleLine1: 'Data-Driven Agriculture.',
-                heroTitleLine2: 'Better Decisions. Better',
-                heroTitleAccent: 'Yields.',
-                heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy — all in one platform.',
+                heroTitleLine1: 'Agricoltura guidata dai dati',
+                heroTitleLine2: 'Decisioni migliori. Raccolti',
+                heroTitleAccent: 'migliori.',
+                heroPlatformSub: 'Monitoraggio IoT avanzato di suolo, clima, acqua ed energia, tutto in un\'unica piattaforma.',
                 tryDemo: 'Prova la Demo', discoverServices: 'Scopri i Servizi', insurance: 'Assicurazione Agricola Rayat Smart Monitoring',
                 ourSensors: 'Tecnologia Rayat', ourReality: 'La Nostra Realtà',
                 ourRealityDesc: 'Rayat nasce dalla passione per l\'agricoltura e dalla profonda comprensione delle sfide che ogni agricoltore affronta. Siamo un team di esperti che porta tecnologia accessibile nei campi.',
@@ -866,6 +866,27 @@
                 whatsappButtonLabel: 'Apri WhatsApp Rayat',
                 optimalRangeFor: 'Range ottimale per',
                 optimalFor: 'Ottimale per',
+                alertBadgeAttention: 'Attenzione',
+                alertBadgeAlert: 'Allarme',
+                activeAlertsTitle: 'Allarmi attivi',
+                activeAlertsSubtitle: 'Eventi recenti legati alla coltura selezionata',
+                batteryVoltageLabel: 'Tensione batteria',
+                batteryTitle: 'Batteria',
+                optimalRangePlain: 'Range ottimale',
+                tempShort: 'Temp',
+                humidityShort: 'Umidita',
+                optimalShort: 'Ottimale',
+                subscriptionExpiringEyebrow: 'Avviso abbonamento',
+                subscriptionExpiringTitle: 'Il tuo piano sta per scadere',
+                subscriptionExpiringText: 'L\'accesso resta attivo, ma l\'abbonamento termina {when}.',
+                subscriptionExpiringSoonText: 'a breve',
+                subscriptionExpiringInDays: 'tra {days} giorni',
+                subscriptionExpiringOnDate: 'il {date}',
+                subscriptionSupportCta: 'Supporto',
+                subscriptionExpiredTitle: 'Abbonamento scaduto',
+                subscriptionExpiredText: 'Il tuo piano di monitoraggio e giunto al termine. Per continuare ad accedere ai dati dei tuoi sensori e ricevere avvisi agronomici in tempo reale, rinnova il tuo abbonamento.',
+                subscriptionRenewWhatsapp: 'Rinnova su WhatsApp',
+                continueWithoutLogin: 'Continua senza login',
                 termsOfService: 'Termini di Servizio',
                 navMenu: 'Menu', mobileMenuClose: 'Chiudi menu',
                 forgotPassword: 'Password dimenticata?', forgotPasswordSubmit: 'Invia link di reset', forgotPasswordSuccess: 'Se l\'account esiste, riceverai un\'email con il link di reset.',
@@ -884,10 +905,10 @@
                 home: 'Home', services: 'Services', aboutUs: 'About Us', demo: 'Demo', login: 'Login', logout: 'Logout',
                 hero: 'Healthy Soil = Rich Harvest', heroSub: 'Monitor your field 24/7 with smart sensors',
                 heroEyebrow: 'Rayat Smart Monitoring',
-                heroTitleLine1: 'Data-Driven Agriculture.',
+                heroTitleLine1: 'Data-Driven Agriculture',
                 heroTitleLine2: 'Better Decisions. Better',
                 heroTitleAccent: 'Yields.',
-                heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy — all in one platform.',
+                heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy, all in one platform.',
                 tryDemo: 'Try Demo', discoverServices: 'Discover Services', insurance: 'Your agricultural insurance - Continuous real-time monitoring',
                 ourSensors: 'Our Sensors', ourReality: 'Our Reality',
                 ourRealityDesc: 'Rayat was born from a passion for agriculture. We are a team of experts bringing accessible innovation to the fields.',
@@ -958,6 +979,27 @@
                 whatsappButtonLabel: 'Open Rayat WhatsApp',
                 optimalRangeFor: 'Optimal range for',
                 optimalFor: 'Optimal for',
+                alertBadgeAttention: 'Attention',
+                alertBadgeAlert: 'Alert',
+                activeAlertsTitle: 'Active alerts',
+                activeAlertsSubtitle: 'Recent events tied to the selected crop',
+                batteryVoltageLabel: 'Battery voltage',
+                batteryTitle: 'Battery',
+                optimalRangePlain: 'Optimal range',
+                tempShort: 'Temp',
+                humidityShort: 'Hum',
+                optimalShort: 'Optimal',
+                subscriptionExpiringEyebrow: 'Subscription notice',
+                subscriptionExpiringTitle: 'Your plan expires soon',
+                subscriptionExpiringText: 'Access stays active, but the subscription ends {when}.',
+                subscriptionExpiringSoonText: 'soon',
+                subscriptionExpiringInDays: 'in {days} day(s)',
+                subscriptionExpiringOnDate: 'on {date}',
+                subscriptionSupportCta: 'Support',
+                subscriptionExpiredTitle: 'Subscription expired',
+                subscriptionExpiredText: 'Your monitoring plan has ended. To keep accessing sensor data and real-time agronomic alerts, renew your subscription.',
+                subscriptionRenewWhatsapp: 'Renew on WhatsApp',
+                continueWithoutLogin: 'Continue without login',
                 termsOfService: 'Terms of Service',
                 navMenu: 'Menu', mobileMenuClose: 'Close menu',
                 forgotPassword: 'Forgot password?', forgotPasswordSubmit: 'Send reset link', forgotPasswordSuccess: 'If the account exists, you will receive an email with the reset link.',
@@ -976,10 +1018,10 @@
                 home: 'Accueil', services: 'Services', aboutUs: 'Qui Sommes-Nous', demo: 'Démo', login: 'Connexion', logout: 'Déconnexion',
                 hero: 'Sol Sain = Récolte Riche', heroSub: 'Surveillance 24h/24 avec capteurs intelligents Rayat',
                 heroEyebrow: 'Rayat Smart Monitoring',
-                heroTitleLine1: 'Data-Driven Agriculture.',
-                heroTitleLine2: 'Better Decisions. Better',
-                heroTitleAccent: 'Yields.',
-                heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy — all in one platform.',
+                heroTitleLine1: 'Agriculture pilotee par les donnees',
+                heroTitleLine2: 'Meilleures decisions. Meilleurs',
+                heroTitleAccent: 'rendements.',
+                heroPlatformSub: 'Surveillance IoT avancee du sol, du climat, de l\'eau et de l\'energie, dans une seule plateforme.',
                 tryDemo: 'Tester la Démo', discoverServices: 'Nos Services', insurance: 'Assurance Agricole Rayat Smart Monitoring',
                 ourSensors: 'Technologie Rayat', ourReality: 'Notre Réalité',
                 ourRealityDesc: 'Rayat est né d\'une passion pour l\'agriculture. Nous sommes une équipe d\'experts apportant une innovation accessible directement aux champs.',
@@ -1048,8 +1090,29 @@
                 whatsappSectionText: 'Écrivez-nous pour obtenir des informations, du support ou demander une démo Rayat. Nous sommes disponibles par message, note vocale ou appel direct. Nous répondons rapidement.',
                 whatsappSectionButton: 'Écrire sur WhatsApp',
                 whatsappButtonLabel: 'Ouvrir WhatsApp Rayat',
-                optimalRangeFor: 'Plage optimale pour',
-                optimalFor: 'Optimal pour',
+                optimalRangeFor: 'Plage ideale pour',
+                optimalFor: 'Ideal pour',
+                alertBadgeAttention: 'Attention',
+                alertBadgeAlert: 'Alerte',
+                activeAlertsTitle: 'Alertes actives',
+                activeAlertsSubtitle: 'Evenements recents lies a la culture choisie',
+                batteryVoltageLabel: 'Tension batterie',
+                batteryTitle: 'Batterie',
+                optimalRangePlain: 'Plage optimale',
+                tempShort: 'Temp',
+                humidityShort: 'Hum',
+                optimalShort: 'Optimal',
+                subscriptionExpiringEyebrow: 'Avis abonnement',
+                subscriptionExpiringTitle: 'Votre forfait expire bientot',
+                subscriptionExpiringText: 'L\'acces reste actif, mais l\'abonnement se termine {when}.',
+                subscriptionExpiringSoonText: 'bientot',
+                subscriptionExpiringInDays: 'dans {days} jour(s)',
+                subscriptionExpiringOnDate: 'le {date}',
+                subscriptionSupportCta: 'Support',
+                subscriptionExpiredTitle: 'Abonnement expire',
+                subscriptionExpiredText: 'Votre forfait de surveillance est arrive a son terme. Pour continuer a acceder aux donnees des capteurs et aux alertes agronomiques en temps reel, renouvelez votre abonnement.',
+                subscriptionRenewWhatsapp: 'Renouveler sur WhatsApp',
+                continueWithoutLogin: 'Continuer sans connexion',
                 termsOfService: 'Conditions d\'utilisation',
                 navMenu: 'Menu', mobileMenuClose: 'Fermer le menu',
                 forgotPassword: 'Mot de passe oublié ?', forgotPasswordSubmit: 'Envoyer le lien de reinitialisation', forgotPasswordSuccess: 'Si le compte existe, vous recevrez un email avec le lien de reinitialisation.',
@@ -1068,10 +1131,10 @@
                 home: 'الرئيسية', services: 'الخدمات', aboutUs: 'من نحن', demo: 'تجريبي', login: 'دخول', logout: 'خروج',
                 hero: 'تربة صحية = حصاد غني', heroSub: 'مراقبة 24/7 بأجهزة استشعار رايات الذكية',
                 heroEyebrow: 'Rayat Smart Monitoring',
-                heroTitleLine1: 'Data-Driven Agriculture.',
-                heroTitleLine2: 'Better Decisions. Better',
-                heroTitleAccent: 'Yields.',
-                heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy — all in one platform.',
+                heroTitleLine1: 'زراعة مدفوعة بالبيانات',
+                heroTitleLine2: 'قرارات أفضل. محاصيل',
+                heroTitleAccent: 'أفضل.',
+                heroPlatformSub: 'مراقبة IoT متقدمة للتربة والمناخ والمياه والطاقة في منصة واحدة.',
                 tryDemo: 'تجريب النسخة', discoverServices: 'خدماتنا', insurance: 'تأمينك الزراعي مع رايات',
                 ourSensors: 'تكنولوجيا رايات', ourReality: 'واقعنا',
                 ourRealityDesc: 'ولدت رايات من شغف بالزراعة. نحن فريق من الخبراء نجلب الابتكار المتاح إلى الحقول.',
@@ -1142,6 +1205,27 @@
                 whatsappButtonLabel: 'افتح واتساب رايات',
                 optimalRangeFor: 'النطاق المثالي لـ',
                 optimalFor: 'المثالي لـ',
+                alertBadgeAttention: 'انتباه',
+                alertBadgeAlert: 'إنذار',
+                activeAlertsTitle: 'الإنذارات النشطة',
+                activeAlertsSubtitle: 'أحدث الأحداث المرتبطة بالمحصول المختار',
+                batteryVoltageLabel: 'جهد البطارية',
+                batteryTitle: 'البطارية',
+                optimalRangePlain: 'النطاق المثالي',
+                tempShort: 'حرارة',
+                humidityShort: 'رطوبة',
+                optimalShort: 'مثالي',
+                subscriptionExpiringEyebrow: 'تنبيه الاشتراك',
+                subscriptionExpiringTitle: 'ستنتهي خطتك قريبًا',
+                subscriptionExpiringText: 'لا يزال الوصول فعالًا، لكن الاشتراك ينتهي {when}.',
+                subscriptionExpiringSoonText: 'قريبًا',
+                subscriptionExpiringInDays: 'خلال {days} يوم',
+                subscriptionExpiringOnDate: 'في {date}',
+                subscriptionSupportCta: 'الدعم',
+                subscriptionExpiredTitle: 'انتهى الاشتراك',
+                subscriptionExpiredText: 'انتهت خطة المراقبة الخاصة بك. لمواصلة الوصول إلى بيانات المستشعرات والتنبيهات الزراعية الفورية، جدد اشتراكك.',
+                subscriptionRenewWhatsapp: 'جدد عبر واتساب',
+                continueWithoutLogin: 'المتابعة بدون تسجيل',
                 navMenu: 'القائمة', mobileMenuClose: 'إغلاق القائمة',
                 forgotPassword: 'هل نسيت كلمة المرور؟', forgotPasswordSubmit: 'إرسال رابط إعادة التعيين', forgotPasswordSuccess: 'إذا كان الحساب موجودا فستصلك رسالة تحتوي على رابط إعادة التعيين.',
                 forgotPasswordEmailRequired: 'أدخل بريدك الإلكتروني للحصول على رابط إعادة التعيين.',
@@ -1165,10 +1249,10 @@
                 hero: 'ⴰⴽⴰⵍ ⵉⵖⵓⴷⴰⵏ = ⴰⵎⴳⵔ ⵉⵖⵓⴷⴰⵏ',
                 heroSub: 'ⵀⴰⵏⴰ ⴽⵓⵍⵍⵓ',
                 heroEyebrow: 'Rayat Smart Monitoring',
-                heroTitleLine1: 'Data-Driven Agriculture.',
-                heroTitleLine2: 'Better Decisions. Better',
-                heroTitleAccent: 'Yields.',
-                heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy — all in one platform.',
+                heroTitleLine1: 'ⵜⴰⴼⵍⵍⴰⵃⵜ ⵙ ⵉⵙⴼⴽⴰ',
+                heroTitleLine2: 'ⵉⵖⵣⵣⵉⵏ ⵉⴼⵓⵍⴽⵉⵏⵜ. ⴰⵎⴳⵔ',
+                heroTitleAccent: 'ⵉⴼⵓⵍⴽⵉⵏ.',
+                heroPlatformSub: 'ⵜⴰⴳⴳⴰ IoT i wakal, anzwi, aman d tazmert deg yiwen umkan.',
                 insurance: 'ⵍⴰⵙⵉⵔⵓⵏⵙ ⵏ ⵜⴼⵍⵍⴰⵃⵜ',
                 tryDemo: 'ⴰⵔⴰⵎ ⴷⵉⵎⵓ',
                 discoverServices: 'ⵥⵕ ⵉⵎⴰⵣⵣⴰⵍⵏ',
@@ -1235,7 +1319,7 @@
                 sensorSoF6: 'Phosphore',
                 sensorSoF7: 'Potassium',
                 sensorClName: 'ⴰⵏⵣⵡⵉ',
-                sensorClDesc: 'Climate Monitoring - Rayat Smart Monitoring',
+                sensorClDesc: 'ⵜⴰⴳⴳⴰ ⵏ ⴰⵏⵣⵡⵉ - Rayat Smart Monitoring',
                 sensorClF1: 'Alerte gel SMS',
                 sensorClF2: 'Prévision évaporation',
                 sensorClF3: 'Vitesse vent',
@@ -1318,7 +1402,7 @@
                 windSpeed: 'ⴰⴹⵓ <span class="text-xs text-gray-500">Rih</span>',
                 realTimeMonitoring: 'ⴰⵍⵖⵓ ⵏ ⵜⵎⴰⵢⵏⵓⵜ',
                 last7Days: '7 ⵓⵙⵙⴰⵏ',
-                dataUnavailable: 'ⵉⵙⴼⴽⴰ ⵓⵔ ⵍⵍⵉⵏ <span class="text-[10px] block">Data Unavailable</span>',
+                dataUnavailable: 'ⵉⵙⴼⴽⴰ ⵓⵔ ⵍⵍⵉⵏ',
                 privacyPolicy: 'ⵜⴰⵙⵔⵜⵉⵜ ⵏ ⵜⵉⵏⵏⵓⵜⴼⴰ',
                 termsOfService: 'ⵜⵉⴼⴰⴷⵉⵡⵉⵏ ⵏ ⵓⵙⵎⵔⵙ',
                 regStep: 'ⵜⴰⵙⴽⵯⴼⵍⵜ', regOf: 'ⵙⴳ', regPersonalData: 'ⵉⵙⴼⴽⴰ ⵉⵢⵉⵎⴰⵏ', regAgriType: 'ⴰⵙⵉⴳⴳⵯⵍ ⴰⴳⵔⵉⴽⵓⵍ', regFieldLoc: 'ⴰⴷⵖⴰⵔ ⵏ ⵓⴽⴰⵍ',
@@ -1352,6 +1436,27 @@
                 whatsappButtonLabel: 'ⵍⴷ WhatsApp ⵏ Rayat',
                 optimalRangeFor: 'ⴰⵣⵍⴰⵢ ⵉⵖⵓⴷⴰⵏ ⵉ',
                 optimalFor: 'ⵉⵖⵓⴷⴰⵏ ⵉ',
+                alertBadgeAttention: 'ⵔⴷ ⵍⴱⴰⵍ',
+                alertBadgeAlert: 'ⴰⵍⵖⵓ',
+                activeAlertsTitle: 'ⴰⵍⵖⵓⵏ ⵉⵔⴳⴳⴰⵏ',
+                activeAlertsSubtitle: 'ⵉⵎⵣⵣⵓⵔⵉⵏ ⵉⵇⵔⵉⴱⵏ ⵉ ⵜⵎⴳⵔⵜ ⵉⵜⵜⵓⴼⵔⴰⵏ',
+                batteryVoltageLabel: 'ⵜⵉⵥⴹⵉ ⵏ ⵜⴱⴰⵟⵟⵔⵉ',
+                batteryTitle: 'ⵜⴱⴰⵟⵟⵔⵉ',
+                optimalRangePlain: 'ⴰⵣⵍⴰⵢ ⵉⵖⵓⴷⴰⵏ',
+                tempShort: 'Temp',
+                humidityShort: 'Hum',
+                optimalShort: 'Opt',
+                subscriptionExpiringEyebrow: 'ⴰⵍⵖⵓ ⵏ ⵓⴱⵓⵏⵎⴰⵏ',
+                subscriptionExpiringTitle: 'ⴰⴱⵍⴰⵏ ⵏⵏⴽ ⴰⴷ ⵉⴼⴼⵓⴽ',
+                subscriptionExpiringText: 'ⴰⴽⵛⵓⵎ ⵎⴰⵣⴰⵍ, ⵎⴰⵛⴰ ⴰⴱⵓⵏⵎⴰⵏ ⵉⵜⵜⴼⴽⴰ {when}.',
+                subscriptionExpiringSoonText: 'ⴷⵖⵉ',
+                subscriptionExpiringInDays: 'ⴳ {days} ⵓⵙⵙⴰⵏ',
+                subscriptionExpiringOnDate: 'ⴳ {date}',
+                subscriptionSupportCta: 'Support',
+                subscriptionExpiredTitle: 'ⴰⴱⵓⵏⵎⴰⵏ ⵉⴼⴼⵓⴽ',
+                subscriptionExpiredText: 'ⴰⴱⵍⴰⵏ ⵏ ⵜⴰⴳⴳⴰ ⵉⴼⴼⵓⴽ. ⵉⵡⴽⴽⵉⵍ ad tkemmed igh data n sensors d alerts agronomiques, jedded l\'abonnement inek.',
+                subscriptionRenewWhatsapp: 'ⵊⴷⴷⴻⴷ ⵙ WhatsApp',
+                continueWithoutLogin: 'ⴽⵎⵎⵍ ⴱⵍⴰ login',
                 navMenu: 'ⵎⵉⵏⵓ', mobileMenuClose: 'ⵎⴷⵍ ⵎⵉⵏⵓ',
                 forgotPassword: 'Mot de passe oublie ?', forgotPasswordSubmit: 'Azen lien n reinitialisation', forgotPasswordSuccess: 'Ma yella lcompte illa, ad tawed email s lien n reinitialisation.',
                 forgotPasswordEmailRequired: 'Ari email inek iwakken ad tawsed lien n reinitialisation.',
@@ -1374,6 +1479,59 @@
                 val = translations['fr'][key];
             }
             return val || key;
+        }
+
+        function getLocaleForCurrentLanguage() {
+            const locales = {
+                it: 'it-IT',
+                en: 'en-US',
+                fr: 'fr-FR',
+                ar: 'ar-MA',
+                zgh: 'tzm-MA'
+            };
+
+            return locales[currentLang] || 'it-IT';
+        }
+
+        function formatLocalizedDate(date) {
+            return date.toLocaleDateString(getLocaleForCurrentLanguage());
+        }
+
+        function formatLocalizedTime(date) {
+            return date.toLocaleTimeString(getLocaleForCurrentLanguage(), {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function formatTemplate(template, tokens = {}) {
+            return String(template || '').replace(/\{(\w+)\}/g, (_, key) => tokens[key] ?? '');
+        }
+
+        function getAlertBadgeLabel(level, withIcon = false) {
+            if (level === 'alert') {
+                return `${withIcon ? '🚨 ' : ''}${t('alertBadgeAlert')}`;
+            }
+
+            if (level === 'attention') {
+                return `${withIcon ? '⚠ ' : ''}${t('alertBadgeAttention')}`;
+            }
+
+            return t('statusNormal');
+        }
+
+        function syncStaticI18n() {
+            document.documentElement.lang = currentLang;
+            document.documentElement.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
+
+            document.querySelectorAll('[data-i18n]').forEach((element) => {
+                const key = element.getAttribute('data-i18n');
+                if (!key) {
+                    return;
+                }
+
+                element.textContent = t(key);
+            });
         }
 
         function escapeHtml(value) {
@@ -1691,7 +1849,7 @@
                     </div>
                     <div class="flex justify-between text-[10px] text-gray-500 mt-0.5">
                         <span>${min}${unit}</span>
-                        <span class="text-green-600 font-semibold">Opt: ${optimalMin}-${hasMaxOptimal ? optimalMax : '∞'}${unit}</span>
+                        <span class="text-green-600 font-semibold">${t('optimalShort')}: ${optimalMin}-${hasMaxOptimal ? optimalMax : '∞'}${unit}</span>
                         <span>${max}${unit}</span>
                     </div>
                 </div>`;
@@ -1707,14 +1865,14 @@
             if (level === 'alert') {
                 return {
                     className: 'bg-red-100 text-red-700',
-                    label: '🚨 Alert'
+                    label: getAlertBadgeLabel('alert', true)
                 };
             }
 
             if (level === 'attention') {
                 return {
                     className: 'bg-amber-100 text-amber-700',
-                    label: '⚠ Attention'
+                    label: getAlertBadgeLabel('attention', true)
                 };
             }
 
@@ -1742,7 +1900,7 @@
 
         function renderHistoryStatusCell(level, fallback = t('statusNormal')) {
             const badge = getStatusBadge(level, fallback);
-            return `<td class="p-8 text-right"><span class="px-4 py-2 ${badge.className} rounded-xl font-black text-[10px] uppercase tracking-widest">${badge.label}</span></td>`;
+            return `<td class="rayat-history-status-cell"><span class="rayat-history-status-badge ${badge.className}">${badge.label}</span></td>`;
         }
 
         function renderMetricCard(group, metric, options = {}) {
@@ -1756,13 +1914,11 @@
             return `
                 <article class="rayat-metric-card ${state.cssModifier}">
                     <div class="rayat-metric-card-head mb-4">
-                        <div class="rayat-metric-card-copy">
-                            <div class="flex items-center gap-3">
-                                <span class="text-3xl">${metric.icon}</span>
-                                <div>
-                                    <p class="rayat-metric-card-title">${t(metric.label)}</p>
-                                    <p class="rayat-metric-card-state ${getLevelClass(state.level)}">${state.label}</p>
-                                </div>
+                        <div class="rayat-metric-card-header-main">
+                            <span class="rayat-metric-card-icon">${metric.icon}</span>
+                            <div class="rayat-metric-card-copy">
+                                <p class="rayat-metric-card-title">${t(metric.label)}</p>
+                                <p class="rayat-metric-card-state ${getLevelClass(state.level)}">${state.label}</p>
                             </div>
                         </div>
                         ${state.badge ? `<span class="rayat-alert-badge ${state.level === 'alert' ? 'rayat-alert-badge--alert' : 'rayat-alert-badge--attention'}">${state.badge}</span>` : ''}
@@ -1780,7 +1936,7 @@
                             <span>${formatMetricValue(gauge.max)}${unit ? ` ${unit}` : ''}</span>
                         </div>
                     ` : ''}
-                    <p class="mt-4 text-sm leading-relaxed ${state.level === 'normal' ? 'text-slate-500' : getLevelClass(state.level)}">${rangeLabel}</p>
+                    <p class="rayat-metric-card-range ${state.level === 'normal' ? 'text-slate-600' : getLevelClass(state.level)}">${rangeLabel}</p>
                 </article>
             `;
         }
@@ -1842,15 +1998,15 @@
                 sensorType: 'energia',
                 sensorSubtype: SENSOR_SUBTYPE_MAP.energy.voltage,
                 param: 'voltage',
-                label: 'Battery Voltage',
+                label: t('batteryVoltageLabel'),
                 value: energyValue,
                 unit: energyRange.unit,
                 level: energyState.level,
                 optimalMin: energyRange.min,
                 optimalMax: energyRange.max,
                 crop: null,
-                title: `${t(sensorData.energia.nome)} • Battery`,
-                description: `Optimal range: ${formatMetricValue(energyRange.min)} – ${formatMetricValue(energyRange.max)} ${energyRange.unit}`
+                title: `${t(sensorData.energia.nome)} • ${t('batteryTitle')}`,
+                description: `${t('optimalRangePlain')}: ${formatMetricValue(energyRange.min)} – ${formatMetricValue(energyRange.max)} ${energyRange.unit}`
             });
 
             const numDays = filterState.period === '7d' ? 7 : (filterState.period === '30d' ? 30 : 1);
@@ -1926,8 +2082,8 @@
                 <section class="rayat-dashboard-alert-feed">
                     <div class="flex items-center justify-between gap-4 mb-5">
                         <div>
-                            <p class="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">Alert Attivi</p>
-                            <h5 class="text-2xl font-black text-slate-900">Recent crop-aware events</h5>
+                            <p class="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">${t('activeAlertsTitle')}</p>
+                            <h5 class="text-2xl font-black text-slate-900">${t('activeAlertsSubtitle')}</h5>
                         </div>
                         <span class="text-sm font-bold text-slate-500">${relevantAlerts.length}</span>
                     </div>
@@ -1939,7 +2095,7 @@
                                         <p class="font-black text-slate-900">${escapeHtml(alert.title)}</p>
                                         <p class="text-sm text-slate-500 mt-1">${escapeHtml(alert.description)}</p>
                                     </div>
-                                    <span class="text-xs font-black uppercase tracking-[0.16em] ${alert.level === 'alert' ? 'text-red-600' : 'text-amber-600'}">${alert.level === 'alert' ? 'Alert' : 'Attention'}</span>
+                                    <span class="text-xs font-black uppercase tracking-[0.16em] ${alert.level === 'alert' ? 'text-red-600' : 'text-amber-600'}">${getAlertBadgeLabel(alert.level)}</span>
                                 </div>
                             </button>
                         `).join('')}
@@ -2601,18 +2757,21 @@
                 return '';
             }
 
+            const whenText = subscriptionUiState.daysRemaining != null
+                ? formatTemplate(t('subscriptionExpiringInDays'), { days: subscriptionUiState.daysRemaining })
+                : t('subscriptionExpiringSoonText');
             const expiryText = subscriptionUiState.expiryDate
-                ? subscriptionUiState.expiryDate.toLocaleDateString()
+                ? ` ${formatTemplate(t('subscriptionExpiringOnDate'), { date: formatLocalizedDate(subscriptionUiState.expiryDate) })}`
                 : '';
 
             return `
                 <div class="rayat-soft-banner mb-8">
                     <div>
-                        <p class="text-[11px] font-black uppercase tracking-[0.28em] text-amber-700">Subscription notice</p>
-                        <h4 class="text-xl font-black text-slate-900 mt-2">Your plan expires soon</h4>
-                        <p class="text-sm text-slate-600 mt-2">Access stays active, but the subscription ends ${subscriptionUiState.daysRemaining != null ? `in ${subscriptionUiState.daysRemaining} day(s)` : 'soon'}${expiryText ? ` on ${expiryText}` : ''}.</p>
+                        <p class="text-[11px] font-black uppercase tracking-[0.28em] text-amber-700">${t('subscriptionExpiringEyebrow')}</p>
+                        <h4 class="text-xl font-black text-slate-900 mt-2">${t('subscriptionExpiringTitle')}</h4>
+                        <p class="text-sm text-slate-600 mt-2">${formatTemplate(t('subscriptionExpiringText'), { when: `${whenText}${expiryText}`.trim() })}</p>
                     </div>
-                    <button onclick="openSupportWhatsapp()" class="mt-4 inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-black px-5 py-3 rounded-2xl transition">Support</button>
+                    <button onclick="openSupportWhatsapp()" class="mt-4 inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-black px-5 py-3 rounded-2xl transition">${t('subscriptionSupportCta')}</button>
                 </div>
             `;
         }
@@ -2722,8 +2881,8 @@
                         <div class="rayat-hero-shell">
                             <div class="rayat-hero-kicker">${t('heroEyebrow')}</div>
                             <h1 class="rayat-hero-title rayat-fade-up">
-                                <span>${t('heroTitleLine1')}</span>
-                                <span>${t('heroTitleLine2')} <span class="rayat-hero-accent">${t('heroTitleAccent')}</span></span>
+                                <span class="rayat-hero-title-line rayat-hero-title-line--primary">${t('heroTitleLine1')}</span>
+                                <span class="rayat-hero-title-line rayat-hero-title-line--secondary">${t('heroTitleLine2')} <span class="rayat-hero-accent">${t('heroTitleAccent')}</span></span>
                             </h1>
                             <p class="rayat-hero-subtitle rayat-fade-in">${t('heroPlatformSub')}</p>
                             <p class="text-base md:text-lg mb-8 text-green-100 font-semibold">✅ ${t('insurance')}</p>
@@ -2815,29 +2974,32 @@
                             </div>
                         </div>
 
-                        <div class="relative bg-white p-2 rounded-[2.5rem] shadow-2xl overflow-hidden border-4 border-white rayat-map-shell">
-                            <div id="home-map" style="height: 600px; width: 100%; z-index: 10;" class="rounded-[2rem]"></div>
-                            
-                            <!-- Legend -->
-                            <div class="absolute bottom-12 left-12 z-[1000] bg-white/90 backdrop-blur-md p-6 rounded-3xl shadow-2xl border border-white/50 space-y-4 rayat-home-map-legend">
-                                <div class="flex items-center gap-4">
-                                    <div class="w-4 h-4 marker-online shadow-none"></div>
-                                    <span class="text-xs font-black text-gray-700 uppercase tracking-widest">${t('mapLegendOnline')}</span>
-                                </div>
-                                <div class="flex items-center gap-4">
-                                    <div class="w-4 h-4 bg-gray-300 border border-white rounded-full"></div>
-                                    <span class="text-xs font-black text-gray-500 uppercase tracking-widest">${t('mapLegendOffline')}</span>
-                                </div>
-                                <div class="h-[1px] bg-gray-200 my-2"></div>
-                                <div class="flex items-center gap-4">
-                                    <div class="w-5 h-5 bg-green-100 border-2 border-green-300 rounded-lg"></div>
-                                    <span class="text-[10px] font-black text-green-700 uppercase tracking-widest">${t('mapFocusArea')}: Souss-Massa</span>
+                        <div class="bg-white p-2 rounded-[2.5rem] shadow-2xl overflow-hidden border-4 border-white rayat-map-shell rayat-home-map-card">
+                            <div class="rayat-home-map-header">
+                                <div class="rayat-home-map-badge">
+                                    📍 ${t('mapFocusArea')}: Souss-Massa
                                 </div>
                             </div>
 
-                            <!-- Floating Badge -->
-                            <div class="absolute top-8 right-8 z-[1000] bg-orange-600 text-white px-8 py-3 rounded-full font-black uppercase tracking-widest text-xs shadow-2xl animate-bounce rayat-home-map-badge">
-                                📍 Forte presenza in Souss-Massa
+                            <div class="relative rayat-home-map-canvas">
+                                <div id="home-map" style="height: 600px; width: 100%; z-index: 10;" class="rounded-[2rem]"></div>
+                            
+                                <!-- Legend -->
+                                <div class="absolute bottom-12 left-12 z-[1000] bg-white/90 backdrop-blur-md p-6 rounded-3xl shadow-2xl border border-white/50 space-y-4 rayat-home-map-legend">
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-4 h-4 marker-online shadow-none"></div>
+                                        <span class="text-xs font-black text-gray-700 uppercase tracking-widest">${t('mapLegendOnline')}</span>
+                                    </div>
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-4 h-4 bg-gray-300 border border-white rounded-full"></div>
+                                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">${t('mapLegendOffline')}</span>
+                                    </div>
+                                    <div class="h-[1px] bg-gray-200 my-2"></div>
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-5 h-5 bg-green-100 border-2 border-green-300 rounded-lg"></div>
+                                        <span class="text-[10px] font-black text-green-700 uppercase tracking-widest">${t('mapFocusArea')}: Souss-Massa</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3710,6 +3872,12 @@
             return `
                 <footer class="bg-black text-white py-16 text-center safe-area-bottom">
                     <div class="container mx-auto px-4">
+                        <div class="flex justify-center items-center space-x-3 mb-6">
+                            <img src="icons/tree-silver.png" alt="Rayat Logo"
+                                 class="h-14 w-auto"
+                                 style="filter:brightness(0) invert(1);" />
+                            <h2 class="text-4xl font-black tracking-tighter text-white">RAYAT</h2>
+                        </div>
                         <nav class="rayat-footer-primary-nav">
                             ${primaryFooterLinks.map((link, index) => `
                                 <button onclick="${link.tracked ? `setViewWithTracking('${link.view}')` : `setView('${link.view}')`}" class="rayat-footer-primary-link">
@@ -3718,13 +3886,7 @@
                                 ${index < primaryFooterLinks.length - 1 ? '<span class="rayat-footer-divider" aria-hidden="true">|</span>' : ''}
                             `).join('')}
                         </nav>
-                        <div class="flex justify-center items-center space-x-3 mb-6">
-                            <img src="icons/tree-silver.png" alt="Rayat Logo"
-                                 class="h-14 w-auto"
-                                 style="filter:brightness(0) invert(1);" />
-                            <h2 class="text-4xl font-black tracking-tighter text-white">RAYAT</h2>
-                        </div>
-                        <nav class="flex justify-center space-x-6 mb-8 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                        <nav class="rayat-footer-legal-nav">
                             <a href="#" onclick="trackNavigationEvent('contatti'); setView('contatti')" class="hover:text-orange-500 transition uppercase">${t('contactTitle')}</a>
                             <a href="#" onclick="setView('privacy')" class="hover:text-orange-500 transition">${t('privacyPolicy') || 'Privacy Policy'}</a>
                             <a href="#" onclick="setView('terms')" class="hover:text-orange-500 transition">${t('termsOfService') || 'Terms of Service'}</a>
@@ -3925,7 +4087,7 @@
                                     <div class="ml-auto text-right pr-4 shrink-0 whitespace-nowrap flex items-center gap-3">
                                         <div>
                                             <p class="text-[9px] font-bold text-gray-400 uppercase tracking-tight leading-none">${t('lastRefreshed')}:</p>
-                                            <p class="text-[11px] font-bold text-gray-600 leading-tight">${lastRefreshed.toLocaleTimeString()}</p>
+                                            <p class="text-[11px] font-bold text-gray-600 leading-tight">${formatLocalizedTime(lastRefreshed)}</p>
                                         </div>
                                         <button onclick="refreshData()" class="p-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition border border-gray-100 group">
                                             <span class="text-sm block" id="refresh-btn-icon-small">🔄</span>
@@ -3934,19 +4096,19 @@
                             </div>
 
                             <!-- Dynamic History Table -->
-                            <div class="bg-white rounded-[4rem] p-12 shadow-2xl border border-gray-50 overflow-hidden">
-                                <div class="overflow-x-auto">
-                                    <table class="w-full text-left">
+                            <div class="rayat-history-card bg-white rounded-[4rem] p-12 shadow-2xl border border-gray-50 overflow-hidden">
+                                <div class="rayat-history-table-wrap overflow-x-auto">
+                                    <table class="rayat-history-table w-full text-left">
                                         <thead>
                                             <tr class="border-b-8 border-gray-50">
                                                 ${(() => {
                     const cols = {
                         energia: [t('time'), '⚡ ' + t('sensorEnName') + ' (kW)', t('status')],
-                        acqua: [t('time'), '💧 ' + t('available') + ' (Ton)', '📉 ' + t('need') + ' (Ton)', t('status')],
-                        terreno: [t('time'), '🌡️ TEMP', '💧 HUM', '⚡ EC', '🌿 N', '🌿 P', '🌿 K', '🧪 pH', t('status')],
-                        clima: [t('time'), '🌡️ TEMP', '💧 HUM', '💨 CO2', '🌬️ ' + t('windSpeed'), t('status')],
+                        acqua: [t('time'), '💧 ' + t('available') + ' (' + t('ton') + ')', '📉 ' + t('need') + ' (' + t('ton') + ')', t('status')],
+                        terreno: [t('time'), '🌡️ ' + t('tempShort'), '💧 ' + t('humidityShort'), '⚡ EC', '🌿 N', '🌿 P', '🌿 K', '🧪 pH', t('status')],
+                        clima: [t('time'), '🌡️ ' + t('tempShort'), '💧 ' + t('humidityShort'), '💨 CO2', '🌬️ ' + t('windSpeed'), t('status')],
                     };
-                    return (cols[selectedSensor] || []).map(h => `<th class="p-8 text-[10px] font-black text-gray-300 uppercase tracking-[0.3em] ${h.includes('⚡') || h.includes('💧') || h.includes('🌡️') || h.includes('💨') || h.includes('🌬️') ? 'text-center' : ''}">${h}</th>`).join('');
+                    return (cols[selectedSensor] || []).map(h => `<th class="rayat-history-head-cell ${h.includes('⚡') || h.includes('💧') || h.includes('🌡️') || h.includes('💨') || h.includes('🌬️') ? 'rayat-history-head-cell--metric' : ''}">${h}</th>`).join('');
                 })()}
                                             </tr>
                                         </thead>
@@ -3954,14 +4116,17 @@
                                             ${getFilteredHistory().map(row => {
                     const s = selectedSensor;
                     let cells = '';
-                    const timeCell = `<td class="p-8 font-black text-gray-800 text-sm whitespace-nowrap">${row.date.toLocaleDateString()} <span class="text-gray-300 ml-2 font-bold">${row.date.toLocaleTimeString()}</span></td>`;
-                    const statusCell = (stat) => `<td class="p-8 text-right"><span class="px-4 py-2 ${stat === 'statusNormal' || stat === 'statusOk' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} rounded-xl font-black text-[10px] uppercase tracking-widest">${t(stat)}</span></td>`;
+                    const timeCell = `
+                        <td class="rayat-history-time-cell">
+                            <div class="rayat-history-time-primary">${formatLocalizedDate(row.date)}</div>
+                            <div class="rayat-history-time-secondary">${formatLocalizedTime(row.date)}</div>
+                        </td>`;
 
                     if (s === 'energia') {
                         const energyLevel = getMetricState(parseNumericValue(row.energia), { min: 12.2, max: 13.8, unit: 'V' }).level;
                         cells = `
                                                         ${timeCell}
-                                                        <td class="p-8 text-center text-3xl font-black ${getLevelClass(energyLevel)}">${row.energia.toFixed(2)}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(energyLevel)}">${row.energia.toFixed(2)}</td>
                                                         ${renderHistoryStatusCell(energyLevel)}
                                                     `;
                     } else if (s === 'acqua') {
@@ -3972,8 +4137,8 @@
                         const waterLevel = avail < (req * 0.7) ? 'alert' : (avail < req ? 'attention' : 'normal');
                         cells = `
                                                         ${timeCell}
-                                                        <td class="p-8 text-center text-3xl font-black text-blue-700">${avail.toLocaleString()}</td>
-                                                        <td class="p-8 text-center text-2xl font-black text-blue-900">${req.toLocaleString()}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg text-blue-700">${avail.toLocaleString()}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--md text-blue-900">${req.toLocaleString()}</td>
                                                         ${renderHistoryStatusCell(waterLevel, t('statusOk'))}
                                                     `;
                     } else if (s === 'terreno') {
@@ -3988,13 +4153,13 @@
                         ];
                         cells = `
                                                         ${timeCell}
-                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[0])}">${row.temperature.toFixed(1)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[1])}">${row.terreno.toFixed(0)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[2])}">${(row.ec / 1000).toFixed(2)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[3])}">${row.nitrogen.toFixed(0)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[4])}">${row.phosphorus.toFixed(0)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[5])}">${row.potassium.toFixed(0)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[6])}">${row.pH.toFixed(1)}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[0])}">${row.temperature.toFixed(1)}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[1])}">${row.terreno.toFixed(0)}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[2])}">${(row.ec / 1000).toFixed(2)}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[3])}">${row.nitrogen.toFixed(0)}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[4])}">${row.phosphorus.toFixed(0)}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[5])}">${row.potassium.toFixed(0)}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[6])}">${row.pH.toFixed(1)}</td>
                                                         ${renderHistoryStatusCell(getOverallLevel(soilLevels))}
                                                     `;
                     } else if (s === 'clima') {
@@ -4006,14 +4171,14 @@
                         ];
                         cells = `
                                                         ${timeCell}
-                                                        <td class="p-8 text-center text-3xl font-black ${getLevelClass(climateLevels[0])}">${row.climaTemp.toFixed(1)}</td>
-                                                        <td class="p-8 text-center text-3xl font-black ${getLevelClass(climateLevels[1])}">${row.humidity.toFixed(0)}</td>
-                                                        <td class="p-8 text-center text-3xl font-black ${getLevelClass(climateLevels[2])}">${row.co2.toFixed(0)}</td>
-                                                        <td class="p-8 text-center text-3xl font-black ${getLevelClass(climateLevels[3])}">${row.windSpeed.toFixed(1)}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[0])}">${row.climaTemp.toFixed(1)}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[1])}">${row.humidity.toFixed(0)}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[2])}">${row.co2.toFixed(0)}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[3])}">${row.windSpeed.toFixed(1)}</td>
                                                         ${renderHistoryStatusCell(getOverallLevel(climateLevels))}
                                                     `;
                     }
-                    return `<tr class="hover:bg-gray-50 transition duration-300">${cells}</tr>`;
+                    return `<tr class="rayat-history-row hover:bg-gray-50 transition duration-300">${cells}</tr>`;
                 }).join('')}
                                         </tbody>
                                     </table>
@@ -4119,6 +4284,7 @@
             const viewFn = routes[currentView] || renderHomePage;
             app.innerHTML = `${viewFn()}${renderPublicWhatsappButton()}`;
             syncBodyScrollLock();
+            syncStaticI18n();
 
             // Post-render initialization
             // Post-render initialization

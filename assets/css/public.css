@@ -361,13 +361,27 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 0.1em;
+            gap: 0.2em;
             margin: 0 auto 1.5rem;
-            max-width: 14ch;
+            max-width: min(100%, 16ch);
             font-size: 72px;
             font-weight: 800;
-            line-height: 1.1;
+            line-height: 1.02;
             letter-spacing: -0.05em;
+        }
+
+        .rayat-hero-title-line {
+            display: block;
+            width: 100%;
+            text-wrap: balance;
+        }
+
+        .rayat-hero-title-line--primary {
+            max-width: 13ch;
+        }
+
+        .rayat-hero-title-line--secondary {
+            max-width: 15ch;
         }
 
         .rayat-hero-accent {
@@ -445,6 +459,22 @@
             align-items: flex-start;
             justify-content: space-between;
             gap: 0.85rem;
+            flex-wrap: wrap;
+        }
+
+        .rayat-metric-card-header-main {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.85rem;
+            min-width: 0;
+            flex: 1 1 14rem;
+        }
+
+        .rayat-metric-card-icon {
+            font-size: 2rem;
+            line-height: 1;
+            flex-shrink: 0;
+            margin-top: 0.1rem;
         }
 
         .rayat-metric-card-copy {
@@ -454,17 +484,26 @@
 
         .rayat-metric-card-title {
             margin: 0;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 900;
             text-transform: uppercase;
-            letter-spacing: 0.24em;
-            color: #94a3b8;
-            word-break: break-word;
+            letter-spacing: 0.18em;
+            color: #475569;
+            line-height: 1.35;
+            text-wrap: balance;
         }
 
         .rayat-metric-card-state {
-            margin: 0.2rem 0 0;
-            font-size: 0.92rem;
+            margin: 0.28rem 0 0;
+            font-size: 0.94rem;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+
+        .rayat-metric-card-range {
+            margin-top: 1rem;
+            font-size: 0.97rem;
+            line-height: 1.6;
             font-weight: 600;
         }
 
@@ -476,6 +515,88 @@
         .rayat-alert-badge--alert {
             color: #dc2626;
             background: rgba(239, 68, 68, 0.14);
+        }
+
+        .rayat-history-card {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        }
+
+        .rayat-history-table {
+            min-width: 720px;
+        }
+
+        .rayat-history-head-cell {
+            padding: 1.35rem 1rem;
+            font-size: 12px;
+            font-weight: 900;
+            color: #334155;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            white-space: nowrap;
+        }
+
+        .rayat-history-head-cell--metric {
+            text-align: center;
+        }
+
+        .rayat-history-row {
+            background: transparent;
+        }
+
+        .rayat-history-time-cell {
+            padding: 1.15rem 1rem;
+            min-width: 164px;
+            white-space: nowrap;
+        }
+
+        .rayat-history-time-primary {
+            font-size: 0.96rem;
+            font-weight: 900;
+            color: #0f172a;
+            line-height: 1.2;
+        }
+
+        .rayat-history-time-secondary {
+            margin-top: 0.18rem;
+            font-size: 0.83rem;
+            font-weight: 700;
+            color: #475569;
+            line-height: 1.2;
+        }
+
+        .rayat-history-value-cell {
+            padding: 1.15rem 0.9rem;
+            text-align: center;
+            font-size: 1.18rem;
+            font-weight: 900;
+            color: #0f172a;
+            white-space: nowrap;
+        }
+
+        .rayat-history-value-cell--md {
+            font-size: 1.3rem;
+        }
+
+        .rayat-history-value-cell--lg {
+            font-size: 1.55rem;
+        }
+
+        .rayat-history-status-cell {
+            padding: 1.15rem 1rem;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .rayat-history-status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.65rem 0.95rem;
+            border-radius: 0.95rem;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
         }
 
         .rayat-range-track {
@@ -506,6 +627,41 @@
 
         .rayat-map-shell {
             isolation: isolate;
+        }
+
+        .rayat-home-map-card {
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .rayat-home-map-header {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .rayat-home-map-canvas {
+            position: relative;
+        }
+
+        .rayat-home-map-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            max-width: 100%;
+            background: #ea580c;
+            color: #fff;
+            padding: 0.85rem 1.35rem;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 900;
+            line-height: 1.2;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            box-shadow: 0 18px 36px rgba(234, 88, 12, 0.22);
+            text-align: center;
         }
 
         .rayat-contact-map-shell {
@@ -552,11 +708,11 @@
             align-items: center;
             flex-wrap: wrap;
             gap: 0.8rem;
-            margin-bottom: 2rem;
+            margin: 1.25rem 0 1.75rem;
         }
 
         .rayat-footer-primary-link {
-            color: #e2e8f0;
+            color: #64748b;
             font-size: 13px;
             font-weight: 800;
             letter-spacing: 0.08em;
@@ -569,8 +725,26 @@
         }
 
         .rayat-footer-divider {
-            color: rgba(226, 232, 240, 0.45);
+            color: rgba(100, 116, 139, 0.45);
             font-weight: 700;
+        }
+
+        .rayat-footer-legal-nav {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
+
+        .rayat-footer-legal-nav a {
+            color: inherit;
         }
 
         .rayat-soft-banner {
@@ -712,48 +886,120 @@
             }
 
             .rayat-hero-title {
-                max-width: 12ch;
-                font-size: 44px;
+                max-width: 100%;
+                font-size: clamp(2.4rem, 9vw, 2.85rem);
+                line-height: 1.04;
+                gap: 0.28rem;
+            }
+
+            .rayat-hero-title-line--primary,
+            .rayat-hero-title-line--secondary {
+                max-width: 100%;
             }
 
             .rayat-hero-subtitle {
                 font-size: 17px;
-                width: 90%;
+                width: min(100%, 90%);
+                line-height: 1.55;
             }
 
             .rayat-water-compact {
                 grid-template-columns: 1fr;
             }
 
-            .rayat-home-map-legend,
-            .rayat-home-map-badge {
+            .rayat-home-map-legend {
                 position: static;
                 margin: 1rem;
             }
 
+            .rayat-home-map-card {
+                padding: 0.9rem;
+                gap: 0.85rem;
+            }
+
+            .rayat-home-map-header {
+                justify-content: stretch;
+            }
+
+            .rayat-home-map-badge {
+                width: 100%;
+                border-radius: 1.25rem;
+                padding: 0.95rem 1rem;
+                font-size: 11px;
+                letter-spacing: 0.12em;
+            }
+
             .rayat-metric-card-head {
-                flex-direction: column;
-                align-items: stretch;
+                align-items: flex-start;
+                gap: 0.75rem;
+            }
+
+            .rayat-metric-card-header-main {
+                flex-basis: 100%;
             }
 
             .rayat-alert-badge {
                 align-self: flex-start;
+                white-space: normal;
+                line-height: 1.25;
+            }
+
+            .rayat-history-card {
+                padding: 1.5rem;
+                border-radius: 2rem;
+            }
+
+            .rayat-history-head-cell {
+                padding: 1rem 0.85rem;
+                font-size: 11px;
+            }
+
+            .rayat-history-time-cell,
+            .rayat-history-status-cell,
+            .rayat-history-value-cell {
+                padding: 1rem 0.85rem;
+            }
+
+            .rayat-history-time-primary {
+                font-size: 0.92rem;
+            }
+
+            .rayat-history-time-secondary {
+                font-size: 0.8rem;
+            }
+
+            .rayat-history-value-cell {
+                font-size: 1.08rem;
+            }
+
+            .rayat-history-value-cell--md {
+                font-size: 1.14rem;
+            }
+
+            .rayat-history-value-cell--lg {
+                font-size: 1.2rem;
             }
 
             .rayat-footer-primary-nav {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 0;
+                justify-content: center;
+                gap: 0.7rem 1rem;
+                margin: 1rem 0 1.35rem;
             }
 
             .rayat-footer-primary-link {
-                width: 100%;
-                padding: 8px 0;
+                width: auto;
+                padding: 0;
                 font-size: 15px;
             }
 
             .rayat-footer-divider {
-                display: none;
+                display: inline;
+            }
+
+            .rayat-footer-legal-nav {
+                gap: 0.9rem 1.15rem;
+                font-size: 10px;
+                letter-spacing: 0.12em;
             }
 
             #map,
@@ -862,6 +1108,54 @@
                 width: 48px;
                 min-width: 48px;
                 height: 48px;
+            }
+
+            .rayat-hero-title {
+                font-size: clamp(2.05rem, 10vw, 2.45rem);
+                line-height: 1.06;
+            }
+
+            .rayat-hero-subtitle {
+                font-size: 16px;
+                width: 100%;
+            }
+
+            .rayat-metric-card {
+                padding: 1.25rem;
+            }
+
+            .rayat-metric-card-title {
+                font-size: 11px;
+                letter-spacing: 0.16em;
+            }
+
+            .rayat-metric-card-state,
+            .rayat-metric-card-range {
+                font-size: 0.92rem;
+            }
+
+            .rayat-alert-badge {
+                font-size: 10px;
+                padding: 0.4rem 0.68rem;
+            }
+
+            .rayat-home-map-card {
+                padding: 0.75rem;
+            }
+
+            .rayat-home-map-badge {
+                font-size: 10px;
+                padding: 0.82rem 0.9rem;
+                letter-spacing: 0.1em;
+            }
+
+            .rayat-footer-primary-nav,
+            .rayat-footer-legal-nav {
+                gap: 0.75rem;
+            }
+
+            .rayat-footer-divider {
+                display: none;
             }
 
             #contact-map {
