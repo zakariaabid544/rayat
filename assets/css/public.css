@@ -642,8 +642,22 @@
             align-items: center;
         }
 
+        .rayat-home-map-layout {
+            display: grid;
+            grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+            gap: 1rem;
+            align-items: stretch;
+        }
+
+        .rayat-home-map-legend {
+            position: relative;
+            z-index: 1;
+            align-self: stretch;
+        }
+
         .rayat-home-map-canvas {
             position: relative;
+            min-width: 0;
         }
 
         .rayat-home-map-badge {
@@ -907,9 +921,13 @@
                 grid-template-columns: 1fr;
             }
 
+            .rayat-home-map-layout {
+                grid-template-columns: 1fr;
+            }
+
             .rayat-home-map-legend {
                 position: static;
-                margin: 1rem;
+                margin: 0;
             }
 
             .rayat-home-map-card {

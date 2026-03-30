@@ -2981,11 +2981,9 @@
                                 </div>
                             </div>
 
-                            <div class="relative rayat-home-map-canvas">
-                                <div id="home-map" style="height: 600px; width: 100%; z-index: 10;" class="rounded-[2rem]"></div>
-                            
+                            <div class="rayat-home-map-layout">
                                 <!-- Legend -->
-                                <div class="absolute bottom-12 left-12 z-[1000] bg-white/90 backdrop-blur-md p-6 rounded-3xl shadow-2xl border border-white/50 space-y-4 rayat-home-map-legend">
+                                <div class="bg-white/90 backdrop-blur-md p-6 rounded-3xl shadow-2xl border border-white/50 space-y-4 rayat-home-map-legend">
                                     <div class="flex items-center gap-4">
                                         <div class="w-4 h-4 marker-online shadow-none"></div>
                                         <span class="text-xs font-black text-gray-700 uppercase tracking-widest">${t('mapLegendOnline')}</span>
@@ -2999,6 +2997,10 @@
                                         <div class="w-5 h-5 bg-green-100 border-2 border-green-300 rounded-lg"></div>
                                         <span class="text-[10px] font-black text-green-700 uppercase tracking-widest">${t('mapFocusArea')}: Souss-Massa</span>
                                     </div>
+                                </div>
+
+                                <div class="rayat-home-map-canvas">
+                                    <div id="home-map" style="height: 600px; width: 100%; z-index: 10;" class="rounded-[2rem]"></div>
                                 </div>
                             </div>
                         </div>
