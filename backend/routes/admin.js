@@ -515,13 +515,15 @@ const isSuperAdmin = (req, res, next) => {
 
 router.post('/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const email = String(req.body.email || '').trim().toLowerCase();
+        const password = String(req.body.password || '').trim();
         if (!email || !password) {
             return res.status(400).json({ error: 'Email e password obbligatori' });
         }
 
         const rows = await query('SELECT * FROM users WHERE email = ?', [email]);
         if (!rows.length) {
+            console.log('❌ User not found');
             return res.status(401).json({ error: 'Credenziali non valide' });
         }
 
@@ -537,6 +539,7 @@ router.post('/login', async (req, res) => {
 
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) {
+            console.log('❌ Wrong password');
             return res.status(401).json({ error: 'Credenziali non valide' });
         }
 
@@ -546,6 +549,8 @@ router.post('/login', async (req, res) => {
             name: user.name,
             role: normalizedRole
         });
+
+        console.log('✅ Login success');
 
         res.cookie(
             ADMIN_SESSION_COOKIE,

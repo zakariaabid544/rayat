@@ -233,12 +233,14 @@ router.post('/login', async (req, res) => {
 
         const users = await query('SELECT * FROM users WHERE email = ?', [email]);
         if (users.length === 0) {
+            console.log('❌ User not found');
             return res.status(401).json({ error: 'Credenziali non valide' });
         }
 
         const user = users[0];
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
         if (!isValidPassword) {
+            console.log('❌ Wrong password');
             return res.status(401).json({ error: 'Credenziali non valide' });
         }
 
@@ -249,6 +251,8 @@ router.post('/login', async (req, res) => {
             name: user.name,
             role: normalizedRole
         });
+
+        console.log('✅ Login success');
 
         res.json({
             token,

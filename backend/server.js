@@ -151,7 +151,7 @@ async function startServer() {
 
         if (!dbConnected) {
             console.warn('⚠️  ATTENZIONE: Database non connesso. Alcune funzionalità potrebbero non funzionare.');
-            console.warn('   Verifica le credenziali in .env e assicurati che MySQL sia in esecuzione.');
+            console.warn('   Verifica DATABASE_URL e assicurati che PostgreSQL Render sia raggiungibile.');
         } else {
             try {
                 const schemaChanges = await ensurePlatformSchema();

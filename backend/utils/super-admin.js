@@ -2,7 +2,6 @@ const bcrypt = require('bcrypt');
 
 const { query } = require('../config/database');
 
-const DEFAULT_SUPER_ADMIN_EMAIL = 'zakariaabid@hotmail.it';
 const PLACEHOLDER_PASSWORDS = new Set([
   '',
   'CHANGE_ME',
@@ -11,21 +10,11 @@ const PLACEHOLDER_PASSWORDS = new Set([
 ]);
 
 function getConfiguredSuperAdminEmail() {
-  return String(
-    process.env.SUPER_ADMIN_EMAIL ||
-      process.env.ADMIN_DEFAULT_EMAIL ||
-      DEFAULT_SUPER_ADMIN_EMAIL
-  )
-    .trim()
-    .toLowerCase();
+  return String(process.env.ADMIN_DEFAULT_EMAIL || '').trim().toLowerCase();
 }
 
 function getConfiguredSuperAdminPassword() {
-  return String(
-    process.env.SUPER_ADMIN_PASSWORD ||
-      process.env.ADMIN_DEFAULT_PASSWORD ||
-      ''
-  ).trim();
+  return String(process.env.ADMIN_DEFAULT_PASSWORD || '').trim();
 }
 
 async function ensureSuperAdmin() {
@@ -34,7 +23,7 @@ async function ensureSuperAdmin() {
 
   if (!email || PLACEHOLDER_PASSWORDS.has(password)) {
     console.warn(
-      'Super admin bootstrap skipped: set SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD in backend/.env.'
+      'Super admin bootstrap skipped: set ADMIN_DEFAULT_EMAIL and ADMIN_DEFAULT_PASSWORD.'
     );
     return {
       status: 'skipped',
@@ -50,7 +39,7 @@ async function ensureSuperAdmin() {
   );
 
   if (existingSuperAdmins.length > 0) {
-    console.log('Super admin already exists');
+    console.log('ℹ️ Super admin already exists');
     return {
       status: 'existing',
       id: existingSuperAdmins[0].id,
@@ -86,7 +75,7 @@ async function ensureSuperAdmin() {
     );
   }
 
-  console.log('Super admin created');
+  console.log('✅ Super admin created');
   return {
     status: 'created',
     email

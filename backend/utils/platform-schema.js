@@ -8,9 +8,9 @@ const {
 async function tableExists(tableName) {
   const rows = await query(
     `SELECT 1
-     FROM INFORMATION_SCHEMA.TABLES
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = ?
+     FROM information_schema.tables
+     WHERE table_schema = current_schema()
+       AND table_name = ?
      LIMIT 1`,
     [tableName]
   );
@@ -62,37 +62,31 @@ async function ensureCoreTables(changes) {
     await ensureTable(
       'users',
       `CREATE TABLE IF NOT EXISTS users (
-         id INT PRIMARY KEY AUTO_INCREMENT,
-         email VARCHAR(255) UNIQUE NULL,
-         password_hash VARCHAR(255) NOT NULL,
-         name VARCHAR(100),
+         id SERIAL PRIMARY KEY,
+         email TEXT UNIQUE,
+         password_hash TEXT NOT NULL,
+         name TEXT,
          language VARCHAR(5) DEFAULT 'it',
-         phone VARCHAR(20),
-         crop_type VARCHAR(100),
-         latitude DECIMAL(10, 7),
-         longitude DECIMAL(10, 7),
-         location_name VARCHAR(255),
-         location_address VARCHAR(255),
+         phone TEXT,
+         crop_type TEXT,
+         latitude NUMERIC(10, 7),
+         longitude NUMERIC(10, 7),
+         location_name TEXT,
+         location_address TEXT,
          verification_code VARCHAR(10),
          is_verified BOOLEAN DEFAULT FALSE,
-         role ENUM('admin', 'farmer', 'client', 'super_admin', 'operator', 'operator_admin') DEFAULT 'client',
+         role VARCHAR(32) NOT NULL DEFAULT 'client',
          client_code VARCHAR(20),
-         payment_status ENUM('pagato','non_pagato') DEFAULT 'non_pagato',
-         payment_date DATETIME NULL,
-         subscription_expiry DATETIME NULL,
-         registration_status ENUM('new','active') NOT NULL DEFAULT 'active',
+         payment_status VARCHAR(20) DEFAULT 'non_pagato',
+         payment_date TIMESTAMPTZ NULL,
+         subscription_expiry TIMESTAMPTZ NULL,
+         registration_status VARCHAR(20) NOT NULL DEFAULT 'active',
          registration_source VARCHAR(20) NOT NULL DEFAULT 'legacy',
-         approved_at DATETIME NULL,
+         approved_at TIMESTAMPTZ NULL,
          active BOOLEAN DEFAULT TRUE,
-         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-         INDEX idx_email (email),
-         INDEX idx_role (role),
-         INDEX idx_users_role_active_created (role, active, created_at),
-         INDEX idx_users_client_code (client_code),
-         INDEX idx_users_location_name (location_name),
-         INDEX idx_users_registration_feed (registration_source, registration_status, created_at)
-       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+       )`
     )
   ) {
     changes.push('users table');
@@ -102,24 +96,18 @@ async function ensureCoreTables(changes) {
     await ensureTable(
       'devices',
       `CREATE TABLE IF NOT EXISTS devices (
-         id INT PRIMARY KEY AUTO_INCREMENT,
+         id SERIAL PRIMARY KEY,
          device_id VARCHAR(100) UNIQUE NOT NULL,
-         user_id INT NOT NULL,
-         name VARCHAR(100),
-         api_key VARCHAR(255) NOT NULL,
-         location VARCHAR(255),
-         status ENUM('active', 'inactive', 'error') DEFAULT 'active',
-         last_seen TIMESTAMP NULL,
-         metadata JSON,
-         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-         INDEX idx_device_id (device_id),
-         INDEX idx_user_id (user_id),
-         INDEX idx_status (status),
-         INDEX idx_devices_user_status_last_seen (user_id, status, last_seen),
-         INDEX idx_devices_last_seen (last_seen)
-       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         name TEXT,
+         api_key TEXT NOT NULL,
+         location TEXT,
+         status VARCHAR(20) DEFAULT 'active',
+         last_seen TIMESTAMPTZ NULL,
+         metadata JSONB,
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+       )`
     )
   ) {
     changes.push('devices table');
@@ -129,21 +117,17 @@ async function ensureCoreTables(changes) {
     await ensureTable(
       'sensors',
       `CREATE TABLE IF NOT EXISTS sensors (
-         id INT PRIMARY KEY AUTO_INCREMENT,
-         device_id INT NOT NULL,
-         type ENUM('energia', 'acqua', 'terreno', 'clima') NOT NULL,
+         id SERIAL PRIMARY KEY,
+         device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+         type VARCHAR(32) NOT NULL,
          subtype VARCHAR(50),
-         name VARCHAR(100),
+         name TEXT,
          unit VARCHAR(20),
-         calibration_offset DECIMAL(10, 4) DEFAULT 0,
+         calibration_offset NUMERIC(10, 4) DEFAULT 0,
          enabled BOOLEAN DEFAULT TRUE,
-         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-         FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
-         INDEX idx_device_type (device_id, type),
-         INDEX idx_enabled (enabled),
-         INDEX idx_sensors_device_enabled_type (device_id, enabled, type)
-       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+       )`
     )
   ) {
     changes.push('sensors table');
@@ -153,15 +137,12 @@ async function ensureCoreTables(changes) {
     await ensureTable(
       'sensor_readings',
       `CREATE TABLE IF NOT EXISTS sensor_readings (
-         id BIGINT PRIMARY KEY AUTO_INCREMENT,
-         sensor_id INT NOT NULL,
-         value DECIMAL(10, 2) NOT NULL,
-         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-         metadata JSON,
-         FOREIGN KEY (sensor_id) REFERENCES sensors(id) ON DELETE CASCADE,
-         INDEX idx_sensor_time (sensor_id, timestamp DESC),
-         INDEX idx_timestamp (timestamp)
-       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+         id BIGSERIAL PRIMARY KEY,
+         sensor_id INTEGER NOT NULL REFERENCES sensors(id) ON DELETE CASCADE,
+         value NUMERIC(10, 2) NOT NULL,
+         timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         metadata JSONB
+       )`
     )
   ) {
     changes.push('sensor_readings table');
@@ -171,18 +152,15 @@ async function ensureCoreTables(changes) {
     await ensureTable(
       'alert_thresholds',
       `CREATE TABLE IF NOT EXISTS alert_thresholds (
-         id INT PRIMARY KEY AUTO_INCREMENT,
-         user_id INT NOT NULL,
+         id SERIAL PRIMARY KEY,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
          sensor_type VARCHAR(50) NOT NULL,
-         threshold_type ENUM('min', 'max') NOT NULL,
-         threshold_value DECIMAL(10, 2) NOT NULL,
+         threshold_type VARCHAR(10) NOT NULL,
+         threshold_value NUMERIC(10, 2) NOT NULL,
          enabled BOOLEAN DEFAULT TRUE,
-         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-         INDEX idx_user_sensor (user_id, sensor_type),
-         INDEX idx_enabled (enabled)
-       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+       )`
     )
   ) {
     changes.push('alert_thresholds table');
@@ -192,21 +170,17 @@ async function ensureCoreTables(changes) {
     await ensureTable(
       'active_alerts',
       `CREATE TABLE IF NOT EXISTS active_alerts (
-         id INT PRIMARY KEY AUTO_INCREMENT,
-         user_id INT NOT NULL,
-         sensor_id INT NOT NULL,
-         alert_type ENUM('warning', 'critical') NOT NULL,
-         message VARCHAR(255),
-         reading_value DECIMAL(10, 2),
-         threshold_value DECIMAL(10, 2),
+         id SERIAL PRIMARY KEY,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         sensor_id INTEGER NOT NULL REFERENCES sensors(id) ON DELETE CASCADE,
+         alert_type VARCHAR(20) NOT NULL,
+         message TEXT,
+         reading_value NUMERIC(10, 2),
+         threshold_value NUMERIC(10, 2),
          acknowledged BOOLEAN DEFAULT FALSE,
-         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-         acknowledged_at TIMESTAMP NULL,
-         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-         FOREIGN KEY (sensor_id) REFERENCES sensors(id) ON DELETE CASCADE,
-         INDEX idx_user_unack (user_id, acknowledged),
-         INDEX idx_created (created_at)
-       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         acknowledged_at TIMESTAMPTZ NULL
+       )`
     )
   ) {
     changes.push('active_alerts table');
@@ -251,14 +225,11 @@ async function ensureCoreTables(changes) {
     await ensureTable(
       'sensor_latest',
       `CREATE TABLE IF NOT EXISTS sensor_latest (
-         sensor_id INT PRIMARY KEY,
-         value DECIMAL(10, 2) NOT NULL,
-         timestamp TIMESTAMP NOT NULL,
-         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                   ON UPDATE CURRENT_TIMESTAMP,
-         FOREIGN KEY (sensor_id) REFERENCES sensors(id) ON DELETE CASCADE,
-         INDEX idx_sensor_latest_timestamp (timestamp)
-       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+         sensor_id INTEGER PRIMARY KEY REFERENCES sensors(id) ON DELETE CASCADE,
+         value NUMERIC(10, 2) NOT NULL,
+         timestamp TIMESTAMPTZ NOT NULL,
+         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+       )`
     )
   ) {
     changes.push('sensor_latest table');
@@ -268,15 +239,13 @@ async function ensureCoreTables(changes) {
     await ensureTable(
       'password_resets',
       `CREATE TABLE IF NOT EXISTS password_resets (
-         id INT PRIMARY KEY AUTO_INCREMENT,
-         user_id INT NOT NULL,
+         id SERIAL PRIMARY KEY,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
          token_hash VARCHAR(64) NOT NULL,
-         expires_at DATETIME NOT NULL,
+         expires_at TIMESTAMPTZ NOT NULL,
          used BOOLEAN NOT NULL DEFAULT FALSE,
-         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-         INDEX idx_password_resets_token_hash (token_hash)
-       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+       )`
     )
   ) {
     changes.push('password_resets table');
@@ -288,91 +257,34 @@ async function ensurePlatformSchema() {
 
   await ensureCoreTables(changes);
 
-  try {
-    await query(
-      `ALTER TABLE users
-       MODIFY COLUMN email VARCHAR(255) NULL`
-    );
-    changes.push('users.email nullable');
-  } catch (error) {
-    console.warn('Schema warning (users.email nullable):', error.message);
-  }
-
-  try {
-    await query(
-      `ALTER TABLE users
-       MODIFY COLUMN role ENUM('admin', 'farmer', 'client', 'super_admin', 'operator', 'operator_admin')
-       NOT NULL DEFAULT 'client'`
-    );
-    changes.push('users.role extended');
-  } catch (error) {
-    console.warn('Schema warning (users.role enum):', error.message);
-  }
-
-  if (await ensureColumn('users', 'client_code', "VARCHAR(20) NULL AFTER role")) {
+  if (await ensureColumn('users', 'client_code', 'VARCHAR(20)')) {
     changes.push('users.client_code');
   }
-  if (
-    await ensureColumn(
-      'users',
-      'payment_status',
-      "ENUM('pagato','non_pagato') DEFAULT 'non_pagato' AFTER client_code"
-    )
-  ) {
+  if (await ensureColumn('users', 'payment_status', "VARCHAR(20) DEFAULT 'non_pagato'")) {
     changes.push('users.payment_status');
   }
-  if (await ensureColumn('users', 'payment_date', 'DATETIME NULL AFTER payment_status')) {
+  if (await ensureColumn('users', 'payment_date', 'TIMESTAMPTZ')) {
     changes.push('users.payment_date');
   }
-  if (
-    await ensureColumn(
-      'users',
-      'subscription_expiry',
-      'DATETIME NULL AFTER payment_date'
-    )
-  ) {
+  if (await ensureColumn('users', 'subscription_expiry', 'TIMESTAMPTZ')) {
     changes.push('users.subscription_expiry');
   }
-  if (
-    await ensureColumn(
-      'users',
-      'registration_status',
-      "ENUM('new','active') NOT NULL DEFAULT 'active' AFTER subscription_expiry"
-    )
-  ) {
+  if (await ensureColumn('users', 'registration_status', "VARCHAR(20) NOT NULL DEFAULT 'active'")) {
     changes.push('users.registration_status');
   }
-  if (
-    await ensureColumn(
-      'users',
-      'registration_source',
-      "VARCHAR(20) NOT NULL DEFAULT 'legacy' AFTER registration_status"
-    )
-  ) {
+  if (await ensureColumn('users', 'registration_source', "VARCHAR(20) NOT NULL DEFAULT 'legacy'")) {
     changes.push('users.registration_source');
   }
-  if (
-    await ensureColumn(
-      'users',
-      'approved_at',
-      'DATETIME NULL AFTER registration_source'
-    )
-  ) {
+  if (await ensureColumn('users', 'approved_at', 'TIMESTAMPTZ')) {
     changes.push('users.approved_at');
   }
-  if (
-    await ensureColumn(
-      'users',
-      'location_address',
-      'VARCHAR(255) NULL AFTER location_name'
-    )
-  ) {
+  if (await ensureColumn('users', 'location_address', 'TEXT')) {
     changes.push('users.location_address');
   }
 
   await query(
     `UPDATE users
-     SET client_code = LPAD(id, 4, '0')
+     SET client_code = LPAD(id::text, 4, '0')
      WHERE role IN ('client', 'farmer')
        AND (client_code IS NULL OR client_code = '')`
   );
@@ -393,8 +305,8 @@ async function ensurePlatformSchema() {
   await query(
     `UPDATE users
      SET registration_status = CASE
-         WHEN role IN ('client', 'farmer') AND active = 1 THEN 'active'
-         WHEN role IN ('client', 'farmer') AND active = 0 THEN 'new'
+         WHEN role IN ('client', 'farmer') AND active = TRUE THEN 'active'
+         WHEN role IN ('client', 'farmer') AND active = FALSE THEN 'new'
          ELSE 'active'
        END
      WHERE registration_status IS NULL
