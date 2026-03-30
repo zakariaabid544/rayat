@@ -1,0 +1,9 @@
+.env
+node_modules/
+*.log
+logs/
+.DS_Store
+._*
+*.swp
+*~
+.AppleDouble
