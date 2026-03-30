@@ -294,8 +294,120 @@
             overflow: auto;
         }
 
-        .rayat-metric-card {
+        @keyframes rayatFadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes rayatFadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .rayat-fade-up {
+            opacity: 0;
+            animation: rayatFadeUp 0.6s ease-out 0.1s forwards;
+        }
+
+        .rayat-fade-in {
+            opacity: 0;
+            animation: rayatFadeIn 0.6s ease-out 0.4s forwards;
+        }
+
+        .rayat-hero {
             position: relative;
+            overflow: hidden;
+            color: white;
+            background:
+                radial-gradient(circle at top left, rgba(255, 255, 255, 0.12), transparent 30%),
+                linear-gradient(135deg, #214e3a 0%, #2d6a4f 45%, #163924 100%);
+            padding: 6rem 0 5rem;
+        }
+
+        .rayat-hero-shell {
+            position: relative;
+            z-index: 2;
+            max-width: 920px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .rayat-hero-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.55rem 0.95rem;
+            margin-bottom: 1.25rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+        }
+
+        .rayat-hero-title {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.1em;
+            margin: 0 auto 1.5rem;
+            max-width: 14ch;
+            font-size: 72px;
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: -0.05em;
+        }
+
+        .rayat-hero-accent {
+            color: #f97316;
+        }
+
+        .rayat-hero-subtitle {
+            margin: 0 auto 2rem;
+            max-width: 600px;
+            width: min(600px, 90%);
+            font-size: 22px;
+            line-height: 1.5;
+            opacity: 0.88;
+        }
+
+        .rayat-hero-orb {
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(18px);
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .rayat-hero-orb--one {
+            width: 240px;
+            height: 240px;
+            top: -40px;
+            left: -40px;
+            background: rgba(249, 115, 22, 0.4);
+        }
+
+        .rayat-hero-orb--two {
+            width: 280px;
+            height: 280px;
+            right: -60px;
+            bottom: -80px;
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        .rayat-metric-card {
             border-radius: 1.75rem;
             padding: 1.5rem;
             background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
@@ -315,15 +427,45 @@
         }
 
         .rayat-alert-badge {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            align-self: flex-start;
             border-radius: 999px;
             padding: 0.38rem 0.7rem;
             font-size: 11px;
             font-weight: 900;
             letter-spacing: 0.08em;
             text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .rayat-metric-card-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.85rem;
+        }
+
+        .rayat-metric-card-copy {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .rayat-metric-card-title {
+            margin: 0;
+            font-size: 11px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.24em;
+            color: #94a3b8;
+            word-break: break-word;
+        }
+
+        .rayat-metric-card-state {
+            margin: 0.2rem 0 0;
+            font-size: 0.92rem;
+            font-weight: 600;
         }
 
         .rayat-alert-badge--attention {
@@ -360,6 +502,75 @@
             border: 1px solid rgba(14, 165, 233, 0.12);
             border-radius: 2rem;
             padding: 1.5rem;
+        }
+
+        .rayat-map-shell {
+            isolation: isolate;
+        }
+
+        .rayat-contact-map-shell {
+            position: relative;
+            min-height: 300px;
+            z-index: 1;
+        }
+
+        .rayat-whatsapp-panel {
+            padding: 2.5rem 2rem;
+            border-radius: 2rem;
+            background:
+                radial-gradient(circle at top right, rgba(37, 211, 102, 0.12), transparent 26%),
+                linear-gradient(135deg, #f6fffa 0%, #ecfdf5 100%);
+            border: 1px solid rgba(34, 197, 94, 0.12);
+            box-shadow: 0 24px 54px rgba(21, 128, 61, 0.08);
+        }
+
+        .rayat-whatsapp-float {
+            position: fixed;
+            right: 24px;
+            bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+            z-index: 70;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            height: 56px;
+            border-radius: 999px;
+            background: #25D366;
+            color: white;
+            box-shadow: 0 16px 30px rgba(37, 211, 102, 0.32);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .rayat-whatsapp-float:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 20px 36px rgba(37, 211, 102, 0.38);
+        }
+
+        .rayat-footer-primary-nav {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+            margin-bottom: 2rem;
+        }
+
+        .rayat-footer-primary-link {
+            color: #e2e8f0;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            transition: color 0.2s ease;
+        }
+
+        .rayat-footer-primary-link:hover {
+            color: #f97316;
+        }
+
+        .rayat-footer-divider {
+            color: rgba(226, 232, 240, 0.45);
+            font-weight: 700;
         }
 
         .rayat-soft-banner {
@@ -414,6 +625,13 @@
             font-weight: 900;
             line-height: 1;
             box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+        }
+
+        #contact-map {
+            min-height: 300px;
+            height: 320px;
+            position: relative;
+            z-index: 1;
         }
 
         @media (max-width: 768px) {
@@ -489,8 +707,53 @@
                 -webkit-overflow-scrolling: touch;
             }
 
+            .rayat-hero {
+                padding: 5rem 0 4rem;
+            }
+
+            .rayat-hero-title {
+                max-width: 12ch;
+                font-size: 44px;
+            }
+
+            .rayat-hero-subtitle {
+                font-size: 17px;
+                width: 90%;
+            }
+
             .rayat-water-compact {
                 grid-template-columns: 1fr;
+            }
+
+            .rayat-home-map-legend,
+            .rayat-home-map-badge {
+                position: static;
+                margin: 1rem;
+            }
+
+            .rayat-metric-card-head {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .rayat-alert-badge {
+                align-self: flex-start;
+            }
+
+            .rayat-footer-primary-nav {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0;
+            }
+
+            .rayat-footer-primary-link {
+                width: 100%;
+                padding: 8px 0;
+                font-size: 15px;
+            }
+
+            .rayat-footer-divider {
+                display: none;
             }
 
             #map,
@@ -578,6 +841,15 @@
                 padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)) !important;
             }
 
+            .rayat-whatsapp-panel {
+                padding: 2rem 1.25rem;
+            }
+
+            .rayat-whatsapp-float {
+                right: 18px;
+                bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+            }
+
             .rayat-water-hectares {
                 gap: 0.5rem;
             }
@@ -590,5 +862,10 @@
                 width: 48px;
                 min-width: 48px;
                 height: 48px;
+            }
+
+            #contact-map {
+                min-height: 220px;
+                height: 220px;
             }
         }

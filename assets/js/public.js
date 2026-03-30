@@ -35,6 +35,8 @@
             terms: '/terms',
             'reset-password': '/reset-password'
         };
+        const WHATSAPP_CTA_URL = 'https://wa.me/393513203307';
+        const WHATSAPP_DISPLAY_NUMBER = '+39 351 320 3307';
 
         // Professional Water Management Config
         const CROP_OPTIONS = [
@@ -42,6 +44,7 @@
             { value: 'tomate', labelKey: 'cropOptionTomate' },
             { value: 'poivron', labelKey: 'cropOptionPoivron' },
             { value: 'concombre', labelKey: 'cropOptionConcombre' },
+            { value: 'melon', labelKey: 'cropOptionMelon' },
             { value: 'courgette', labelKey: 'cropOptionCourgette' },
             { value: 'laitue', labelKey: 'cropOptionLaitue' },
             { value: 'fraise', labelKey: 'cropOptionFraise' },
@@ -535,11 +538,12 @@
             };
         }
 
-        function buildOptimalRangeLabel(range, prefix = 'Optimal range for') {
+        function buildOptimalRangeLabel(range, mode = 'range') {
             if (!range) {
                 return '';
             }
             const unitSuffix = range.unit ? ` ${range.unit}` : '';
+            const prefix = mode === 'climate' ? t('optimalFor') : t('optimalRangeFor');
             return `${prefix} ${getSelectedCropLabel()}: ${formatMetricValue(range.min)} – ${formatMetricValue(range.max)}${unitSuffix}`;
         }
 
@@ -594,6 +598,72 @@
 
         function syncSubscriptionUiState() {
             subscriptionUiState = getSubscriptionStateFromUser();
+        }
+
+        function getWhatsappHref() {
+            return WHATSAPP_CTA_URL;
+        }
+
+        function getWhatsappIconSvg(extraClass = '') {
+            return `
+                <svg viewBox="0 0 24 24" class="${extraClass}" aria-hidden="true">
+                    <path fill="currentColor" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/>
+                </svg>
+            `;
+        }
+
+        function renderPublicWhatsappButton() {
+            if (currentView === 'demo' || window.location.pathname.startsWith('/admin')) {
+                return '';
+            }
+
+            return `
+                <a href="${getWhatsappHref()}" target="_blank" rel="noopener" onclick="trackEvent('WhatsApp Click')" class="rayat-whatsapp-float" aria-label="${t('whatsappButtonLabel')}">
+                    ${getWhatsappIconSvg('w-7 h-7')}
+                </a>
+            `;
+        }
+
+        function renderHomepageWhatsappSection() {
+            return `
+                <section class="py-12 bg-white">
+                    <div class="container mx-auto px-4">
+                        <div class="rayat-whatsapp-panel mx-auto max-w-4xl text-center">
+                            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white text-[#25D366] shadow-lg mb-6">
+                                ${getWhatsappIconSvg('w-8 h-8')}
+                            </div>
+                            <h3 class="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-4">${t('whatsappSectionTitle')}</h3>
+                            <p class="text-base md:text-lg text-slate-700 leading-relaxed max-w-2xl mx-auto">${t('whatsappSectionText')}</p>
+                            <a href="${getWhatsappHref()}" target="_blank" rel="noopener" onclick="trackEvent('WhatsApp Click')" class="inline-flex items-center justify-center gap-3 mt-8 bg-[#25D366] hover:bg-[#1ebd5a] text-white font-black px-8 py-4 rounded-2xl transition shadow-lg shadow-green-500/25 min-h-[56px]">
+                                ${getWhatsappIconSvg('w-6 h-6')}
+                                <span>${t('whatsappSectionButton')}</span>
+                            </a>
+                        </div>
+                    </div>
+                </section>
+            `;
+        }
+
+        function scheduleMapInvalidate(map) {
+            if (!map) {
+                return;
+            }
+
+            requestAnimationFrame(() => map.invalidateSize());
+            setTimeout(() => map.invalidateSize(), 180);
+            setTimeout(() => map.invalidateSize(), 520);
+        }
+
+        function invalidateVisibleMaps() {
+            if (currentView === 'home' && homeMapInstance) {
+                scheduleMapInvalidate(homeMapInstance);
+            }
+            if (currentView === 'contatti' && contactMapInstance) {
+                scheduleMapInvalidate(contactMapInstance);
+            }
+            if (currentView === 'register' && regMap) {
+                scheduleMapInvalidate(regMap);
+            }
         }
 
         function decodeJwtPayload(token) {
@@ -719,6 +789,11 @@
             it: {
                 home: 'Home', services: 'Servizi', aboutUs: 'Chi Siamo', demo: 'Demo', login: 'Accedi', logout: 'Logout',
                 hero: 'Terreno Sano = Raccolto Ricco', heroSub: 'Monitoraggio 24/7 con sensori intelligenti Rayat',
+                heroEyebrow: 'Rayat Smart Monitoring',
+                heroTitleLine1: 'Data-Driven Agriculture.',
+                heroTitleLine2: 'Better Decisions. Better',
+                heroTitleAccent: 'Yields.',
+                heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy — all in one platform.',
                 tryDemo: 'Prova la Demo', discoverServices: 'Scopri i Servizi', insurance: 'Assicurazione Agricola Rayat Smart Monitoring',
                 ourSensors: 'Tecnologia Rayat', ourReality: 'La Nostra Realtà',
                 ourRealityDesc: 'Rayat nasce dalla passione per l\'agricoltura e dalla profonda comprensione delle sfide che ogni agricoltore affronta. Siamo un team di esperti che porta tecnologia accessibile nei campi.',
@@ -785,6 +860,12 @@
                 mapLegendOnline: 'Online con Rayat', mapLegendOffline: 'Offline', mapFocusArea: 'Area principale Rayat',
                 statOnline: 'Clienti online ora', statMa: 'Clienti in Marocco', statSouss: 'Attivi in Souss-Massa',
                 clientName: 'Cliente', crop: 'Coltura principale', locality: 'Località', region: 'Regione', statusOnline: 'Online con Rayat', lastActive: 'Ultima attività',
+                whatsappSectionTitle: 'Contattaci direttamente su WhatsApp',
+                whatsappSectionText: 'Scrivici per informazioni, supporto o per richiedere una demo di Rayat. Siamo disponibili tramite messaggi, note vocali o chiamata diretta. Rispondiamo rapidamente.',
+                whatsappSectionButton: 'Scrivici su WhatsApp',
+                whatsappButtonLabel: 'Apri WhatsApp Rayat',
+                optimalRangeFor: 'Range ottimale per',
+                optimalFor: 'Ottimale per',
                 termsOfService: 'Termini di Servizio',
                 navMenu: 'Menu', mobileMenuClose: 'Chiudi menu',
                 forgotPassword: 'Password dimenticata?', forgotPasswordSubmit: 'Invia link di reset', forgotPasswordSuccess: 'Se l\'account esiste, riceverai un\'email con il link di reset.',
@@ -795,13 +876,18 @@
                 resetPasswordMismatch: 'Le password non coincidono.', backToLogin: 'Torna al login',
                 cropSelectorTitle: 'Coltura selezionata', cropSelectorHint: 'Rayat usa questa coltura per personalizzare consigli e stime locali.',
                 cropCustomLabel: 'Specifica la coltura', cropCustomPlaceholder: 'Es. Melone, melanzana, papaya',
-                cropOptionBanane: 'Banane', cropOptionTomate: 'Pomodoro', cropOptionPoivron: 'Peperone', cropOptionConcombre: 'Cetriolo', cropOptionCourgette: 'Zucchina',
+                cropOptionBanane: 'Banane', cropOptionTomate: 'Pomodoro', cropOptionPoivron: 'Peperone', cropOptionConcombre: 'Cetriolo', cropOptionMelon: 'Melone', cropOptionCourgette: 'Zucchina',
                 cropOptionLaitue: 'Lattuga', cropOptionFraise: 'Fragola', cropOptionAgrumes: 'Agrumi', cropOptionOlive: 'Olivo', cropOptionArgan: 'Argan',
                 cropOptionBle: 'Grano', cropOptionOrge: 'Orzo', cropOptionMais: 'Mais', cropOptionLuzerne: 'Erba medica', cropOptionAutre: 'Altro'
             },
             en: {
                 home: 'Home', services: 'Services', aboutUs: 'About Us', demo: 'Demo', login: 'Login', logout: 'Logout',
                 hero: 'Healthy Soil = Rich Harvest', heroSub: 'Monitor your field 24/7 with smart sensors',
+                heroEyebrow: 'Rayat Smart Monitoring',
+                heroTitleLine1: 'Data-Driven Agriculture.',
+                heroTitleLine2: 'Better Decisions. Better',
+                heroTitleAccent: 'Yields.',
+                heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy — all in one platform.',
                 tryDemo: 'Try Demo', discoverServices: 'Discover Services', insurance: 'Your agricultural insurance - Continuous real-time monitoring',
                 ourSensors: 'Our Sensors', ourReality: 'Our Reality',
                 ourRealityDesc: 'Rayat was born from a passion for agriculture. We are a team of experts bringing accessible innovation to the fields.',
@@ -866,6 +952,12 @@
                 mapLegendOnline: 'Online with Rayat', mapLegendOffline: 'Offline', mapFocusArea: 'Rayat Main Area',
                 statOnline: 'Clients online now', statMa: 'Clients in Morocco', statSouss: 'Active in Souss-Massa',
                 clientName: 'Client', crop: 'Main Crop', locality: 'Locality', region: 'Region', statusOnline: 'Online with Rayat', lastActive: 'Last active',
+                whatsappSectionTitle: 'Contact us directly on WhatsApp',
+                whatsappSectionText: 'Write to us for information, support or to request a Rayat demo. We are available through messages, voice notes or direct calls. We reply quickly.',
+                whatsappSectionButton: 'Message us on WhatsApp',
+                whatsappButtonLabel: 'Open Rayat WhatsApp',
+                optimalRangeFor: 'Optimal range for',
+                optimalFor: 'Optimal for',
                 termsOfService: 'Terms of Service',
                 navMenu: 'Menu', mobileMenuClose: 'Close menu',
                 forgotPassword: 'Forgot password?', forgotPasswordSubmit: 'Send reset link', forgotPasswordSuccess: 'If the account exists, you will receive an email with the reset link.',
@@ -876,13 +968,18 @@
                 resetPasswordMismatch: 'Passwords do not match.', backToLogin: 'Back to login',
                 cropSelectorTitle: 'Selected crop', cropSelectorHint: 'Rayat uses this crop to personalize guidance and local estimates.',
                 cropCustomLabel: 'Specify the crop', cropCustomPlaceholder: 'Example: melon, eggplant, papaya',
-                cropOptionBanane: 'Banana', cropOptionTomate: 'Tomato', cropOptionPoivron: 'Pepper', cropOptionConcombre: 'Cucumber', cropOptionCourgette: 'Zucchini',
+                cropOptionBanane: 'Bananas', cropOptionTomate: 'Tomato', cropOptionPoivron: 'Pepper', cropOptionConcombre: 'Cucumber', cropOptionMelon: 'Melon', cropOptionCourgette: 'Zucchini',
                 cropOptionLaitue: 'Lettuce', cropOptionFraise: 'Strawberry', cropOptionAgrumes: 'Citrus', cropOptionOlive: 'Olive', cropOptionArgan: 'Argan',
                 cropOptionBle: 'Wheat', cropOptionOrge: 'Barley', cropOptionMais: 'Corn', cropOptionLuzerne: 'Alfalfa', cropOptionAutre: 'Other'
             },
             fr: {
                 home: 'Accueil', services: 'Services', aboutUs: 'Qui Sommes-Nous', demo: 'Démo', login: 'Connexion', logout: 'Déconnexion',
                 hero: 'Sol Sain = Récolte Riche', heroSub: 'Surveillance 24h/24 avec capteurs intelligents Rayat',
+                heroEyebrow: 'Rayat Smart Monitoring',
+                heroTitleLine1: 'Data-Driven Agriculture.',
+                heroTitleLine2: 'Better Decisions. Better',
+                heroTitleAccent: 'Yields.',
+                heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy — all in one platform.',
                 tryDemo: 'Tester la Démo', discoverServices: 'Nos Services', insurance: 'Assurance Agricole Rayat Smart Monitoring',
                 ourSensors: 'Technologie Rayat', ourReality: 'Notre Réalité',
                 ourRealityDesc: 'Rayat est né d\'une passion pour l\'agriculture. Nous sommes une équipe d\'experts apportant une innovation accessible directement aux champs.',
@@ -947,6 +1044,12 @@
                 mapLegendOnline: 'En ligne avec Rayat', mapLegendOffline: 'Hors ligne', mapFocusArea: 'Zone principale Rayat',
                 statOnline: 'Clients en ligne', statMa: 'Clients au Maroc', statSouss: 'Actifs à Souss-Massa',
                 clientName: 'Client', crop: 'Culture principale', locality: 'Localité', region: 'Région', statusOnline: 'En ligne avec Rayat', lastActive: 'Dernière activité',
+                whatsappSectionTitle: 'Contactez-nous directement sur WhatsApp',
+                whatsappSectionText: 'Écrivez-nous pour obtenir des informations, du support ou demander une démo Rayat. Nous sommes disponibles par message, note vocale ou appel direct. Nous répondons rapidement.',
+                whatsappSectionButton: 'Écrire sur WhatsApp',
+                whatsappButtonLabel: 'Ouvrir WhatsApp Rayat',
+                optimalRangeFor: 'Plage optimale pour',
+                optimalFor: 'Optimal pour',
                 termsOfService: 'Conditions d\'utilisation',
                 navMenu: 'Menu', mobileMenuClose: 'Fermer le menu',
                 forgotPassword: 'Mot de passe oublié ?', forgotPasswordSubmit: 'Envoyer le lien de reinitialisation', forgotPasswordSuccess: 'Si le compte existe, vous recevrez un email avec le lien de reinitialisation.',
@@ -957,13 +1060,18 @@
                 resetPasswordMismatch: 'Les mots de passe ne correspondent pas.', backToLogin: 'Retour a la connexion',
                 cropSelectorTitle: 'Culture selectionnee', cropSelectorHint: 'Rayat utilise cette culture pour personnaliser les recommandations et les estimations.',
                 cropCustomLabel: 'Precisez la culture', cropCustomPlaceholder: 'Ex. melon, aubergine, papaye',
-                cropOptionBanane: 'Banane', cropOptionTomate: 'Tomate', cropOptionPoivron: 'Poivron', cropOptionConcombre: 'Concombre', cropOptionCourgette: 'Courgette',
+                cropOptionBanane: 'Banane', cropOptionTomate: 'Tomate', cropOptionPoivron: 'Poivron', cropOptionConcombre: 'Concombre', cropOptionMelon: 'Melon', cropOptionCourgette: 'Courgette',
                 cropOptionLaitue: 'Laitue', cropOptionFraise: 'Fraise', cropOptionAgrumes: 'Agrumes', cropOptionOlive: 'Olivier', cropOptionArgan: 'Argan',
                 cropOptionBle: 'Ble', cropOptionOrge: 'Orge', cropOptionMais: 'Mais', cropOptionLuzerne: 'Luzerne', cropOptionAutre: 'Autre'
             },
             ar: {
                 home: 'الرئيسية', services: 'الخدمات', aboutUs: 'من نحن', demo: 'تجريبي', login: 'دخول', logout: 'خروج',
                 hero: 'تربة صحية = حصاد غني', heroSub: 'مراقبة 24/7 بأجهزة استشعار رايات الذكية',
+                heroEyebrow: 'Rayat Smart Monitoring',
+                heroTitleLine1: 'Data-Driven Agriculture.',
+                heroTitleLine2: 'Better Decisions. Better',
+                heroTitleAccent: 'Yields.',
+                heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy — all in one platform.',
                 tryDemo: 'تجريب النسخة', discoverServices: 'خدماتنا', insurance: 'تأمينك الزراعي مع رايات',
                 ourSensors: 'تكنولوجيا رايات', ourReality: 'واقعنا',
                 ourRealityDesc: 'ولدت رايات من شغف بالزراعة. نحن فريق من الخبراء نجلب الابتكار المتاح إلى الحقول.',
@@ -1028,6 +1136,12 @@
                 mapLegendOnline: 'متصل مع رايات', mapLegendOffline: 'غير متصل', mapFocusArea: 'منطقة رايات الرئيسية',
                 statOnline: 'متصلون الآن', statMa: 'العملاء في المغرب', statSouss: 'نشطون في سوس ماسة',
                 clientName: 'العميل', crop: 'المحصول الأساسي', locality: 'الموقع', region: 'الجهة', statusOnline: 'نشط مع رايات', lastActive: 'آخر نشاط',
+                whatsappSectionTitle: 'تواصل معنا مباشرة عبر واتساب',
+                whatsappSectionText: 'اكتب لنا للمعلومات أو الدعم أو لطلب عرض Rayat التجريبي. نحن متاحون عبر الرسائل أو الملاحظات الصوتية أو الاتصال المباشر. نرد بسرعة.',
+                whatsappSectionButton: 'راسلنا على واتساب',
+                whatsappButtonLabel: 'افتح واتساب رايات',
+                optimalRangeFor: 'النطاق المثالي لـ',
+                optimalFor: 'المثالي لـ',
                 navMenu: 'القائمة', mobileMenuClose: 'إغلاق القائمة',
                 forgotPassword: 'هل نسيت كلمة المرور؟', forgotPasswordSubmit: 'إرسال رابط إعادة التعيين', forgotPasswordSuccess: 'إذا كان الحساب موجودا فستصلك رسالة تحتوي على رابط إعادة التعيين.',
                 forgotPasswordEmailRequired: 'أدخل بريدك الإلكتروني للحصول على رابط إعادة التعيين.',
@@ -1037,7 +1151,7 @@
                 resetPasswordMismatch: 'كلمتا المرور غير متطابقتين.', backToLogin: 'العودة إلى تسجيل الدخول',
                 cropSelectorTitle: 'المحصول المختار', cropSelectorHint: 'تستخدم رايات هذا المحصول لتخصيص التوصيات والتقديرات المحلية.',
                 cropCustomLabel: 'حدد المحصول', cropCustomPlaceholder: 'مثال: شمام، باذنجان، بابايا',
-                cropOptionBanane: 'موز', cropOptionTomate: 'طماطم', cropOptionPoivron: 'فلفل', cropOptionConcombre: 'خيار', cropOptionCourgette: 'كوسة',
+                cropOptionBanane: 'موز', cropOptionTomate: 'طماطم', cropOptionPoivron: 'فلفل', cropOptionConcombre: 'خيار', cropOptionMelon: 'شمام', cropOptionCourgette: 'كوسة',
                 cropOptionLaitue: 'خس', cropOptionFraise: 'فراولة', cropOptionAgrumes: 'حمضيات', cropOptionOlive: 'زيتون', cropOptionArgan: 'أركان',
                 cropOptionBle: 'قمح', cropOptionOrge: 'شعير', cropOptionMais: 'ذرة', cropOptionLuzerne: 'برسيم', cropOptionAutre: 'أخرى'
             },
@@ -1050,6 +1164,11 @@
                 logout: 'ⴼⴼⵓⵖ',
                 hero: 'ⴰⴽⴰⵍ ⵉⵖⵓⴷⴰⵏ = ⴰⵎⴳⵔ ⵉⵖⵓⴷⴰⵏ',
                 heroSub: 'ⵀⴰⵏⴰ ⴽⵓⵍⵍⵓ',
+                heroEyebrow: 'Rayat Smart Monitoring',
+                heroTitleLine1: 'Data-Driven Agriculture.',
+                heroTitleLine2: 'Better Decisions. Better',
+                heroTitleAccent: 'Yields.',
+                heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy — all in one platform.',
                 insurance: 'ⵍⴰⵙⵉⵔⵓⵏⵙ ⵏ ⵜⴼⵍⵍⴰⵃⵜ',
                 tryDemo: 'ⴰⵔⴰⵎ ⴷⵉⵎⵓ',
                 discoverServices: 'ⵥⵕ ⵉⵎⴰⵣⵣⴰⵍⵏ',
@@ -1227,6 +1346,12 @@
                 mapLegendOnline: 'ⵉⵍⵍⴰ ⴰⴽⴷ Rayat', mapLegendOffline: 'ⵓⵔ ⵉⵍⵍⵉ', mapFocusArea: 'ⴰⴷⵖⴰⵔ ⵏ Rayat',
                 statOnline: 'ⵉⵍⵍⴰⵏ ⴷⵖⵉ', statMa: 'ⵉⵎⵙⴰⵡⴰⴹⵏ ⴳ ⵍⵎⵖⵔⵉⴱ', statSouss: 'ⵉⵍⵍⴰⵏ ⴳ ⵙⵓⵙ',
                 clientName: 'ⴰⵎⵙⴰⵡⴰⴹ', crop: 'ⵜⴰⵢⵢⵓⵣⵜ', locality: 'ⴰⴷⵖⴰⵔ', region: 'ⵜⴰⵎⵏⴰⴹⵜ', statusOnline: 'ⵉⵍⵍⴰ ⴰⴽⴷ Rayat', lastActive: 'ⴰⵏⴳⴳⴰⵔⵓ',
+                whatsappSectionTitle: 'ⴰⵎⵢⴰⵡⴰⴹ ⴷⴰⵔⵏⵖ ⵙ WhatsApp',
+                whatsappSectionText: 'ⴰⵔⵉ ⴰⴷ ⴰⵖⵜⴰⵔⴷ ⵉ ⵉⵙⴼⴽⴰ, ⴰⴼⵔⵔⵓ ⵏⵖ ⵜⵓⵜⵜⵔⴰ ⵏ demo ⵏ Rayat. ⵏⵍⵍⴰ ⵙ ⵉⵣⵏⴰⵏ, ⵉⵡⴰⵍⵏ ⵉⵎⵙⵍⵉⵜⵏ ⴷ ⵜⵉⵍⵉⴼⵓⵏ.',
+                whatsappSectionButton: 'ⴰⵔⵉ ⵙ WhatsApp',
+                whatsappButtonLabel: 'ⵍⴷ WhatsApp ⵏ Rayat',
+                optimalRangeFor: 'ⴰⵣⵍⴰⵢ ⵉⵖⵓⴷⴰⵏ ⵉ',
+                optimalFor: 'ⵉⵖⵓⴷⴰⵏ ⵉ',
                 navMenu: 'ⵎⵉⵏⵓ', mobileMenuClose: 'ⵎⴷⵍ ⵎⵉⵏⵓ',
                 forgotPassword: 'Mot de passe oublie ?', forgotPasswordSubmit: 'Azen lien n reinitialisation', forgotPasswordSuccess: 'Ma yella lcompte illa, ad tawed email s lien n reinitialisation.',
                 forgotPasswordEmailRequired: 'Ari email inek iwakken ad tawsed lien n reinitialisation.',
@@ -1236,7 +1361,7 @@
                 resetPasswordMismatch: 'Awalen uffiren ur mgaraden ara.', backToLogin: 'Ughul ar login',
                 cropSelectorTitle: 'ⵜⴰⵢⵢⵓⵣⵜ ⵉⵜⵜⵓⴼⵔⴰⵏ', cropSelectorHint: 'Rayat ittwaseqdec ttayyuzt ad yerr isemras d itqdirin.',
                 cropCustomLabel: 'ⴰⵔⵉ ⵉⵙⵎ ⵏ ⵜⵎⴳⵔⵜ', cropCustomPlaceholder: 'Melon, aubergine, papaye',
-                cropOptionBanane: 'ⵜⵉⴳⴰⵢⵢⴰ', cropOptionTomate: 'ⵜⵉⵎⴰⵜⵉⵛ', cropOptionPoivron: 'Poivron', cropOptionConcombre: 'Concombre', cropOptionCourgette: 'Courgette',
+                cropOptionBanane: 'ⵜⵉⴳⴰⵢⵢⴰ', cropOptionTomate: 'ⵜⵉⵎⴰⵜⵉⵛ', cropOptionPoivron: 'Poivron', cropOptionConcombre: 'Concombre', cropOptionMelon: 'Melon', cropOptionCourgette: 'Courgette',
                 cropOptionLaitue: 'Laitue', cropOptionFraise: 'ⵜⵉⴼⵔⴰⵙ', cropOptionAgrumes: 'Agrumes', cropOptionOlive: 'ⴰⵣⵎⵎⵓⵔ', cropOptionArgan: 'Argan',
                 cropOptionBle: 'Ble', cropOptionOrge: 'Orge', cropOptionMais: 'ⴰⴷⵔⴰⵔ', cropOptionLuzerne: 'Luzerne', cropOptionAutre: 'ⵢⴰⴹⵏ'
             }
@@ -1343,7 +1468,48 @@
 
         function navigateFromMobileMenu(view) {
             toggleMobileMenu(false);
+            trackNavigationEvent(view);
             setView(view);
+        }
+
+        function shouldTrackAnalytics(view = currentView) {
+            return view !== 'demo' && !window.location.pathname.startsWith('/admin');
+        }
+
+        function trackEvent(name) {
+            if (!name || !shouldTrackAnalytics()) {
+                return;
+            }
+
+            if (typeof window !== 'undefined' && typeof window.plausible === 'function') {
+                window.plausible(name);
+            }
+        }
+
+        function trackPageView(view = currentView) {
+            if (!shouldTrackAnalytics(view)) {
+                return;
+            }
+
+            if (typeof window !== 'undefined' && typeof window.plausible === 'function') {
+                window.plausible('pageview', { u: `${window.location.origin}${getPathForView(view)}` });
+            }
+        }
+
+        function getNavigationEventName(view) {
+            if (view === 'login') return 'Login Click';
+            if (view === 'contatti') return 'Contact Click';
+            if (view === 'demo') return 'Demo Request Click';
+            return '';
+        }
+
+        function trackNavigationEvent(view) {
+            trackEvent(getNavigationEventName(view));
+        }
+
+        function setViewWithTracking(view, options = {}) {
+            trackNavigationEvent(view);
+            setView(view, options);
         }
 
         function setLanguage(lang) {
@@ -1585,17 +1751,21 @@
             const unit = getMetricUnit(group, metric.key, metric.unit || metric.unita || '');
             const state = getMetricState(normalizedValue, range);
             const gauge = range ? getGaugeMeta(group, metric.key, range) : null;
-            const rangeLabel = buildOptimalRangeLabel(range, group === 'climate' ? 'Optimal for' : 'Optimal range for');
+            const rangeLabel = buildOptimalRangeLabel(range, group === 'climate' ? 'climate' : 'range');
 
             return `
                 <article class="rayat-metric-card ${state.cssModifier}">
-                    ${state.badge ? `<span class="rayat-alert-badge ${state.level === 'alert' ? 'rayat-alert-badge--alert' : 'rayat-alert-badge--attention'}">${state.badge}</span>` : ''}
-                    <div class="flex items-center gap-3 mb-4">
-                        <span class="text-3xl">${metric.icon}</span>
-                        <div>
-                            <p class="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">${t(metric.label)}</p>
-                            <p class="text-sm font-semibold ${getLevelClass(state.level)}">${state.label}</p>
+                    <div class="rayat-metric-card-head mb-4">
+                        <div class="rayat-metric-card-copy">
+                            <div class="flex items-center gap-3">
+                                <span class="text-3xl">${metric.icon}</span>
+                                <div>
+                                    <p class="rayat-metric-card-title">${t(metric.label)}</p>
+                                    <p class="rayat-metric-card-state ${getLevelClass(state.level)}">${state.label}</p>
+                                </div>
+                            </div>
                         </div>
+                        ${state.badge ? `<span class="rayat-alert-badge ${state.level === 'alert' ? 'rayat-alert-badge--alert' : 'rayat-alert-badge--attention'}">${state.badge}</span>` : ''}
                     </div>
                     <div class="flex items-end gap-2 mb-5">
                         <span class="text-5xl font-black text-slate-900 leading-none">${formatMetricValue(normalizedValue)}</span>
@@ -1637,7 +1807,7 @@
                     optimalMax: range?.max ?? null,
                     crop: cropLabel,
                     title: `${t(metric.label)} • ${cropLabel}`,
-                    description: buildOptimalRangeLabel(range)
+                    description: buildOptimalRangeLabel(range, 'range')
                 });
             });
 
@@ -1659,7 +1829,7 @@
                     optimalMax: range?.max ?? null,
                     crop: cropLabel,
                     title: `${t(metric.label)} • ${cropLabel}`,
-                    description: buildOptimalRangeLabel(range, 'Optimal for')
+                    description: buildOptimalRangeLabel(range, 'climate')
                 });
             });
 
@@ -2078,6 +2248,7 @@
                 hideSubscriptionExpiredModal();
             }
             render();
+            trackPageView(view);
             window.scrollTo({ top: 0, behavior: 'instant' });
 
             // Re-initialize maps for specific views
@@ -2385,7 +2556,7 @@
 
         function goToLogin() {
             clearPublicSession();
-            setView('login', { replace: true, path: '/login' });
+            setViewWithTracking('login', { replace: true, path: '/login' });
         }
 
         function continueWithoutLogin() {
@@ -2394,7 +2565,8 @@
         }
 
         function openSupportWhatsapp() {
-            window.open('https://wa.me/212628265466', '_blank', 'noopener');
+            trackEvent('WhatsApp Click');
+            window.open(getWhatsappHref(), '_blank', 'noopener');
         }
 
         function renderNotifications() {
@@ -2454,19 +2626,15 @@
             const amazighFlag = `<svg class="${flagBase}" viewBox="0 0 90 60" width="24" height="16" xmlns="http://www.w3.org/2000/svg"><rect width="90" height="20" y="0" fill="#0099CC"/><rect width="90" height="20" y="20" fill="#99CC33"/><rect width="90" height="20" y="40" fill="#FFCC00"/><text x="45" y="48" font-size="40" fill="#CC3333" text-anchor="middle" font-family="sans-serif">ⵣ</text></svg>`;
             const primaryLinks = [
                 { view: 'home', label: t('home') },
-                { view: 'servizi', label: t('services') },
                 { view: 'chi-siamo', label: t('aboutUs') },
-                { view: 'contatti', label: t('contactTitle') },
-                { view: 'demo', label: t('demo') }
+                { view: 'servizi', label: t('services') },
+                { view: 'demo', label: t('demo'), tracked: true },
+                { view: 'contatti', label: t('contactTitle'), tracked: true }
             ];
-            const mobileLinks = [
-                ...primaryLinks,
-                { view: 'privacy', label: t('privacyPolicy') },
-                { view: 'terms', label: t('termsOfService') }
-            ];
+            const mobileLinks = [...primaryLinks];
             const authButton = isLoggedIn || user
                 ? `<button onclick="logout()" class="bg-red-500 hover:bg-red-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('logout')}</button>`
-                : `<button onclick="setView('login')" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('login')}</button>`;
+                : `<button onclick="setViewWithTracking('login')" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('login')}</button>`;
 
             return `
                 <div id="offline-banner"></div>
@@ -2486,7 +2654,7 @@
                             <div class="flex items-center gap-3 md:gap-4">
                                 <nav class="rayat-desktop-nav items-center space-x-6 font-bold uppercase text-xs tracking-widest">
                                     ${primaryLinks.map((link) => `
-                                        <a onclick="setView('${link.view}')" class="cursor-pointer hover:text-orange-400 transition ${link.view === 'chi-siamo' ? 'whitespace-nowrap' : ''}">
+                                        <a onclick="${link.tracked ? `setViewWithTracking('${link.view}')` : `setView('${link.view}')`}" class="cursor-pointer hover:text-orange-400 transition ${link.view === 'chi-siamo' ? 'whitespace-nowrap' : ''}">
                                             ${link.label}
                                         </a>
                                     `).join('')}
@@ -2547,18 +2715,26 @@
             return `
                 ${renderHeader(!!user)}
                 
-                <section class="bg-gradient-to-r from-green-700 to-green-900 text-white py-20">
-                    <div class="container mx-auto px-4 text-center">
-                        <h2 class="text-5xl font-bold mb-6">${t('hero')}</h2>
-                        <p class="text-xl mb-8">${t('heroSub')}</p>
-                        <p class="text-lg mb-8 text-green-100">✅ ${t('insurance')}</p>
-                        <div class="rayat-mobile-actions flex gap-4 justify-center">
-                            <button onclick="setView('demo')" class="bg-orange-500 hover:bg-orange-600 px-8 py-4 rounded-lg text-lg font-semibold transition transform hover:scale-105">
+                <section class="rayat-hero">
+                    <div class="rayat-hero-orb rayat-hero-orb--one"></div>
+                    <div class="rayat-hero-orb rayat-hero-orb--two"></div>
+                    <div class="container mx-auto px-4">
+                        <div class="rayat-hero-shell">
+                            <div class="rayat-hero-kicker">${t('heroEyebrow')}</div>
+                            <h1 class="rayat-hero-title rayat-fade-up">
+                                <span>${t('heroTitleLine1')}</span>
+                                <span>${t('heroTitleLine2')} <span class="rayat-hero-accent">${t('heroTitleAccent')}</span></span>
+                            </h1>
+                            <p class="rayat-hero-subtitle rayat-fade-in">${t('heroPlatformSub')}</p>
+                            <p class="text-base md:text-lg mb-8 text-green-100 font-semibold">✅ ${t('insurance')}</p>
+                            <div class="rayat-mobile-actions flex gap-4 justify-center">
+                                <button onclick="setViewWithTracking('demo')" class="bg-orange-500 hover:bg-orange-600 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-orange-950/20">
                                 ${t('tryDemo')}
-                            </button>
-                            <button onclick="setView('servizi')" class="bg-white text-green-800 px-8 py-4 rounded-lg text-lg font-semibold transition transform hover:scale-105">
+                                </button>
+                                <button onclick="setView('servizi')" class="bg-white text-green-800 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-green-950/10">
                                 ${t('discoverServices')}
-                            </button>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -2639,11 +2815,11 @@
                             </div>
                         </div>
 
-                        <div class="relative bg-white p-2 rounded-[2.5rem] shadow-2xl overflow-hidden border-4 border-white">
+                        <div class="relative bg-white p-2 rounded-[2.5rem] shadow-2xl overflow-hidden border-4 border-white rayat-map-shell">
                             <div id="home-map" style="height: 600px; width: 100%; z-index: 10;" class="rounded-[2rem]"></div>
                             
                             <!-- Legend -->
-                            <div class="absolute bottom-12 left-12 z-[1000] bg-white/90 backdrop-blur-md p-6 rounded-3xl shadow-2xl border border-white/50 space-y-4">
+                            <div class="absolute bottom-12 left-12 z-[1000] bg-white/90 backdrop-blur-md p-6 rounded-3xl shadow-2xl border border-white/50 space-y-4 rayat-home-map-legend">
                                 <div class="flex items-center gap-4">
                                     <div class="w-4 h-4 marker-online shadow-none"></div>
                                     <span class="text-xs font-black text-gray-700 uppercase tracking-widest">${t('mapLegendOnline')}</span>
@@ -2660,12 +2836,14 @@
                             </div>
 
                             <!-- Floating Badge -->
-                            <div class="absolute top-8 right-8 z-[1000] bg-orange-600 text-white px-8 py-3 rounded-full font-black uppercase tracking-widest text-xs shadow-2xl animate-bounce">
+                            <div class="absolute top-8 right-8 z-[1000] bg-orange-600 text-white px-8 py-3 rounded-full font-black uppercase tracking-widest text-xs shadow-2xl animate-bounce rayat-home-map-badge">
                                 📍 Forte presenza in Souss-Massa
                             </div>
                         </div>
                     </div>
                 </section>
+
+                ${renderHomepageWhatsappSection()}
 
                 ${renderFooter()}
             `;
@@ -2744,7 +2922,7 @@
                         </form>
 
                         <div class="mt-6 text-center">
-                            <button onclick="setView('login')" class="text-sm text-green-700 font-bold hover:underline">
+                            <button onclick="setViewWithTracking('login')" class="text-sm text-green-700 font-bold hover:underline">
                                 ${t('backToLogin')}
                             </button>
                         </div>
@@ -2992,7 +3170,7 @@
                                                 <p class="text-xl text-gray-600">${t(sensor.descrizioneEstesa || sensor.descrizione)}</p>
                                             </div>
                                             <div class="mt-4 md:mt-0">
-                                                <button onclick="setSensor('${key}'); setView('demo')" class="w-full md:w-auto bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-lg text-lg font-bold transition transform hover:scale-105 shadow-lg">
+                                                <button onclick="setSensor('${key}'); trackNavigationEvent('demo'); setView('demo')" class="w-full md:w-auto bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-lg text-lg font-bold transition transform hover:scale-105 shadow-lg">
                                                     ${user ? (t('dashboardBtn') || 'Dashboard Privata') : (t('demoBtn') || 'Versione Demo')} 📊
                                                 </button>
                                             </div>
@@ -3016,7 +3194,7 @@
                     <div class="mt-16 bg-green-100 rounded-2xl p-8 text-center shadow-inner">
                         <h3 class="text-4xl font-bold mb-4 text-green-800">🎯 ${t('customSolutionsTitle')}</h3>
                         <p class="text-xl text-gray-700 mb-6">${t('customSolutionsDesc')}</p>
-                        <button onclick="setView(user ? 'demo' : 'login')" class="bg-green-700 hover:bg-green-800 text-white px-8 py-4 rounded-lg text-lg font-semibold transition">
+                        <button onclick="setViewWithTracking('contatti')" class="bg-green-700 hover:bg-green-800 text-white px-8 py-4 rounded-lg text-lg font-semibold transition">
                             ${t('contactUs')}
                         </button>
                     </div>
@@ -3114,7 +3292,7 @@
                                             <div>
                                                 <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">${t('ctaWhatsapp')}</p>
                                                 <p class="text-lg font-bold text-gray-800">${contactSettings.whatsapp}</p>
-                                                <a href="https://wa.me/${contactSettings.whatsapp.replace(/[^0-9]/g, '')}" target="_blank" class="text-sm text-green-600 font-bold hover:underline">Chatta ora ➡️</a>
+                                                <a href="${getWhatsappHref()}" target="_blank" rel="noopener" onclick="trackEvent('WhatsApp Click')" class="text-sm text-green-600 font-bold hover:underline">Chatta ora ➡️</a>
                                             </div>
                                         </div>
                                         <!-- Email -->
@@ -3216,7 +3394,9 @@
                                             📍 ${t('openInMap')}
                                         </button>
                                     </div>
-                                    <div id="contact-map" class="h-[400px] w-full bg-gray-200"></div>
+                                    <div class="rayat-contact-map-shell">
+                                        <div id="contact-map" class="w-full bg-gray-200 rounded-[1.75rem]"></div>
+                                    </div>
                                 </div>
 
                                 <!-- Founder Section -->
@@ -3250,17 +3430,33 @@
             window.scrollTo({ top: 100, behavior: 'smooth' });
         }
 
+        let contactMapInstance = null;
         function initContactMap() {
             setTimeout(() => {
                 const mapEl = document.getElementById('contact-map');
-                if (!mapEl) return;
-                const map = L.map('contact-map').setView([contactSettings.mapLat, contactSettings.mapLng], 15);
+                if (!mapEl || typeof L === 'undefined') return;
+
+                if (contactMapInstance) {
+                    contactMapInstance.remove();
+                    contactMapInstance = null;
+                }
+
+                const lat = Number(contactSettings.lat) || 30.4703;
+                const lng = Number(contactSettings.lng) || -8.8770;
+                const map = L.map('contact-map', {
+                    scrollWheelZoom: false
+                }).setView([lat, lng], 15);
+                contactMapInstance = map;
+
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '© OpenStreetMap'
                 }).addTo(map);
-                L.marker([contactSettings.mapLat, contactSettings.mapLng]).addTo(map)
-                    .bindPopup(`<b class="text-green-800">${contactSettings.officeName}</b><br>${contactSettings.officeAddress}`)
+
+                L.marker([lat, lng]).addTo(map)
+                    .bindPopup(`<b class="text-green-800">${contactSettings.officeName}</b><br>${contactSettings.officeAddress}<br>Taroudant, Morocco`)
                     .openPopup();
+
+                scheduleMapInvalidate(map);
             }, 100);
         }
 
@@ -3268,7 +3464,7 @@
         function initHomeMap() {
             setTimeout(() => {
                 const mapEl = document.getElementById('home-map');
-                if (!mapEl) return;
+                if (!mapEl || typeof L === 'undefined') return;
 
                 // Dispose of previous instance if it exists to allow re-initialization
                 if (homeMapInstance) {
@@ -3277,7 +3473,9 @@
                 }
 
                 // Center on Morocco (with a focus shift towards Souss-Massa)
-                const map = L.map('home-map').setView([30.5, -9.0], 6);
+                const map = L.map('home-map', {
+                    scrollWheelZoom: false
+                }).setView([30.5, -9.0], 6);
                 homeMapInstance = map;
 
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -3340,6 +3538,7 @@
 
                 // Auto-zoom to Souss-Massa on desktop if preferred, but user requested "vista iniziale sul Marocco"
                 // so we keep the zoom 6.
+                scheduleMapInvalidate(map);
             }, 100);
         }
 
@@ -3500,9 +3699,25 @@
         }
 
         function renderFooter() {
+            const primaryFooterLinks = [
+                { view: 'home', label: t('home') },
+                { view: 'chi-siamo', label: t('aboutUs') },
+                { view: 'servizi', label: t('services') },
+                { view: 'demo', label: t('demo'), tracked: true },
+                { view: 'contatti', label: t('contactTitle'), tracked: true }
+            ];
+
             return `
                 <footer class="bg-black text-white py-16 text-center safe-area-bottom">
                     <div class="container mx-auto px-4">
+                        <nav class="rayat-footer-primary-nav">
+                            ${primaryFooterLinks.map((link, index) => `
+                                <button onclick="${link.tracked ? `setViewWithTracking('${link.view}')` : `setView('${link.view}')`}" class="rayat-footer-primary-link">
+                                    ${link.label}
+                                </button>
+                                ${index < primaryFooterLinks.length - 1 ? '<span class="rayat-footer-divider" aria-hidden="true">|</span>' : ''}
+                            `).join('')}
+                        </nav>
                         <div class="flex justify-center items-center space-x-3 mb-6">
                             <img src="icons/tree-silver.png" alt="Rayat Logo"
                                  class="h-14 w-auto"
@@ -3510,9 +3725,9 @@
                             <h2 class="text-4xl font-black tracking-tighter text-white">RAYAT</h2>
                         </div>
                         <nav class="flex justify-center space-x-6 mb-8 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                            <a href="#" onclick="setView('contatti')" class="hover:text-white transition uppercase">${t('contactTitle')}</a>
-                            <a href="#" onclick="setView('privacy')" class="hover:text-white transition">${t('privacyPolicy') || 'Privacy Policy'}</a>
-                            <a href="#" onclick="setView('terms')" class="hover:text-white transition">${t('termsOfService') || 'Terms of Service'}</a>
+                            <a href="#" onclick="trackNavigationEvent('contatti'); setView('contatti')" class="hover:text-orange-500 transition uppercase">${t('contactTitle')}</a>
+                            <a href="#" onclick="setView('privacy')" class="hover:text-orange-500 transition">${t('privacyPolicy') || 'Privacy Policy'}</a>
+                            <a href="#" onclick="setView('terms')" class="hover:text-orange-500 transition">${t('termsOfService') || 'Terms of Service'}</a>
                         </nav>
                         <div class="max-w-md mx-auto h-px bg-white/10 mb-8"></div>
                         <p class="text-gray-500 text-[10px] font-black uppercase tracking-[0.3em]">${t('footerRights')}</p>
@@ -3858,7 +4073,7 @@
             founderRole: 'Fondatore / Responsabile progetto Rayat',
             phoneItaly: '+39 351 320 3307',
             phoneMorocco: '+212 628 265466',
-            whatsapp: '+212 628 265466',
+            whatsapp: WHATSAPP_DISPLAY_NUMBER,
             email: 'zakariaabid@hotmail.it',
             officeName: 'Rayat Agriculture Technology',
             officeCity: 'Taroudant',
@@ -3868,6 +4083,7 @@
             lat: 30.4703,
             lng: -8.8770
         };
+        contactSettings.whatsapp = WHATSAPP_DISPLAY_NUMBER;
 
         let registrationStep = 1;
         let registrationData = {
@@ -3901,7 +4117,7 @@
             };
 
             const viewFn = routes[currentView] || renderHomePage;
-            app.innerHTML = viewFn();
+            app.innerHTML = `${viewFn()}${renderPublicWhatsappButton()}`;
             syncBodyScrollLock();
 
             // Post-render initialization
@@ -3912,6 +4128,7 @@
                  // Map initialization for registration is handled inside renderRegisterPage
                  // but we can ensure it here too if needed.
             }
+            invalidateVisibleMaps();
             // removed render post-init chart calls
         }
 
@@ -3933,13 +4150,16 @@
             if (event.state && event.state.view) {
                 currentView = event.state.view;
                 render();
+                trackPageView(currentView);
             } else if (window.location.pathname) {
                 currentView = getViewFromPath(window.location.pathname);
                 render();
+                trackPageView(currentView);
             } else if (currentView !== 'home') {
                 // Return to home if no specific state (simulates Android "exit to home" before closing)
                 currentView = 'home';
                 render();
+                trackPageView(currentView);
             }
         };
 
@@ -3962,6 +4182,16 @@
             }
 
             document.getElementById('lang-menu')?.classList.add('hidden');
+        });
+
+        window.addEventListener('resize', () => {
+            invalidateVisibleMaps();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                invalidateVisibleMaps();
+            }
         });
 
         // Capacitor: Network Connectivity Handler
