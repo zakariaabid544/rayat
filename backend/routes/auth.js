@@ -257,7 +257,9 @@ router.post('/login', async (req, res) => {
                 email: user.email,
                 name: user.name,
                 language: user.language,
-                role: normalizedRole
+                role: normalizedRole,
+                payment_status: user.payment_status || null,
+                subscription_expiry: user.subscription_expiry || null
             }
         });
     } catch (error) {

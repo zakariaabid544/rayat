@@ -214,6 +214,41 @@ async function ensureCoreTables(changes) {
 
   if (
     await ensureTable(
+      'alarm_events',
+      `CREATE TABLE IF NOT EXISTS alarm_events (
+         id INT PRIMARY KEY AUTO_INCREMENT,
+         user_id INT NOT NULL,
+         sensor_id INT NULL,
+         sensor_type VARCHAR(50) NOT NULL,
+         sensor_subtype VARCHAR(80) NULL,
+         param VARCHAR(80) NOT NULL,
+         crop VARCHAR(120) NULL,
+         level ENUM('attention', 'alert') NOT NULL,
+         priority ENUM('medium', 'high') NOT NULL DEFAULT 'medium',
+         value DECIMAL(12, 3) NOT NULL,
+         optimal_min DECIMAL(12, 3) NULL,
+         optimal_max DECIMAL(12, 3) NULL,
+         first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         last_notified_at DATETIME NULL,
+         notification_count INT NOT NULL DEFAULT 0,
+         is_resolved BOOLEAN NOT NULL DEFAULT FALSE,
+         resolved_at DATETIME NULL,
+         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+         FOREIGN KEY (sensor_id) REFERENCES sensors(id) ON DELETE SET NULL,
+         INDEX idx_alarm_events_active (user_id, sensor_type, param, is_resolved),
+         INDEX idx_alarm_events_recent (created_at),
+         INDEX idx_alarm_events_sensor (sensor_id, created_at)
+       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+    )
+  ) {
+    changes.push('alarm_events table');
+  }
+
+  if (
+    await ensureTable(
       'sensor_latest',
       `CREATE TABLE IF NOT EXISTS sensor_latest (
          sensor_id INT PRIMARY KEY,
@@ -379,6 +414,33 @@ async function ensurePlatformSchema() {
        AND location_name <> ''`
   );
 
+  if (
+    await ensureIndex(
+      'alarm_events',
+      'idx_alarm_events_active',
+      'CREATE INDEX idx_alarm_events_active ON alarm_events (user_id, sensor_type, param, is_resolved)'
+    )
+  ) {
+    changes.push('idx_alarm_events_active');
+  }
+  if (
+    await ensureIndex(
+      'alarm_events',
+      'idx_alarm_events_recent',
+      'CREATE INDEX idx_alarm_events_recent ON alarm_events (created_at)'
+    )
+  ) {
+    changes.push('idx_alarm_events_recent');
+  }
+  if (
+    await ensureIndex(
+      'alarm_events',
+      'idx_alarm_events_sensor',
+      'CREATE INDEX idx_alarm_events_sensor ON alarm_events (sensor_id, created_at)'
+    )
+  ) {
+    changes.push('idx_alarm_events_sensor');
+  }
   if (
     await ensureIndex(
       'password_resets',

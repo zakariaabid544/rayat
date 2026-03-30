@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 const { authenticateToken, checkSubscription } = require('../middleware/auth');
+const { upsertAlarmEvent, resolveAlarmEvent } = require('../utils/alerts');
 
 // GET /api/sensors/latest - Ultimi dati di tutti i sensori dell'utente
 router.get('/latest', authenticateToken, checkSubscription, async (req, res) => {
@@ -173,6 +174,60 @@ router.get('/alerts', authenticateToken, checkSubscription, async (req, res) => 
     } catch (error) {
         console.error('Get alerts error:', error);
         res.status(500).json({ error: 'Errore nel recupero allarmi' });
+    }
+});
+
+// POST /api/sensors/alarm-events/sync - Sincronizza alert crop-aware dalla dashboard
+router.post('/alarm-events/sync', authenticateToken, checkSubscription, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const incomingEvents = Array.isArray(req.body.events) ? req.body.events.slice(0, 50) : [];
+
+        for (const event of incomingEvents) {
+            const level = String(event.level || 'normal').trim();
+            const sensorType = String(event.sensorType || '').trim();
+            const sensorSubtype = String(event.sensorSubtype || '').trim();
+            const param = String(event.param || '').trim();
+            const value = Number(event.value);
+
+            if (!sensorType || !param) {
+                continue;
+            }
+
+            if (level === 'normal') {
+                await resolveAlarmEvent({
+                    userId,
+                    sensorType,
+                    sensorSubtype: sensorSubtype || null,
+                    param
+                });
+                continue;
+            }
+
+            if (!Number.isFinite(value)) {
+                continue;
+            }
+
+            await upsertAlarmEvent({
+                userId,
+                sensorType,
+                sensorSubtype: sensorSubtype || null,
+                param,
+                level,
+                value,
+                optimalMin: event.optimalMin ?? null,
+                optimalMax: event.optimalMax ?? null,
+                crop: event.crop ? String(event.crop).trim() : null
+            });
+        }
+
+        res.json({
+            success: true,
+            processed: incomingEvents.length
+        });
+    } catch (error) {
+        console.error('Sync alarm events error:', error);
+        res.status(500).json({ error: 'Errore nella sincronizzazione degli allarmi' });
     }
 });
 

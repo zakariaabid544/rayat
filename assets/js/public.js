@@ -60,6 +60,7 @@
             tomate: 20,
             poivron: 18,
             concombre: 24,
+            melon: 19,
             courgette: 22,
             laitue: 12,
             fraise: 14,
@@ -72,8 +73,264 @@
             luzerne: 26,
             autre: 15
         };
+        const cropRanges = {
+            banane: {
+                soilMoisture: { min: 60, max: 80, unit: '%' },
+                soilTemp: { min: 20, max: 30, unit: '°C' },
+                ec: { min: 1.5, max: 3.0, unit: 'mS/cm' },
+                ph: { min: 5.5, max: 7.0, unit: '' },
+                nitrogen: { min: 150, max: 250, unit: 'mg/kg' },
+                phosphorus: { min: 30, max: 60, unit: 'mg/kg' },
+                potassium: { min: 200, max: 400, unit: 'mg/kg' },
+                airTemp: { min: 26, max: 30, unit: '°C' },
+                airHumidity: { min: 60, max: 90, unit: '%' },
+                co2: { min: 420, max: 1100, unit: 'ppm' },
+                windSpeed: { min: 0, max: 18, unit: 'km/h' }
+            },
+            tomate: {
+                soilMoisture: { min: 65, max: 85, unit: '%' },
+                soilTemp: { min: 18, max: 26, unit: '°C' },
+                ec: { min: 2.0, max: 3.5, unit: 'mS/cm' },
+                ph: { min: 6.0, max: 7.0, unit: '' },
+                nitrogen: { min: 120, max: 200, unit: 'mg/kg' },
+                phosphorus: { min: 40, max: 70, unit: 'mg/kg' },
+                potassium: { min: 180, max: 350, unit: 'mg/kg' },
+                airTemp: { min: 18, max: 25, unit: '°C' },
+                airHumidity: { min: 60, max: 80, unit: '%' },
+                co2: { min: 450, max: 1200, unit: 'ppm' },
+                windSpeed: { min: 0, max: 14, unit: 'km/h' }
+            },
+            concombre: {
+                soilMoisture: { min: 70, max: 85, unit: '%' },
+                soilTemp: { min: 20, max: 28, unit: '°C' },
+                ec: { min: 1.8, max: 3.2, unit: 'mS/cm' },
+                ph: { min: 5.8, max: 6.8, unit: '' },
+                nitrogen: { min: 140, max: 220, unit: 'mg/kg' },
+                phosphorus: { min: 35, max: 65, unit: 'mg/kg' },
+                potassium: { min: 220, max: 380, unit: 'mg/kg' },
+                airTemp: { min: 22, max: 28, unit: '°C' },
+                airHumidity: { min: 65, max: 85, unit: '%' },
+                co2: { min: 500, max: 1300, unit: 'ppm' },
+                windSpeed: { min: 0, max: 12, unit: 'km/h' }
+            },
+            poivron: {
+                soilMoisture: { min: 60, max: 75, unit: '%' },
+                soilTemp: { min: 20, max: 27, unit: '°C' },
+                ec: { min: 1.8, max: 3.0, unit: 'mS/cm' },
+                ph: { min: 6.0, max: 6.8, unit: '' },
+                nitrogen: { min: 110, max: 190, unit: 'mg/kg' },
+                phosphorus: { min: 30, max: 60, unit: 'mg/kg' },
+                potassium: { min: 200, max: 320, unit: 'mg/kg' },
+                airTemp: { min: 20, max: 27, unit: '°C' },
+                airHumidity: { min: 55, max: 75, unit: '%' },
+                co2: { min: 450, max: 1100, unit: 'ppm' },
+                windSpeed: { min: 0, max: 14, unit: 'km/h' }
+            },
+            melon: {
+                soilMoisture: { min: 55, max: 70, unit: '%' },
+                soilTemp: { min: 20, max: 28, unit: '°C' },
+                ec: { min: 1.6, max: 2.8, unit: 'mS/cm' },
+                ph: { min: 6.0, max: 6.8, unit: '' },
+                nitrogen: { min: 100, max: 180, unit: 'mg/kg' },
+                phosphorus: { min: 25, max: 55, unit: 'mg/kg' },
+                potassium: { min: 180, max: 300, unit: 'mg/kg' },
+                airTemp: { min: 24, max: 30, unit: '°C' },
+                airHumidity: { min: 50, max: 70, unit: '%' },
+                co2: { min: 400, max: 1000, unit: 'ppm' },
+                windSpeed: { min: 0, max: 18, unit: 'km/h' }
+            },
+            courgette: {
+                soilMoisture: { min: 60, max: 78, unit: '%' },
+                soilTemp: { min: 19, max: 27, unit: '°C' },
+                ec: { min: 1.7, max: 2.8, unit: 'mS/cm' },
+                ph: { min: 5.8, max: 6.8, unit: '' },
+                nitrogen: { min: 110, max: 180, unit: 'mg/kg' },
+                phosphorus: { min: 30, max: 55, unit: 'mg/kg' },
+                potassium: { min: 190, max: 310, unit: 'mg/kg' },
+                airTemp: { min: 20, max: 28, unit: '°C' },
+                airHumidity: { min: 55, max: 75, unit: '%' },
+                co2: { min: 430, max: 1050, unit: 'ppm' },
+                windSpeed: { min: 0, max: 14, unit: 'km/h' }
+            },
+            laitue: {
+                soilMoisture: { min: 65, max: 82, unit: '%' },
+                soilTemp: { min: 16, max: 22, unit: '°C' },
+                ec: { min: 1.2, max: 2.2, unit: 'mS/cm' },
+                ph: { min: 6.0, max: 7.0, unit: '' },
+                nitrogen: { min: 90, max: 150, unit: 'mg/kg' },
+                phosphorus: { min: 28, max: 50, unit: 'mg/kg' },
+                potassium: { min: 160, max: 260, unit: 'mg/kg' },
+                airTemp: { min: 16, max: 24, unit: '°C' },
+                airHumidity: { min: 60, max: 80, unit: '%' },
+                co2: { min: 380, max: 950, unit: 'ppm' },
+                windSpeed: { min: 0, max: 10, unit: 'km/h' }
+            },
+            fraise: {
+                soilMoisture: { min: 62, max: 78, unit: '%' },
+                soilTemp: { min: 16, max: 24, unit: '°C' },
+                ec: { min: 1.2, max: 2.5, unit: 'mS/cm' },
+                ph: { min: 5.5, max: 6.5, unit: '' },
+                nitrogen: { min: 100, max: 170, unit: 'mg/kg' },
+                phosphorus: { min: 30, max: 55, unit: 'mg/kg' },
+                potassium: { min: 170, max: 280, unit: 'mg/kg' },
+                airTemp: { min: 18, max: 24, unit: '°C' },
+                airHumidity: { min: 60, max: 80, unit: '%' },
+                co2: { min: 420, max: 1000, unit: 'ppm' },
+                windSpeed: { min: 0, max: 12, unit: 'km/h' }
+            },
+            agrumes: {
+                soilMoisture: { min: 45, max: 65, unit: '%' },
+                soilTemp: { min: 18, max: 28, unit: '°C' },
+                ec: { min: 1.0, max: 2.2, unit: 'mS/cm' },
+                ph: { min: 6.0, max: 7.5, unit: '' },
+                nitrogen: { min: 90, max: 160, unit: 'mg/kg' },
+                phosphorus: { min: 20, max: 45, unit: 'mg/kg' },
+                potassium: { min: 180, max: 320, unit: 'mg/kg' },
+                airTemp: { min: 20, max: 32, unit: '°C' },
+                airHumidity: { min: 45, max: 70, unit: '%' },
+                co2: { min: 380, max: 950, unit: 'ppm' },
+                windSpeed: { min: 0, max: 18, unit: 'km/h' }
+            },
+            olive: {
+                soilMoisture: { min: 35, max: 55, unit: '%' },
+                soilTemp: { min: 16, max: 28, unit: '°C' },
+                ec: { min: 0.8, max: 1.8, unit: 'mS/cm' },
+                ph: { min: 6.0, max: 8.0, unit: '' },
+                nitrogen: { min: 60, max: 120, unit: 'mg/kg' },
+                phosphorus: { min: 18, max: 38, unit: 'mg/kg' },
+                potassium: { min: 140, max: 260, unit: 'mg/kg' },
+                airTemp: { min: 18, max: 32, unit: '°C' },
+                airHumidity: { min: 35, max: 65, unit: '%' },
+                co2: { min: 350, max: 900, unit: 'ppm' },
+                windSpeed: { min: 0, max: 22, unit: 'km/h' }
+            },
+            argan: {
+                soilMoisture: { min: 28, max: 45, unit: '%' },
+                soilTemp: { min: 18, max: 32, unit: '°C' },
+                ec: { min: 0.7, max: 1.6, unit: 'mS/cm' },
+                ph: { min: 6.2, max: 8.0, unit: '' },
+                nitrogen: { min: 45, max: 90, unit: 'mg/kg' },
+                phosphorus: { min: 15, max: 30, unit: 'mg/kg' },
+                potassium: { min: 110, max: 220, unit: 'mg/kg' },
+                airTemp: { min: 20, max: 34, unit: '°C' },
+                airHumidity: { min: 25, max: 55, unit: '%' },
+                co2: { min: 350, max: 900, unit: 'ppm' },
+                windSpeed: { min: 0, max: 24, unit: 'km/h' }
+            },
+            ble: {
+                soilMoisture: { min: 40, max: 60, unit: '%' },
+                soilTemp: { min: 14, max: 24, unit: '°C' },
+                ec: { min: 0.8, max: 1.8, unit: 'mS/cm' },
+                ph: { min: 6.0, max: 7.5, unit: '' },
+                nitrogen: { min: 80, max: 140, unit: 'mg/kg' },
+                phosphorus: { min: 22, max: 45, unit: 'mg/kg' },
+                potassium: { min: 120, max: 220, unit: 'mg/kg' },
+                airTemp: { min: 14, max: 24, unit: '°C' },
+                airHumidity: { min: 40, max: 70, unit: '%' },
+                co2: { min: 360, max: 900, unit: 'ppm' },
+                windSpeed: { min: 0, max: 20, unit: 'km/h' }
+            },
+            orge: {
+                soilMoisture: { min: 35, max: 55, unit: '%' },
+                soilTemp: { min: 12, max: 22, unit: '°C' },
+                ec: { min: 0.7, max: 1.7, unit: 'mS/cm' },
+                ph: { min: 6.0, max: 7.8, unit: '' },
+                nitrogen: { min: 70, max: 130, unit: 'mg/kg' },
+                phosphorus: { min: 18, max: 40, unit: 'mg/kg' },
+                potassium: { min: 110, max: 210, unit: 'mg/kg' },
+                airTemp: { min: 12, max: 22, unit: '°C' },
+                airHumidity: { min: 35, max: 65, unit: '%' },
+                co2: { min: 360, max: 880, unit: 'ppm' },
+                windSpeed: { min: 0, max: 20, unit: 'km/h' }
+            },
+            mais: {
+                soilMoisture: { min: 50, max: 70, unit: '%' },
+                soilTemp: { min: 18, max: 28, unit: '°C' },
+                ec: { min: 1.0, max: 2.2, unit: 'mS/cm' },
+                ph: { min: 5.8, max: 7.2, unit: '' },
+                nitrogen: { min: 100, max: 170, unit: 'mg/kg' },
+                phosphorus: { min: 25, max: 50, unit: 'mg/kg' },
+                potassium: { min: 150, max: 280, unit: 'mg/kg' },
+                airTemp: { min: 20, max: 30, unit: '°C' },
+                airHumidity: { min: 45, max: 70, unit: '%' },
+                co2: { min: 380, max: 950, unit: 'ppm' },
+                windSpeed: { min: 0, max: 18, unit: 'km/h' }
+            },
+            luzerne: {
+                soilMoisture: { min: 48, max: 68, unit: '%' },
+                soilTemp: { min: 16, max: 28, unit: '°C' },
+                ec: { min: 0.8, max: 2.0, unit: 'mS/cm' },
+                ph: { min: 6.2, max: 7.5, unit: '' },
+                nitrogen: { min: 70, max: 140, unit: 'mg/kg' },
+                phosphorus: { min: 18, max: 42, unit: 'mg/kg' },
+                potassium: { min: 130, max: 240, unit: 'mg/kg' },
+                airTemp: { min: 18, max: 30, unit: '°C' },
+                airHumidity: { min: 40, max: 70, unit: '%' },
+                co2: { min: 360, max: 900, unit: 'ppm' },
+                windSpeed: { min: 0, max: 20, unit: 'km/h' }
+            },
+            autre: {
+                soilMoisture: { min: 55, max: 75, unit: '%' },
+                soilTemp: { min: 18, max: 28, unit: '°C' },
+                ec: { min: 1.4, max: 2.8, unit: 'mS/cm' },
+                ph: { min: 5.8, max: 7.2, unit: '' },
+                nitrogen: { min: 100, max: 180, unit: 'mg/kg' },
+                phosphorus: { min: 25, max: 55, unit: 'mg/kg' },
+                potassium: { min: 160, max: 300, unit: 'mg/kg' },
+                airTemp: { min: 18, max: 28, unit: '°C' },
+                airHumidity: { min: 45, max: 75, unit: '%' },
+                co2: { min: 400, max: 1000, unit: 'ppm' },
+                windSpeed: { min: 0, max: 16, unit: 'km/h' }
+            }
+        };
+        const RANGE_KEYS = {
+            soil: {
+                moisture: 'soilMoisture',
+                temperature: 'soilTemp',
+                ec: 'ec',
+                pH: 'ph',
+                nitrogen: 'nitrogen',
+                phosphorus: 'phosphorus',
+                potassium: 'potassium'
+            },
+            climate: {
+                temperature: 'airTemp',
+                humidity: 'airHumidity',
+                co2: 'co2',
+                windSpeed: 'windSpeed'
+            }
+        };
+        const SENSOR_SUBTYPE_MAP = {
+            energy: { voltage: 'energia_consumption' },
+            water: { availability: 'acqua_level' },
+            soil: {
+                moisture: 'terreno_moisture',
+                temperature: 'terreno_temperature',
+                ec: 'terreno_ec',
+                pH: 'terreno_ph',
+                nitrogen: 'terreno_n',
+                phosphorus: 'terreno_p',
+                potassium: 'terreno_k'
+            },
+            climate: {
+                temperature: 'clima_temperature',
+                humidity: 'clima_humidity',
+                co2: 'clima_co2',
+                windSpeed: 'clima_wind_speed'
+            }
+        };
+        const ALERT_PRIORITY = { normal: 0, attention: 1, alert: 2 };
         let userCropSelection = loadStoredCropSelection();
         let waterSettings = { hectares: 1, crop: userCropSelection.value };
+        let subscriptionUiState = {
+            expired: false,
+            expiringSoon: false,
+            daysRemaining: null,
+            expiryDate: null
+        };
+        let lastAlarmSyncSignature = '';
+        let lastAlarmSyncAt = 0;
+        const dashboardAlertCooldowns = new Map();
 
         function loadStoredCropSelection() {
             const fallback = { value: DEFAULT_CROP_VALUE, custom: '' };
@@ -129,6 +386,216 @@
             return cropConsumptions[userCropSelection.value] || cropConsumptions.autre;
         }
 
+        function isAuthenticated() {
+            return Boolean(authToken && user && user.id);
+        }
+
+        function parseNumericValue(value) {
+            const numeric = Number.parseFloat(value);
+            return Number.isFinite(numeric) ? numeric : null;
+        }
+
+        function formatMetricValue(value) {
+            const numeric = parseNumericValue(value);
+            if (!Number.isFinite(numeric)) {
+                return '--';
+            }
+            if (Math.abs(numeric) >= 100) {
+                return numeric.toFixed(0);
+            }
+            if (Math.abs(numeric) >= 10) {
+                return numeric.toFixed(1).replace(/\.0$/, '');
+            }
+            return numeric.toFixed(2).replace(/0$/, '').replace(/\.$/, '');
+        }
+
+        function getCurrentCropRanges() {
+            return cropRanges[userCropSelection.value] || cropRanges.autre || cropRanges.banane;
+        }
+
+        function getRangeForMetric(group, key) {
+            const rangeKey = RANGE_KEYS[group]?.[key];
+            if (!rangeKey) {
+                return null;
+            }
+            return getCurrentCropRanges()[rangeKey] || null;
+        }
+
+        function getMetricUnit(group, key, fallbackUnit = '') {
+            return getRangeForMetric(group, key)?.unit || fallbackUnit || '';
+        }
+
+        function normalizeMetricValue(group, key, value) {
+            const numeric = parseNumericValue(value);
+            if (!Number.isFinite(numeric)) {
+                return null;
+            }
+
+            if (group === 'soil' && key === 'ec' && numeric > 20) {
+                return numeric / 1000;
+            }
+
+            return numeric;
+        }
+
+        function getAlertThresholds(range) {
+            const minSpan = Math.max(Math.abs(range.min) * 0.3, range.unit === '' ? 0.3 : 1);
+            const maxSpan = Math.max(Math.abs(range.max) * 0.3, range.unit === '' ? 0.3 : 1);
+            return {
+                lowerCritical: range.min - minSpan,
+                upperCritical: range.max + maxSpan
+            };
+        }
+
+        function getMetricState(value, range) {
+            if (!range || !Number.isFinite(value)) {
+                return {
+                    level: 'normal',
+                    badge: '',
+                    label: 'Normal',
+                    cssModifier: '',
+                    borderColor: 'rgba(148, 163, 184, 0.18)',
+                    accentColor: '#22c55e'
+                };
+            }
+
+            if (value >= range.min && value <= range.max) {
+                return {
+                    level: 'normal',
+                    badge: '',
+                    label: 'Normal',
+                    cssModifier: '',
+                    borderColor: 'rgba(34, 197, 94, 0.14)',
+                    accentColor: '#22c55e'
+                };
+            }
+
+            const { lowerCritical, upperCritical } = getAlertThresholds(range);
+            const isAlert = value < lowerCritical || value > upperCritical;
+
+            return {
+                level: isAlert ? 'alert' : 'attention',
+                badge: isAlert ? '🚨 Alert' : '⚠ Attention',
+                label: isAlert ? 'Alert' : 'Attention',
+                cssModifier: isAlert ? 'rayat-metric-card--alert' : 'rayat-metric-card--attention',
+                borderColor: isAlert ? 'rgba(239, 68, 68, 0.28)' : 'rgba(245, 158, 11, 0.28)',
+                accentColor: isAlert ? '#ef4444' : '#f59e0b'
+            };
+        }
+
+        function getGaugeBounds(group, key, range) {
+            if (!range) {
+                return { min: 0, max: 100 };
+            }
+
+            if (group === 'soil' && key === 'pH') {
+                return { min: Math.max(0, range.min - 1.5), max: range.max + 1.5 };
+            }
+
+            if (group === 'soil' && key === 'ec') {
+                return { min: 0, max: Math.max(4, range.max + 1) };
+            }
+
+            if (group === 'climate' && key === 'co2') {
+                return { min: 250, max: Math.max(1600, range.max + 500) };
+            }
+
+            if (group === 'climate' && key === 'windSpeed') {
+                return { min: 0, max: Math.max(40, range.max + 15) };
+            }
+
+            const padding = Math.max((range.max - range.min) * 0.6, 1);
+            return {
+                min: Math.max(0, range.min - padding),
+                max: range.max + padding
+            };
+        }
+
+        function getGaugeMeta(group, key, range) {
+            const bounds = getGaugeBounds(group, key, range);
+            const { lowerCritical, upperCritical } = getAlertThresholds(range);
+            const clamp = (value) => Math.max(bounds.min, Math.min(bounds.max, value));
+            const toPct = (value) => ((clamp(value) - bounds.min) / (bounds.max - bounds.min)) * 100;
+
+            return {
+                min: bounds.min,
+                max: bounds.max,
+                pointerLeft: toPct,
+                gradient: `linear-gradient(to right,
+                    #ef4444 0%,
+                    #ef4444 ${toPct(lowerCritical)}%,
+                    #f59e0b ${toPct(lowerCritical)}%,
+                    #f59e0b ${toPct(range.min)}%,
+                    #22c55e ${toPct(range.min)}%,
+                    #22c55e ${toPct(range.max)}%,
+                    #f59e0b ${toPct(range.max)}%,
+                    #f59e0b ${toPct(upperCritical)}%,
+                    #ef4444 ${toPct(upperCritical)}%,
+                    #ef4444 100%)`
+            };
+        }
+
+        function buildOptimalRangeLabel(range, prefix = 'Optimal range for') {
+            if (!range) {
+                return '';
+            }
+            const unitSuffix = range.unit ? ` ${range.unit}` : '';
+            return `${prefix} ${getSelectedCropLabel()}: ${formatMetricValue(range.min)} – ${formatMetricValue(range.max)}${unitSuffix}`;
+        }
+
+        function getSubscriptionStateFromUser(userData = user) {
+            if (!userData || !isCustomerRole(userData.role)) {
+                return {
+                    expired: false,
+                    expiringSoon: false,
+                    daysRemaining: null,
+                    expiryDate: null
+                };
+            }
+
+            const expiryDate = userData.subscription_expiry ? new Date(userData.subscription_expiry) : null;
+            if (expiryDate && Number.isNaN(expiryDate.getTime())) {
+                return {
+                    expired: false,
+                    expiringSoon: false,
+                    daysRemaining: null,
+                    expiryDate: null
+                };
+            }
+
+            if (userData.payment_status === 'non_pagato') {
+                return {
+                    expired: true,
+                    expiringSoon: false,
+                    daysRemaining: 0,
+                    expiryDate
+                };
+            }
+
+            if (!expiryDate) {
+                return {
+                    expired: false,
+                    expiringSoon: false,
+                    daysRemaining: null,
+                    expiryDate: null
+                };
+            }
+
+            const diffMs = expiryDate.getTime() - Date.now();
+            const daysRemaining = Math.ceil(diffMs / 86400000);
+
+            return {
+                expired: diffMs < 0,
+                expiringSoon: diffMs >= 0 && daysRemaining <= 7,
+                daysRemaining,
+                expiryDate
+            };
+        }
+
+        function syncSubscriptionUiState() {
+            subscriptionUiState = getSubscriptionStateFromUser();
+        }
+
         function decodeJwtPayload(token) {
             if (!token) return null;
 
@@ -167,6 +634,7 @@
             if (!authToken) {
                 user = null;
                 currentRole = 'guest';
+                syncSubscriptionUiState();
                 return;
             }
 
@@ -175,6 +643,7 @@
                 try {
                     user = JSON.parse(storedUser);
                     currentRole = user?.role || 'guest';
+                    syncSubscriptionUiState();
                     return;
                 } catch (error) {
                     localStorage.removeItem('rayat_user');
@@ -191,6 +660,7 @@
                 };
                 currentRole = decoded.role;
                 localStorage.setItem('rayat_user', JSON.stringify(user));
+                syncSubscriptionUiState();
                 return;
             }
 
@@ -206,6 +676,7 @@
             localStorage.removeItem('rayat_user');
             sessionStorage.removeItem('rayat_admin_token');
             sessionStorage.removeItem('rayat_admin_user');
+            syncSubscriptionUiState();
             hideSubscriptionExpiredModal();
 
             if (!options.skipAdminLogout) {
@@ -218,7 +689,8 @@
 
         function updateWaterSettings(val, type) {
             if (type === 'hectares') {
-                waterSettings.hectares = Number.parseFloat(val) || 0;
+                const parsed = Number.parseFloat(val);
+                waterSettings.hectares = Number.isFinite(parsed) ? Math.max(0.1, parsed) : 0.1;
             } else if (type === 'crop') {
                 setUserCrop(val);
                 return;
@@ -226,6 +698,12 @@
 
             render();
             // removed chart initialization
+        }
+
+        function adjustWaterHectares(delta) {
+            const currentHectares = Number.parseFloat(waterSettings.hectares) || 0;
+            waterSettings.hectares = Math.max(0.1, Number((currentHectares + delta).toFixed(1)));
+            render();
         }
 
         // Alert System State
@@ -929,30 +1407,30 @@
                 const hour = date.getHours();
 
                 // Suolo (7-in-1)
-                const nitrogen = 38 + Math.random() * 4;
-                const phosphorus = 6 + Math.random() * 2;
-                const potassium = 46 + Math.random() * 6;
-                const pH = 6.4 + Math.random() * 0.4;
-                const ec = 190 + Math.random() * 30;
-                const moisture = 34 + Math.random() * 3;
-                const tempSuolo = 16 + Math.random() * 6;
+                const nitrogen = 135 + Math.random() * 55;
+                const phosphorus = 35 + Math.random() * 18;
+                const potassium = 210 + Math.random() * 90;
+                const pH = 6.0 + Math.random() * 0.6;
+                const ec = 1700 + Math.random() * 900;
+                const moisture = 60 + Math.random() * 18;
+                const tempSuolo = 20 + Math.random() * 7;
 
                 // Clima
                 let tempClima;
                 if (hour >= 6 && hour <= 18) {
-                    tempClima = 22 + Math.sin((hour - 6) / 12 * Math.PI) * 18;
+                    tempClima = 20 + Math.sin((hour - 6) / 12 * Math.PI) * 10;
                 } else {
-                    tempClima = 12 + Math.random() * 6;
+                    tempClima = 16 + Math.random() * 5;
                 }
-                const humidity = 50 + Math.random() * 45;
-                const co2 = 400 + Math.random() * 100;
-                const wind = 5 + Math.random() * 15;
+                const humidity = 58 + Math.random() * 24;
+                const co2 = 460 + Math.random() * 260;
+                const wind = 4 + Math.random() * 10;
 
                 // Acqua
-                const waterLevel = 3.2 + Math.random() * 0.6;
+                const waterLevel = 3.6 + Math.random() * 0.8;
 
                 // Energia (Battery Voltage)
-                const battery = 12.4 + Math.random() * 1.4;
+                const battery = 12.2 + Math.random() * 1.1;
 
                 globalHistory.push({
                     date,
@@ -969,14 +1447,7 @@
                     nitrogen,
                     phosphorus,
                     potassium,
-                    status: 'statusNormal',
-                    isOptimalTemp: true,
-                    isOptimalMoisture: true,
-                    isOptimalEC: true,
-                    isOptimalN: true,
-                    isOptimalP: true,
-                    isOptimalK: true,
-                    isOptimalPH: true
+                    status: 'statusNormal'
                 });
             }
             // Update current sensorData with the last point
@@ -1058,6 +1529,253 @@
                         <span>${max}${unit}</span>
                     </div>
                 </div>`;
+        }
+
+        function getLevelClass(level) {
+            if (level === 'alert') return 'text-red-600';
+            if (level === 'attention') return 'text-amber-600';
+            return 'text-green-600';
+        }
+
+        function getStatusBadge(level, fallback = t('statusNormal')) {
+            if (level === 'alert') {
+                return {
+                    className: 'bg-red-100 text-red-700',
+                    label: '🚨 Alert'
+                };
+            }
+
+            if (level === 'attention') {
+                return {
+                    className: 'bg-amber-100 text-amber-700',
+                    label: '⚠ Attention'
+                };
+            }
+
+            return {
+                className: 'bg-green-100 text-green-700',
+                label: fallback
+            };
+        }
+
+        function getMetricLevel(group, key, value) {
+            const normalizedValue = normalizeMetricValue(group, key, value);
+            const range = getRangeForMetric(group, key);
+            return getMetricState(normalizedValue, range).level;
+        }
+
+        function getOverallLevel(levels = []) {
+            if (levels.includes('alert')) {
+                return 'alert';
+            }
+            if (levels.includes('attention')) {
+                return 'attention';
+            }
+            return 'normal';
+        }
+
+        function renderHistoryStatusCell(level, fallback = t('statusNormal')) {
+            const badge = getStatusBadge(level, fallback);
+            return `<td class="p-8 text-right"><span class="px-4 py-2 ${badge.className} rounded-xl font-black text-[10px] uppercase tracking-widest">${badge.label}</span></td>`;
+        }
+
+        function renderMetricCard(group, metric, options = {}) {
+            const normalizedValue = normalizeMetricValue(group, metric.key, metric.value);
+            const range = getRangeForMetric(group, metric.key);
+            const unit = getMetricUnit(group, metric.key, metric.unit || metric.unita || '');
+            const state = getMetricState(normalizedValue, range);
+            const gauge = range ? getGaugeMeta(group, metric.key, range) : null;
+            const rangeLabel = buildOptimalRangeLabel(range, group === 'climate' ? 'Optimal for' : 'Optimal range for');
+
+            return `
+                <article class="rayat-metric-card ${state.cssModifier}">
+                    ${state.badge ? `<span class="rayat-alert-badge ${state.level === 'alert' ? 'rayat-alert-badge--alert' : 'rayat-alert-badge--attention'}">${state.badge}</span>` : ''}
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-3xl">${metric.icon}</span>
+                        <div>
+                            <p class="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">${t(metric.label)}</p>
+                            <p class="text-sm font-semibold ${getLevelClass(state.level)}">${state.label}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-end gap-2 mb-5">
+                        <span class="text-5xl font-black text-slate-900 leading-none">${formatMetricValue(normalizedValue)}</span>
+                        <span class="text-sm font-bold text-slate-400 uppercase">${unit}</span>
+                    </div>
+                    ${gauge ? `
+                        <div class="rayat-range-track" style="background:${gauge.gradient};">
+                            <div class="rayat-range-pointer" style="left:calc(${gauge.pointerLeft(normalizedValue)}% - 9px);"></div>
+                        </div>
+                        <div class="flex justify-between text-[11px] font-semibold text-slate-400 mt-3">
+                            <span>${formatMetricValue(gauge.min)}${unit ? ` ${unit}` : ''}</span>
+                            <span>${formatMetricValue(gauge.max)}${unit ? ` ${unit}` : ''}</span>
+                        </div>
+                    ` : ''}
+                    <p class="mt-4 text-sm leading-relaxed ${state.level === 'normal' ? 'text-slate-500' : getLevelClass(state.level)}">${rangeLabel}</p>
+                </article>
+            `;
+        }
+
+        function buildDashboardAlertSnapshot() {
+            const snapshot = [];
+            const cropLabel = getSelectedCropLabel();
+
+            sensorData.terreno.details.forEach((metric) => {
+                const range = getRangeForMetric('soil', metric.key);
+                const value = normalizeMetricValue('soil', metric.key, metric.value);
+                const state = getMetricState(value, range);
+                snapshot.push({
+                    sensor: 'terreno',
+                    sensorLabel: t(sensorData.terreno.nome),
+                    sensorType: 'terreno',
+                    sensorSubtype: SENSOR_SUBTYPE_MAP.soil[metric.key] || null,
+                    param: metric.key,
+                    label: t(metric.label),
+                    value,
+                    unit: getMetricUnit('soil', metric.key, metric.unit || ''),
+                    level: state.level,
+                    optimalMin: range?.min ?? null,
+                    optimalMax: range?.max ?? null,
+                    crop: cropLabel,
+                    title: `${t(metric.label)} • ${cropLabel}`,
+                    description: buildOptimalRangeLabel(range)
+                });
+            });
+
+            sensorData.clima.details.forEach((metric) => {
+                const range = getRangeForMetric('climate', metric.key);
+                const value = normalizeMetricValue('climate', metric.key, metric.value);
+                const state = getMetricState(value, range);
+                snapshot.push({
+                    sensor: 'clima',
+                    sensorLabel: t(sensorData.clima.nome),
+                    sensorType: 'clima',
+                    sensorSubtype: SENSOR_SUBTYPE_MAP.climate[metric.key] || null,
+                    param: metric.key,
+                    label: t(metric.label),
+                    value,
+                    unit: getMetricUnit('climate', metric.key, metric.unit || ''),
+                    level: state.level,
+                    optimalMin: range?.min ?? null,
+                    optimalMax: range?.max ?? null,
+                    crop: cropLabel,
+                    title: `${t(metric.label)} • ${cropLabel}`,
+                    description: buildOptimalRangeLabel(range, 'Optimal for')
+                });
+            });
+
+            const energyRange = { min: 12.2, max: 13.8, unit: sensorData.energia.unita || 'V' };
+            const energyValue = parseNumericValue(sensorData.energia.valore);
+            const energyState = getMetricState(energyValue, energyRange);
+            snapshot.push({
+                sensor: 'energia',
+                sensorLabel: t(sensorData.energia.nome),
+                sensorType: 'energia',
+                sensorSubtype: SENSOR_SUBTYPE_MAP.energy.voltage,
+                param: 'voltage',
+                label: 'Battery Voltage',
+                value: energyValue,
+                unit: energyRange.unit,
+                level: energyState.level,
+                optimalMin: energyRange.min,
+                optimalMax: energyRange.max,
+                crop: null,
+                title: `${t(sensorData.energia.nome)} • Battery`,
+                description: `Optimal range: ${formatMetricValue(energyRange.min)} – ${formatMetricValue(energyRange.max)} ${energyRange.unit}`
+            });
+
+            const numDays = filterState.period === '7d' ? 7 : (filterState.period === '30d' ? 30 : 1);
+            const requiredWater = (Number.parseFloat(waterSettings.hectares) || 0) * getCropConsumptionValue() * numDays;
+            const availableWater = (parseNumericValue(sensorData.acqua.valore) || 0) * 1000;
+            const waterLevel = availableWater < (requiredWater * 0.7) ? 'alert' : (availableWater < requiredWater ? 'attention' : 'normal');
+            snapshot.push({
+                sensor: 'acqua',
+                sensorLabel: t(sensorData.acqua.nome),
+                sensorType: 'acqua',
+                sensorSubtype: SENSOR_SUBTYPE_MAP.water.availability,
+                param: 'availability',
+                label: `${t('available')} / ${t('need')}`,
+                value: availableWater,
+                unit: t('ton'),
+                level: waterLevel,
+                optimalMin: requiredWater,
+                optimalMax: null,
+                crop: cropLabel,
+                title: `${t(sensorData.acqua.nome)} • ${cropLabel}`,
+                description: `${t('need')}: ${Math.round(requiredWater).toLocaleString()} ${t('ton')}`
+            });
+
+            return snapshot;
+        }
+
+        async function syncDashboardAlarmEvents() {
+            if (!isAuthenticated() || !isCustomerRole(currentRole) || currentView !== 'demo') {
+                return;
+            }
+
+            const events = buildDashboardAlertSnapshot().map((event) => ({
+                sensorType: event.sensorType,
+                sensorSubtype: event.sensorSubtype,
+                param: event.param,
+                level: event.level,
+                value: event.value,
+                optimalMin: event.optimalMin,
+                optimalMax: event.optimalMax,
+                crop: event.crop
+            }));
+
+            const signature = JSON.stringify(events);
+            const now = Date.now();
+            if (signature === lastAlarmSyncSignature && (now - lastAlarmSyncAt) < 60000) {
+                return;
+            }
+
+            lastAlarmSyncSignature = signature;
+            lastAlarmSyncAt = now;
+
+            try {
+                await fetch(`${CONFIG.API_BASE_URL}/sensors/alarm-events/sync`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ events })
+                });
+            } catch (error) {
+                console.warn('Alarm sync skipped:', error);
+            }
+        }
+
+        function renderActiveAlertFeed(sensorFilter = null) {
+            const relevantAlerts = activeAlerts.filter((alert) => !sensorFilter || alert.sensor === sensorFilter);
+            if (!relevantAlerts.length) {
+                return '';
+            }
+
+            return `
+                <section class="rayat-dashboard-alert-feed">
+                    <div class="flex items-center justify-between gap-4 mb-5">
+                        <div>
+                            <p class="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">Alert Attivi</p>
+                            <h5 class="text-2xl font-black text-slate-900">Recent crop-aware events</h5>
+                        </div>
+                        <span class="text-sm font-bold text-slate-500">${relevantAlerts.length}</span>
+                    </div>
+                    <div class="space-y-3">
+                        ${relevantAlerts.slice(0, 4).map((alert) => `
+                            <button onclick="setSensor('${alert.sensor}')" class="w-full text-left bg-white/90 border border-white rounded-2xl px-4 py-4 shadow-sm transition hover:shadow-md">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p class="font-black text-slate-900">${escapeHtml(alert.title)}</p>
+                                        <p class="text-sm text-slate-500 mt-1">${escapeHtml(alert.description)}</p>
+                                    </div>
+                                    <span class="text-xs font-black uppercase tracking-[0.16em] ${alert.level === 'alert' ? 'text-red-600' : 'text-amber-600'}">${alert.level === 'alert' ? 'Alert' : 'Attention'}</span>
+                                </div>
+                            </button>
+                        `).join('')}
+                    </div>
+                </section>
+            `;
         }
 
         // --- Historical Data (populated by generateSimulationData) ---
@@ -1197,6 +1915,7 @@
                     user = data.user;
                     currentRole = user.role || 'client';
                     localStorage.setItem('rayat_user', JSON.stringify(user));
+                    syncSubscriptionUiState();
                     hideSubscriptionExpiredModal();
 
                     if (window.Capacitor && window.Capacitor.Plugins.Haptics) {
@@ -1400,7 +2119,7 @@
                 generateSimulationData();
             }
 
-            if (!authToken) {
+            if (!isAuthenticated()) {
                 hideSubscriptionExpiredModal();
                 const cached = localStorage.getItem('rayat_sensor_cache');
                 if (cached) {
@@ -1418,6 +2137,11 @@
                 return;
             }
 
+            if (subscriptionUiState.expired) {
+                showSubscriptionExpiredModal();
+                return;
+            }
+
             try {
                 const response = await fetch(`${CONFIG.API_BASE_URL}/sensors/latest`, {
                     headers: { 'Authorization': `Bearer ${authToken}` }
@@ -1426,6 +2150,11 @@
                 if (response.status === 401 || response.status === 403) {
                     const errorData = await response.json().catch(() => ({}));
                     if (response.status === 403 && errorData.error === 'subscription_expired' && user && isCustomerRole(currentRole)) {
+                        subscriptionUiState = {
+                            ...subscriptionUiState,
+                            expired: true,
+                            expiringSoon: false
+                        };
                         showSubscriptionExpiredModal();
                         return;
                     }
@@ -1528,26 +2257,27 @@
         /* --- Alert System Logic --- */
 
         function checkAlerts() {
-            activeAlerts = [];
-            if (sensorData.energia.valore > alertSettings.energia.maxConsumption) {
-                activeAlerts.push({ type: 'warning', msg: 'alertMsgEnergy', sensor: 'energia' });
-            }
-            if (sensorData.acqua.valore < alertSettings.acqua.minLevel) {
-                activeAlerts.push({ type: 'critical', msg: 'alertMsgWater', sensor: 'acqua' });
-            }
-            if (sensorData.terreno.valore < alertSettings.terreno.minMoisture) {
-                activeAlerts.push({ type: 'warning', msg: 'alertMsgSoil', sensor: 'terreno' });
-            }
-            if (sensorData.clima.valore > alertSettings.clima.maxTemp) {
-                activeAlerts.push({ type: 'critical', msg: 'alertMsgTempHigh', sensor: 'clima' });
-            } else if (sensorData.clima.valore < alertSettings.clima.minTemp) {
-                activeAlerts.push({ type: 'warning', msg: 'alertMsgTempLow', sensor: 'clima' });
-            }
+            activeAlerts = buildDashboardAlertSnapshot()
+                .filter((event) => event.level !== 'normal')
+                .sort((left, right) => ALERT_PRIORITY[right.level] - ALERT_PRIORITY[left.level]);
 
-            // Capacitor: Push Notification (FCM Bridge Placeholder)
-            if (activeAlerts.length > 0 && window.Capacitor && window.Capacitor.Plugins.PushNotifications) {
-                // Notification logic for background/push would go here
-            }
+            activeAlerts
+                .filter((event) => event.level === 'alert')
+                .forEach((event) => {
+                    const cooldownKey = `${event.sensorType}:${event.param}`;
+                    const lastLoggedAt = dashboardAlertCooldowns.get(cooldownKey) || 0;
+                    if ((Date.now() - lastLoggedAt) >= (30 * 60 * 1000)) {
+                        dashboardAlertCooldowns.set(cooldownKey, Date.now());
+                        console.warn(`Immediate alert: ${event.sensorType}.${event.param}`, {
+                            crop: event.crop,
+                            value: event.value,
+                            optimalMin: event.optimalMin,
+                            optimalMax: event.optimalMax
+                        });
+                    }
+                });
+
+            syncDashboardAlarmEvents();
         }
 
         function toggleSettings() {
@@ -1625,7 +2355,7 @@
         }
         
         function showSubscriptionExpiredModal() {
-            if (!authToken || !user || !isCustomerRole(currentRole)) {
+            if (!isAuthenticated() || !isCustomerRole(currentRole) || currentView !== 'demo' || !subscriptionUiState.expired) {
                 return;
             }
 
@@ -1681,15 +2411,36 @@
                     `<div class="p-4 text-center text-gray-500 text-sm">${t('noNotifications')}</div>` :
                     activeAlerts.map(alert => `
                                 <div class="p-4 border-b border-gray-100 hover:bg-red-50 flex items-start space-x-3 cursor-pointer" onclick="setSensor('${alert.sensor}'); toggleNotifications();">
-                                    <span class="text-xl">${alert.type === 'critical' ? '🚨' : '⚠️'}</span>
+                                    <span class="text-xl">${alert.level === 'alert' ? '🚨' : '⚠️'}</span>
                                     <div>
-                                        <p class="font-bold text-sm text-gray-800">${t(alert.msg)}</p>
-                                        <p class="text-xs text-gray-500 capitalize">${t('sensor' + alert.sensor.charAt(0).toUpperCase() + alert.sensor.slice(1, 2) + 'Name')}</p>
+                                        <p class="font-bold text-sm text-gray-800">${escapeHtml(alert.title || alert.label)}</p>
+                                        <p class="text-xs text-gray-500 capitalize">${escapeHtml(alert.description || alert.sensorLabel || alert.sensor)}</p>
                                     </div>
                                 </div>
                             `).join('')
                 }
                     </div>
+                </div>
+            `;
+        }
+
+        function renderSubscriptionWarningBanner() {
+            if (!isAuthenticated() || !isCustomerRole(currentRole) || currentView !== 'demo' || !subscriptionUiState.expiringSoon || subscriptionUiState.expired) {
+                return '';
+            }
+
+            const expiryText = subscriptionUiState.expiryDate
+                ? subscriptionUiState.expiryDate.toLocaleDateString()
+                : '';
+
+            return `
+                <div class="rayat-soft-banner mb-8">
+                    <div>
+                        <p class="text-[11px] font-black uppercase tracking-[0.28em] text-amber-700">Subscription notice</p>
+                        <h4 class="text-xl font-black text-slate-900 mt-2">Your plan expires soon</h4>
+                        <p class="text-sm text-slate-600 mt-2">Access stays active, but the subscription ends ${subscriptionUiState.daysRemaining != null ? `in ${subscriptionUiState.daysRemaining} day(s)` : 'soon'}${expiryText ? ` on ${expiryText}` : ''}.</p>
+                    </div>
+                    <button onclick="openSupportWhatsapp()" class="mt-4 inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-black px-5 py-3 rounded-2xl transition">Support</button>
                 </div>
             `;
         }
@@ -2776,69 +3527,7 @@
 
 
             const render7in1 = () => {
-                const details = sensorData.terreno.details;
-                const soilRanges = {
-                    moisture: { min: 0, max: 100, zones: [{ to: 30, c: 'red' }, { to: 40, c: 'yellow' }, { to: 60, c: 'green' }, { to: 70, c: 'yellow' }, { to: 100, c: 'red' }] },
-                    temperature: { min: 0, max: 45, zones: [{ to: 13, c: 'red' }, { to: 18, c: 'yellow' }, { to: 28, c: 'green' }, { to: 45, c: 'red' }] },
-                    ec: { min: 0, max: 2, zones: [{ to: 0.2, c: 'red' }, { to: 0.4, c: 'yellow' }, { to: 2, c: 'green' }] },
-                    pH: { min: 3, max: 10, zones: [{ to: 5.5, c: 'red' }, { to: 6.0, c: 'yellow' }, { to: 7.0, c: 'green' }, { to: 7.5, c: 'yellow' }, { to: 10, c: 'red' }] },
-                    nitrogen: { min: 0, max: 100, zones: [{ to: 30, c: 'red' }, { to: 60, c: 'green' }, { to: 100, c: 'yellow' }] },
-                    phosphorus: { min: 0, max: 60, zones: [{ to: 15, c: 'red' }, { to: 20, c: 'yellow' }, { to: 60, c: 'green' }] },
-                    potassium: { min: 0, max: 300, zones: [{ to: 60, c: 'red' }, { to: 100, c: 'yellow' }, { to: 300, c: 'green' }] },
-                };
-                const colorMap = { green: '#22c55e', yellow: '#eab308', red: '#ef4444' };
-                const labelMap = { green: 'Optimal ✅', yellow: 'Attention ⚠️', red: 'Alerte 🚨' };
-
-                const rows = details.map(p => {
-                    const key = p.key;
-                    const rawVal = parseFloat(p.value);
-                    const r = soilRanges[key];
-                    const status = (() => {
-                        if (!r) return 'green';
-                        for (const z of r.zones) { if (rawVal <= z.to) return z.c; }
-                        return r.zones[r.zones.length - 1].c;
-                    })();
-                    const arrowPct = r ? Math.max(0, Math.min(100, (rawVal - r.min) / (r.max - r.min) * 100)).toFixed(1) : 50;
-
-                    const icons = { moisture: '💧', temperature: '🌡️', ec: '⚡', pH: '🧪', nitrogen: '🌿', phosphorus: '🌿', potassium: '🌿' };
-                    const labels = { moisture: t('sensorSoF1'), temperature: t('sensorSoF2'), ec: t('sensorSoF3'), pH: t('sensorSoF4'), nitrogen: t('sensorSoF5'), phosphorus: t('sensorSoF6'), potassium: t('sensorSoF7') };
-                    const units = { moisture: '%', temperature: '°C', ec: 'dS/m', pH: 'pH', nitrogen: 'mg/kg', phosphorus: 'mg/kg', potassium: 'mg/kg' };
-                    const statusColor = colorMap[status] || '#22c55e';
-
-                    let gradient = 'linear-gradient(to right, #22c55e, #22c55e)';
-                    if (r) {
-                        const span = r.max - r.min;
-                        let stops = [], curr = r.min;
-                        for (const z of r.zones) {
-                            stops.push(`${colorMap[z.c]} ${((curr - r.min) / span * 100).toFixed(1)}%`, `${colorMap[z.c]} ${((z.to - r.min) / span * 100).toFixed(1)}%`);
-                            curr = z.to;
-                        }
-                        gradient = `linear-gradient(to right, ${stops.join(', ')})`;
-                    }
-
-                    return `
-                    <div style="background:#fff;border-radius:1.5rem;padding:1.8rem 2rem;box-shadow:0 4px 24px rgba(0,0,0,0.07);border:2px solid ${statusColor}22;transition:box-shadow .3s;" onmouseover="this.style.boxShadow='0 8px 32px rgba(0,0,0,0.13)'" onmouseout="this.style.boxShadow='0 4px 24px rgba(0,0,0,0.07)'">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.9rem;">
-                            <div style="display:flex;align-items:center;gap:0.7rem;">
-                                <span style="font-size:1.8rem;">${icons[key] || p.icon}</span>
-                                <span style="font-size:0.75rem;font-weight:900;text-transform:uppercase;letter-spacing:0.12em;color:#64748b;">${labels[key] || t(p.label)}</span>
-                            </div>
-                            <span style="font-size:0.65rem;font-weight:800;padding:0.25rem 0.75rem;border-radius:999px;background:${statusColor}22;color:${statusColor};letter-spacing:0.08em;">${labelMap[status]}</span>
-                        </div>
-                        <div style="display:flex;align-items:baseline;gap:0.4rem;margin-bottom:1.1rem;">
-                            <span style="font-size:3rem;font-weight:900;color:#0f172a;line-height:1;">${p.value}</span>
-                            <span style="font-size:0.85rem;font-weight:700;color:#94a3b8;">${units[key] || p.unit || ''}</span>
-                        </div>
-                        <div style="position:relative;margin-bottom:0.8rem;">
-                            <div style="height:14px;border-radius:999px;background:${gradient};width:100%;box-shadow:inset 0 1px 3px rgba(0,0,0,0.1);"></div>
-                            <div style="position:absolute;top:-6px;left:calc(${arrowPct}% - 8px);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:16px solid #1e293b;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));transition:left 0.8s ease;"></div>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;font-size:0.6rem;font-weight:700;color:#94a3b8;letter-spacing:0.08em;padding-top:0.3rem;">
-                            <span>${r ? r.min + ' ' + (units[key] || '') : ''}</span>
-                            <span>${r ? r.max + ' ' + (units[key] || '') : ''}</span>
-                        </div>
-                    </div>`;
-                }).join('');
+                const rows = sensorData.terreno.details.map((metric) => renderMetricCard('soil', metric)).join('');
 
                 return `
                 <div style="margin-bottom:2.5rem;text-align:center;">
@@ -2851,65 +3540,12 @@
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-12">${rows}</div>`;
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-12">${rows}</div>
+                ${renderActiveAlertFeed('terreno')}`;
             };
 
             const renderClimate = () => {
-                const colorMap = { green: '#22c55e', yellow: '#eab308', red: '#ef4444' };
-                const labelMap = { green: 'Optimal ✅', yellow: 'Attention ⚠️', red: 'Alerte 🚨' };
-                const climateRanges = {
-                    temperature: { min: -10, max: 50, zones: [{ to: 5, c: 'red' }, { to: 18, c: 'yellow' }, { to: 32, c: 'green' }, { to: 40, c: 'yellow' }, { to: 50, c: 'red' }] },
-                    humidity: { min: 0, max: 100, zones: [{ to: 20, c: 'red' }, { to: 40, c: 'yellow' }, { to: 70, c: 'green' }, { to: 85, c: 'yellow' }, { to: 100, c: 'red' }] },
-                    co2: { min: 300, max: 2000, zones: [{ to: 350, c: 'yellow' }, { to: 1000, c: 'green' }, { to: 1500, c: 'yellow' }, { to: 2000, c: 'red' }] },
-                    windSpeed: { min: 0, max: 100, zones: [{ to: 20, c: 'green' }, { to: 40, c: 'yellow' }, { to: 100, c: 'red' }] },
-                };
-
-                const rows = sensorData.clima.details.map(p => {
-                    const key = p.key;
-                    const r = climateRanges[key];
-                    const rawVal = parseFloat(p.value);
-                    const status = (() => {
-                        if (!r) return 'green';
-                        for (const z of r.zones) { if (rawVal <= z.to) return z.c; }
-                        return 'red';
-                    })();
-                    const arrowPct = r ? Math.max(0, Math.min(100, (rawVal - r.min) / (r.max - r.min) * 100)).toFixed(1) : 50;
-                    const statusColor = colorMap[status] || '#22c55e';
-
-                    let gradient = 'linear-gradient(to right, #22c55e, #22c55e)';
-                    if (r) {
-                        const span = r.max - r.min;
-                        let stops = [], curr = r.min;
-                        for (const z of r.zones) {
-                            stops.push(`${colorMap[z.c]} ${((curr - r.min) / span * 100).toFixed(1)}%`, `${colorMap[z.c]} ${((z.to - r.min) / span * 100).toFixed(1)}%`);
-                            curr = z.to;
-                        }
-                        gradient = `linear-gradient(to right, ${stops.join(', ')})`;
-                    }
-
-                    return `
-                    <div style="background:#fff;border-radius:1.5rem;padding:1.8rem 2rem;box-shadow:0 4px 24px rgba(0,0,0,0.07);border:2px solid ${statusColor}22;transition:box-shadow .3s;" onmouseover="this.style.boxShadow='0 8px 32px rgba(0,0,0,0.13)'" onmouseout="this.style.boxShadow='0 4px 24px rgba(0,0,0,0.07)'">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.9rem;">
-                            <div style="display:flex;align-items:center;gap:0.7rem;">
-                                <span style="font-size:1.8rem;">${p.icon}</span>
-                                <span style="font-size:0.75rem;font-weight:900;text-transform:uppercase;letter-spacing:0.12em;color:#64748b;">${t(p.label)}</span>
-                            </div>
-                            <span style="font-size:0.65rem;font-weight:800;padding:0.25rem 0.75rem;border-radius:999px;background:${statusColor}22;color:${statusColor};letter-spacing:0.08em;">${labelMap[status]}</span>
-                        </div>
-                        <div style="display:flex;align-items:baseline;gap:0.4rem;margin-bottom:1.1rem;">
-                            <span style="font-size:3rem;font-weight:900;color:#0f172a;line-height:1;">${p.value}</span>
-                            <span style="font-size:0.85rem;font-weight:700;color:#94a3b8;">${p.unita || p.unit || ''}</span>
-                        </div>
-                        <div style="position:relative;margin-bottom:0.8rem;">
-                            <div style="height:14px;border-radius:999px;background:${gradient};width:100%;box-shadow:inset 0 1px 3px rgba(0,0,0,0.1);"></div>
-                            <div style="position:absolute;top:-6px;left:calc(${arrowPct}% - 8px);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:16px solid #1e293b;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));transition:left 0.8s ease;"></div>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;font-size:0.6rem;font-weight:700;color:#94a3b8;letter-spacing:0.08em;padding-top:0.3rem;">
-                            <span>${r ? r.min + ' ' + (p.unit || '') : ''}</span>
-                            <span>${r ? r.max + ' ' + (p.unit || '') : ''}</span>
-                        </div>
-                    </div>`;
-                }).join('');
+                const rows = sensorData.clima.details.map((metric) => renderMetricCard('climate', metric)).join('');
 
                 return `
                 <div class="mb-10 text-center">
@@ -2922,7 +3558,8 @@
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">${rows}</div>`;
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">${rows}</div>
+                ${renderActiveAlertFeed('clima')}`;
             };
 
             const renderWater = () => {
@@ -2944,15 +3581,37 @@
                     </div>
                     <p class="text-gray-400 font-bold uppercase tracking-widest text-xs mt-0">${t('realTimeMonitoring')}</p>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-                    <div class="bg-gray-50 p-10 rounded-[2.5rem] border border-gray-100 shadow-inner">
+                <div class="rayat-water-compact mb-12">
+                    <div>
                         <label class="block text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">${t('hectaresLabel')}</label>
-                        <div class="relative">
-                            <input type="number" value="${waterSettings.hectares}" oninput="updateWaterSettings(this.value, 'hectares')" class="w-full bg-white border-2 border-gray-100 rounded-3xl p-6 pr-20 font-black text-3xl text-gray-800 outline-none focus:border-blue-500 transition-all">
-                            <span class="absolute right-8 top-1/2 -translate-y-1/2 font-black text-gray-300 text-xl border-l-2 border-gray-100 pl-4">${t('ha')}</span>
+                        <div class="rayat-water-hectares">
+                            <button type="button" onclick="adjustWaterHectares(-0.5)" class="rayat-water-stepper">−</button>
+                            <div class="rayat-water-hectares-input">
+                                <input type="number" min="0.1" step="0.1" value="${waterSettings.hectares}" oninput="updateWaterSettings(this.value, 'hectares')" class="w-full bg-transparent font-black text-3xl text-gray-800 outline-none text-center">
+                                <span class="text-sm font-black text-slate-400 uppercase">${t('ha')}</span>
+                            </div>
+                            <button type="button" onclick="adjustWaterHectares(0.5)" class="rayat-water-stepper">+</button>
                         </div>
                     </div>
-                    ${renderCropSelector({ label: t('cropLabel') })}
+                    <div>
+                        <label class="block text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">${t('cropLabel')}</label>
+                        <select onchange="updateWaterSettings(this.value, 'crop')" class="w-full bg-white border-2 border-gray-100 rounded-3xl px-5 py-4 font-black text-xl text-gray-800 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer">
+                            ${CROP_OPTIONS.map((option) => `
+                                <option value="${option.value}" ${userCropSelection.value === option.value ? 'selected' : ''}>
+                                    ${t(option.labelKey)}
+                                </option>
+                            `).join('')}
+                        </select>
+                        ${userCropSelection.value === 'autre' ? `
+                            <input
+                                type="text"
+                                value="${escapeHtml(userCropSelection.custom)}"
+                                onchange="setUserCustomCrop(this.value)"
+                                class="w-full mt-3 px-4 py-3 border border-gray-200 rounded-2xl"
+                                placeholder="${escapeHtml(t('cropCustomPlaceholder'))}"
+                            >
+                        ` : ''}
+                    </div>
                 </div>
                 <div class="bg-white rounded-[4rem] border-[12px] ${isShortage ? 'border-red-500' : 'border-green-500'} p-8 md:p-12 shadow-2xl transition-all overflow-hidden">
                     <div class="flex flex-col lg:flex-row items-center justify-between gap-8 w-full">
@@ -2972,13 +3631,15 @@
                             <div class="text-[8px] md:text-[10px] font-black opacity-80 uppercase tracking-widest leading-tight">${isShortage ? t('msgShortage') : t('msgOk')}</div>
                         </div>
                     </div>
-                </div>`;
+                </div>
+                ${renderActiveAlertFeed('acqua')}`;
             };
 
             return `
                 ${renderHeader(!!user)}
             <section class="py-24 bg-gray-50 min-h-screen">
                 <div class="container mx-auto px-4 max-w-[1300px]">
+                    ${renderSubscriptionWarningBanner()}
                     <div class="text-center mb-20">
                         <h2 class="text-7xl font-black text-green-800 tracking-tighter uppercase mb-4">${user ? t('dashboardBtn') : t('demoDashboard')}</h2>
                         <p class="text-2xl font-bold text-gray-400 uppercase tracking-widest">${t('demoDesc')}</p>
@@ -3005,8 +3666,8 @@
                                                     <h3 class="text-7xl font-black text-slate-900 tracking-tighter uppercase leading-none m-0">${t(current.nome)}</h3>
                                                 </div>
                                                 <div class="flex items-center gap-4 mt-8">
-                                                    <div class="px-6 py-2 bg-green-100 text-green-700 rounded-2xl font-black text-sm uppercase tracking-widest border border-green-200 flex items-center gap-3">
-                                                        ${t('statusNormal')}
+                                                    <div class="px-6 py-2 ${getStatusBadge(getMetricState(parseNumericValue(current.valore), { min: 12.2, max: 13.8, unit: current.unita || 'V' }).level).className} rounded-2xl font-black text-sm uppercase tracking-widest border border-current flex items-center gap-3">
+                                                        ${getStatusBadge(getMetricState(parseNumericValue(current.valore), { min: 12.2, max: 13.8, unit: current.unita || 'V' }).level).label}
                                                         <div class="w-2.5 h-2.5 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,1)]'} animate-pulse"></div>
                                                     </div>
                                                 </div>
@@ -3016,9 +3677,7 @@
                                             <div class="text-[10rem] md:text-[12rem] font-black text-slate-900 tracking-tighter leading-none">${current.valore}<span class="text-4xl text-slate-300 ml-4 uppercase font-black">${current.unita}</span></div>
                                         </div>
                                     </div>
-                                    <div class="mb-10">
-                                        ${renderCropSelector()}
-                                    </div>
+                                    ${renderActiveAlertFeed('energia')}
                                 `))}
                         </div>
                     </div>
@@ -3084,42 +3743,59 @@
                     const statusCell = (stat) => `<td class="p-8 text-right"><span class="px-4 py-2 ${stat === 'statusNormal' || stat === 'statusOk' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} rounded-xl font-black text-[10px] uppercase tracking-widest">${t(stat)}</span></td>`;
 
                     if (s === 'energia') {
+                        const energyLevel = getMetricState(parseNumericValue(row.energia), { min: 12.2, max: 13.8, unit: 'V' }).level;
                         cells = `
                                                         ${timeCell}
-                                                        <td class="p-8 text-center text-3xl font-black text-green-700">${row.energia.toFixed(2)}</td>
-                                                        ${statusCell(row.status)}
+                                                        <td class="p-8 text-center text-3xl font-black ${getLevelClass(energyLevel)}">${row.energia.toFixed(2)}</td>
+                                                        ${renderHistoryStatusCell(energyLevel)}
                                                     `;
                     } else if (s === 'acqua') {
                         const currentHectares = parseFloat(waterSettings.hectares) || 0;
                         const consumptionPerHa = getCropConsumptionValue();
                         const req = currentHectares * consumptionPerHa;
                         const avail = row.acqua * 1000;
+                        const waterLevel = avail < (req * 0.7) ? 'alert' : (avail < req ? 'attention' : 'normal');
                         cells = `
                                                         ${timeCell}
                                                         <td class="p-8 text-center text-3xl font-black text-blue-700">${avail.toLocaleString()}</td>
                                                         <td class="p-8 text-center text-2xl font-black text-blue-900">${req.toLocaleString()}</td>
-                                                        ${statusCell(avail < req ? 'statusAlert' : 'statusOk')}
+                                                        ${renderHistoryStatusCell(waterLevel, t('statusOk'))}
                                                     `;
                     } else if (s === 'terreno') {
+                        const soilLevels = [
+                            getMetricLevel('soil', 'temperature', row.temperature),
+                            getMetricLevel('soil', 'moisture', row.terreno),
+                            getMetricLevel('soil', 'ec', row.ec),
+                            getMetricLevel('soil', 'nitrogen', row.nitrogen),
+                            getMetricLevel('soil', 'phosphorus', row.phosphorus),
+                            getMetricLevel('soil', 'potassium', row.potassium),
+                            getMetricLevel('soil', 'pH', row.pH)
+                        ];
                         cells = `
                                                         ${timeCell}
-                                                        <td class="p-6 text-center text-xl font-black ${row.isOptimalTemp ? 'text-green-600' : 'text-red-600'}">${row.temperature.toFixed(1)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${row.isOptimalMoisture ? 'text-green-600' : 'text-red-600'}">${row.terreno.toFixed(0)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${row.isOptimalEC ? 'text-green-600' : 'text-red-600'}">${row.ec.toFixed(0)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${row.isOptimalN ? 'text-green-600' : 'text-red-600'}">${row.nitrogen.toFixed(0)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${row.isOptimalP ? 'text-green-600' : 'text-red-600'}">${row.phosphorus.toFixed(0)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${row.isOptimalK ? 'text-green-600' : 'text-red-600'}">${row.potassium.toFixed(0)}</td>
-                                                        <td class="p-6 text-center text-xl font-black ${row.isOptimalPH ? 'text-green-600' : 'text-red-600'}">${row.pH.toFixed(1)}</td>
-                                                        ${statusCell(row.status)}
+                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[0])}">${row.temperature.toFixed(1)}</td>
+                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[1])}">${row.terreno.toFixed(0)}</td>
+                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[2])}">${(row.ec / 1000).toFixed(2)}</td>
+                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[3])}">${row.nitrogen.toFixed(0)}</td>
+                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[4])}">${row.phosphorus.toFixed(0)}</td>
+                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[5])}">${row.potassium.toFixed(0)}</td>
+                                                        <td class="p-6 text-center text-xl font-black ${getLevelClass(soilLevels[6])}">${row.pH.toFixed(1)}</td>
+                                                        ${renderHistoryStatusCell(getOverallLevel(soilLevels))}
                                                     `;
                     } else if (s === 'clima') {
+                        const climateLevels = [
+                            getMetricLevel('climate', 'temperature', row.climaTemp),
+                            getMetricLevel('climate', 'humidity', row.humidity),
+                            getMetricLevel('climate', 'co2', row.co2),
+                            getMetricLevel('climate', 'windSpeed', row.windSpeed)
+                        ];
                         cells = `
                                                         ${timeCell}
-                                                        <td class="p-8 text-center text-3xl font-black text-orange-600">${row.climaTemp.toFixed(1)}</td>
-                                                        <td class="p-8 text-center text-3xl font-black text-blue-600">${row.humidity.toFixed(0)}</td>
-                                                        <td class="p-8 text-center text-3xl font-black text-gray-600">${row.co2.toFixed(0)}</td>
-                                                        <td class="p-8 text-center text-3xl font-black text-blue-400">${row.windSpeed.toFixed(1)}</td>
-                                                        ${statusCell(row.status)}
+                                                        <td class="p-8 text-center text-3xl font-black ${getLevelClass(climateLevels[0])}">${row.climaTemp.toFixed(1)}</td>
+                                                        <td class="p-8 text-center text-3xl font-black ${getLevelClass(climateLevels[1])}">${row.humidity.toFixed(0)}</td>
+                                                        <td class="p-8 text-center text-3xl font-black ${getLevelClass(climateLevels[2])}">${row.co2.toFixed(0)}</td>
+                                                        <td class="p-8 text-center text-3xl font-black ${getLevelClass(climateLevels[3])}">${row.windSpeed.toFixed(1)}</td>
+                                                        ${renderHistoryStatusCell(getOverallLevel(climateLevels))}
                                                     `;
                     }
                     return `<tr class="hover:bg-gray-50 transition duration-300">${cells}</tr>`;
