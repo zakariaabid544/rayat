@@ -1,0 +1,454 @@
+        :root {
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-left: env(safe-area-inset-left, 0px);
+            --safe-right: env(safe-area-inset-right, 0px);
+        }
+
+        body {
+            padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            touch-action: manipulation;
+            background-color: #f8fafc;
+        }
+
+        /* Improved touch responsiveness for buttons */
+        button,
+        a {
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        button:active,
+        .rayat-card:active {
+            transform: scale(0.96);
+            transition: transform 0.1s ease;
+        }
+
+        /* Hide scrollbars for a cleaner app look */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .5;
+            }
+        }
+
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .animate-spin-once {
+            animation: spin 0.8s ease-in-out;
+        }
+
+        /* Admin Dark Mode Styles */
+        .admin-dark {
+            background-color: #1a1c23;
+            color: #e5e7eb;
+        }
+
+        .admin-card {
+            background-color: #24262d;
+            border-color: #374151;
+        }
+
+        .farmer-dashboard-bg {
+            background-color: #f0fdf4;
+            /* Very light green */
+        }
+
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 1rem;
+        }
+
+        /* CSS Globale */
+        .rayat-card {
+            min-height: 220px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            border-radius: 2rem;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            padding: 1.5rem;
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border: 5px solid rgba(255, 255, 255, 0.15);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .rayat-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        .rayat-ok {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .rayat-alert {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        /* Marker Pulse Animation */
+        @keyframes markerPulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .marker-online {
+            background-color: #22c55e;
+            border: 2px solid white;
+            border-radius: 50%;
+            animation: markerPulse 2s infinite ease-in-out;
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.8);
+        }
+        .marker-offline {
+            background-color: #94a3b8;
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+
+        /* Wave Animation */
+        @keyframes waveMove {
+            0% {
+                transform: translateX(0) translateZ(0) scaleY(1);
+            }
+
+            50% {
+                transform: translateX(-25%) translateZ(0) scaleY(0.85);
+            }
+
+            100% {
+                transform: translateX(-50%) translateZ(0) scaleY(1);
+            }
+        }
+
+        .rayat-wave {
+            position: absolute;
+            left: 0;
+            width: 200%;
+            height: 100%;
+            background-repeat: repeat-x;
+            background-position: 0 bottom;
+            transform-origin: center bottom;
+        }
+
+        .wave-top {
+            z-index: 15;
+            opacity: 0.5;
+            animation: waveMove 3s infinite linear;
+        }
+
+        .wave-mid {
+            z-index: 10;
+            opacity: 0.3;
+            animation: waveMove 5s infinite linear;
+        }
+
+        .wave-bot {
+            z-index: 5;
+            animation: waveMove 10s infinite linear;
+        }
+
+        /* Capacitor Safe Areas */
+        .safe-area-top {
+            padding-top: env(safe-area-inset-top);
+        }
+
+        .safe-area-bottom {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        #offline-banner {
+            display: none;
+            background: #f59e0b;
+            color: white;
+            text-align: center;
+            padding: 8px;
+            font-size: 11px;
+            font-weight: bold;
+            position: fixed;
+            top: env(safe-area-inset-top);
+            width: 100%;
+            z-index: 100;
+        }
+
+        html,
+        body,
+        #app {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+
+        img,
+        svg,
+        canvas,
+        iframe {
+            max-width: 100%;
+        }
+
+        body.rayat-menu-open {
+            overflow: hidden;
+        }
+
+        .rayat-desktop-nav {
+            display: flex;
+        }
+
+        .rayat-desktop-auth {
+            display: block;
+        }
+
+        .rayat-mobile-toggle {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(6, 95, 70, 0.9);
+            color: white;
+            font-size: 24px;
+            line-height: 1;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+        }
+
+        .rayat-mobile-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 60;
+            display: none;
+            opacity: 0;
+            background: rgba(15, 23, 42, 0.46);
+            backdrop-filter: blur(10px);
+            transition: opacity 0.25s ease;
+        }
+
+        .rayat-mobile-overlay.is-open {
+            display: block;
+            opacity: 1;
+        }
+
+        .rayat-mobile-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: min(88vw, 360px);
+            height: 100%;
+            background: #ffffff;
+            padding: 24px;
+            transform: translateX(100%);
+            transition: transform 0.25s ease;
+            box-shadow: -20px 0 50px rgba(15, 23, 42, 0.18);
+            overflow-y: auto;
+        }
+
+        .rayat-mobile-panel.is-open {
+            transform: translateX(0);
+        }
+
+        .rayat-crop-selector {
+            width: 100%;
+        }
+
+        .rayat-crop-selector select,
+        .rayat-crop-selector input {
+            min-height: 56px;
+        }
+
+        .rayat-modal-card {
+            max-height: calc(100vh - 2rem);
+            overflow: auto;
+        }
+
+        @media (max-width: 768px) {
+            .rayat-desktop-nav,
+            .rayat-desktop-auth {
+                display: none !important;
+            }
+
+            .rayat-mobile-toggle {
+                display: inline-flex !important;
+            }
+
+            .container {
+                padding-left: 1rem !important;
+                padding-right: 1rem !important;
+            }
+
+            .text-7xl {
+                font-size: 3rem !important;
+                line-height: 1.05 !important;
+            }
+
+            .text-6xl {
+                font-size: 2.75rem !important;
+                line-height: 1.08 !important;
+            }
+
+            .text-5xl {
+                font-size: 2.3rem !important;
+                line-height: 1.1 !important;
+            }
+
+            .text-4xl {
+                font-size: 1.85rem !important;
+                line-height: 1.15 !important;
+            }
+
+            .text-3xl {
+                font-size: 1.55rem !important;
+                line-height: 1.2 !important;
+            }
+
+            .text-2xl {
+                font-size: 1.3rem !important;
+                line-height: 1.25 !important;
+            }
+
+            .text-\[10rem\],
+            .md\:text-\[12rem\] {
+                font-size: 7.5rem !important;
+            }
+
+            .grid-cols-2,
+            .lg\:grid-cols-4,
+            .lg\:grid-cols-3,
+            .lg\:grid-cols-2,
+            .xl\:grid-cols-3,
+            .md\:grid-cols-2 {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+
+            .md\:flex-row,
+            .lg\:flex-row {
+                flex-direction: column !important;
+            }
+
+            table {
+                min-width: 720px;
+            }
+
+            .overflow-x-auto {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            #map,
+            #home-map,
+            #contact-map,
+            #map-registration {
+                height: 360px !important;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .grid-cols-2,
+            .lg\:grid-cols-4,
+            .lg\:grid-cols-3,
+            .lg\:grid-cols-2,
+            .xl\:grid-cols-3,
+            .md\:grid-cols-2 {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+
+            .text-7xl {
+                font-size: 2.35rem !important;
+            }
+
+            .text-6xl {
+                font-size: 2.1rem !important;
+            }
+
+            .text-5xl {
+                font-size: 1.8rem !important;
+            }
+
+            .text-4xl {
+                font-size: 1.55rem !important;
+            }
+
+            .text-3xl {
+                font-size: 1.3rem !important;
+            }
+
+            .text-2xl {
+                font-size: 1.15rem !important;
+            }
+
+            .text-xl {
+                font-size: 1rem !important;
+            }
+
+            .text-\[10rem\],
+            .md\:text-\[12rem\] {
+                font-size: 5.75rem !important;
+            }
+
+            .rayat-mobile-actions > *,
+            form button,
+            form input[type="submit"],
+            .rayat-modal-card button {
+                width: 100%;
+            }
+
+            header button,
+            header a,
+            #mobile-menu-panel button,
+            #lang-menu button {
+                width: auto !important;
+            }
+
+            .flex.gap-4.justify-center {
+                flex-direction: column !important;
+            }
+
+            #map,
+            #home-map,
+            #contact-map,
+            #map-registration {
+                height: 280px !important;
+            }
+
+            .rayat-modal-card {
+                width: 100% !important;
+                max-width: none !important;
+                min-height: 100vh;
+                border-radius: 0 !important;
+                padding-top: calc(1.5rem + env(safe-area-inset-top)) !important;
+                padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)) !important;
+            }
+        }
