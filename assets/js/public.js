@@ -74,6 +74,68 @@
             { value: 'luzerne', labelKey: 'cropOptionLuzerne' },
             { value: 'autre', labelKey: 'cropOptionAutre' }
         ];
+        /* PATCH-02 — start */
+        const REGISTER_CROPS = ['banana', 'mango', 'avocado', 'orange', 'lemon', 'mandarin', 'tomato', 'pepper', 'zucchini'];
+        const REGISTER_CROP_TRANSLATIONS_BER = {
+            'crop.banana': 'ⵜⵉⴳⴰⵢⵢⴰ',
+            'crop.mango': 'ⵎⴰⵏⴳⵓ',
+            'crop.avocado': 'ⴰⴼⵓⴽⴰⴷⵓ',
+            'crop.orange': 'ⵜⴰⵏⴰⵔⴰⵏⵊⵜ',
+            'crop.lemon': 'ⴰⵍⵉⵎⵓⵏ',
+            'crop.mandarin': 'ⵎⴰⵏⴷⴰⵔⵉⵏ',
+            'crop.tomato': 'ⵜⵉⵎⴰⵜⵉⵛ',
+            'crop.pepper': 'ⴰⴼⵍⴼⵍ',
+            'crop.zucchini': 'ⵜⴰⴽⵓⵙⴰ'
+        };
+        const REGISTER_CROP_TRANSLATIONS = {
+            it: {
+                'crop.banana': 'Banana',
+                'crop.mango': 'Mango',
+                'crop.avocado': 'Avocado',
+                'crop.orange': 'Arancia',
+                'crop.lemon': 'Limone',
+                'crop.mandarin': 'Mandarino',
+                'crop.tomato': 'Pomodoro',
+                'crop.pepper': 'Peperone',
+                'crop.zucchini': 'Zucchina'
+            },
+            en: {
+                'crop.banana': 'Banana',
+                'crop.mango': 'Mango',
+                'crop.avocado': 'Avocado',
+                'crop.orange': 'Orange',
+                'crop.lemon': 'Lemon',
+                'crop.mandarin': 'Mandarin',
+                'crop.tomato': 'Tomato',
+                'crop.pepper': 'Pepper',
+                'crop.zucchini': 'Zucchini'
+            },
+            fr: {
+                'crop.banana': 'Banane',
+                'crop.mango': 'Mangue',
+                'crop.avocado': 'Avocat',
+                'crop.orange': 'Orange',
+                'crop.lemon': 'Citron',
+                'crop.mandarin': 'Mandarine',
+                'crop.tomato': 'Tomate',
+                'crop.pepper': 'Poivron',
+                'crop.zucchini': 'Courgette'
+            },
+            ar: {
+                'crop.banana': 'موز',
+                'crop.mango': 'مانجو',
+                'crop.avocado': 'أفوكادو',
+                'crop.orange': 'برتقال',
+                'crop.lemon': 'ليمون',
+                'crop.mandarin': 'يوسفي',
+                'crop.tomato': 'طماطم',
+                'crop.pepper': 'فلفل',
+                'crop.zucchini': 'كوسة'
+            },
+            ber: REGISTER_CROP_TRANSLATIONS_BER,
+            zgh: REGISTER_CROP_TRANSLATIONS_BER
+        };
+        /* PATCH-02 — end */
         const DEFAULT_CROP_VALUE = 'banane';
         const cropConsumptions = {
             banane: 50,
@@ -1768,10 +1830,22 @@
             }
         };
 
+        /* PATCH-02 — start */
+        Object.entries(REGISTER_CROP_TRANSLATIONS).forEach(([lang, values]) => {
+            translations[lang] = {
+                ...(translations[lang] || {}),
+                ...values
+            };
+        });
+        /* PATCH-02 — end */
+
         function t(key) {
             let val = translations[currentLang]?.[key];
+            if (!val && currentLang === 'ber') {
+                val = translations.zgh?.[key];
+            }
             // Fallback to French for Amazigh if translation is missing
-            if (!val && currentLang === 'zgh') {
+            if (!val && (currentLang === 'zgh' || currentLang === 'ber')) {
                 val = translations['fr'][key];
             }
             return val || key;
@@ -1783,6 +1857,7 @@
                 en: 'en-US',
                 fr: 'fr-FR',
                 ar: 'ar-MA',
+                ber: 'tzm-MA',
                 zgh: 'tzm-MA'
             };
 
@@ -1927,6 +2002,14 @@
 
             setViewWithTracking('login', { path: '/login' });
         }
+
+        /* PATCH-01 — start */
+        function openLoginFromNavigation() {
+            closeProfileMenu();
+            toggleMobileMenu(false);
+            setViewWithTracking('login', { path: '/login' });
+        }
+        /* PATCH-01 — end */
 
         function formatTemplate(template, tokens = {}) {
             return String(template || '').replace(/\{(\w+)\}/g, (_, key) => tokens[key] ?? '');
@@ -3564,17 +3647,58 @@
             const ukFlag = `<svg class="${flagBase}" viewBox="0 0 60 40" width="24" height="16"><clipPath id="s"><path d="M0,0 v40 h60 v-40 z"/></clipPath><path d="M0,0 v40 h60 v-40 z" fill="#012169"/><path d="M0,0 L60,40 M60,0 L0,40" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" stroke-width="4"/><path d="M30,0 v40 M0,20 h60" stroke="#fff" stroke-width="10"/><path d="M30,0 v40 M0,20 h60" stroke="#C8102E" stroke-width="6"/></svg>`;
             const amazighFlag = `<svg class="${flagBase}" viewBox="0 0 90 60" width="24" height="16" xmlns="http://www.w3.org/2000/svg"><rect width="90" height="20" y="0" fill="#0099CC"/><rect width="90" height="20" y="20" fill="#99CC33"/><rect width="90" height="20" y="40" fill="#FFCC00"/><text x="45" y="48" font-size="40" fill="#CC3333" text-anchor="middle" font-family="sans-serif">ⵣ</text></svg>`;
             const primaryLinks = [
-                { view: 'home', label: t('home') },
-                { view: 'chi-siamo', label: t('aboutUs') },
-                { view: 'servizi', label: t('services') },
-                { view: 'demo', label: t('demo'), tracked: true },
-                { view: 'contatti', label: t('contactTitle'), tracked: true }
+                { id: 'home', view: 'home', label: t('home') },
+                { id: 'chi-siamo', view: 'chi-siamo', label: t('aboutUs') },
+                { id: 'servizi', view: 'servizi', label: t('services') },
+                { id: 'demo', view: 'demo', label: t('demo'), tracked: true },
+                { id: 'contatti', view: 'contatti', label: t('contactTitle'), tracked: true }
             ];
-            const mobileLinks = [...primaryLinks];
             const canAccessProfile = isAuthenticated() && isCustomerRole(currentRole);
             const adminShortcutUser = getPrivilegedAdminSessionUser();
             const hasAdminAccessShortcut = Boolean(adminShortcutUser);
             const hasVisibleAccountState = canAccessProfile || hasAdminAccessShortcut;
+            /* PATCH-01 — start */
+            const loginNavigationLink = !hasVisibleAccountState
+                ? { id: 'login', label: t('login'), action: 'openLoginFromNavigation()', kind: 'login' }
+                : null;
+            const desktopLinks = loginNavigationLink ? [...primaryLinks, loginNavigationLink] : primaryLinks;
+            const mobileLinks = loginNavigationLink ? [loginNavigationLink, ...primaryLinks] : [...primaryLinks];
+            const getNavigationAction = (link) => link.action || (link.tracked ? `setViewWithTracking('${link.view}')` : `setView('${link.view}')`);
+            const renderNavigationItem = (link, options = {}) => {
+                const mobile = Boolean(options.mobile);
+                const classes = mobile
+                    ? [
+                        'text-left',
+                        'w-full',
+                        'px-4',
+                        'py-4',
+                        'rounded-2xl',
+                        'font-black',
+                        'uppercase',
+                        'tracking-widest',
+                        'text-xs',
+                        'transition',
+                        'flex',
+                        'items-center',
+                        'gap-3',
+                        link.kind === 'login'
+                            ? 'bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100'
+                            : 'bg-slate-50 hover:bg-green-50 text-slate-800'
+                    ].join(' ')
+                    : [
+                        'rayat-nav-link',
+                        link.id === 'chi-siamo' ? 'whitespace-nowrap' : '',
+                        link.kind === 'login' ? 'rayat-nav-link--login' : ''
+                    ].filter(Boolean).join(' ');
+
+                return `
+                    <button onclick="${getNavigationAction(link)}" class="${classes}">
+                        ${mobile && link.kind === 'login' ? '<span class="rayat-mobile-nav-link__icon" aria-hidden="true">🔐</span>' : ''}
+                        <span>${link.label}</span>
+                    </button>
+                `;
+            };
+            /* PATCH-01 — end */
             const mergedProfile = canAccessProfile ? getMergedUserProfile() : null;
             const profileDisplayName = mergedProfile?.name || user?.name || 'Rayat';
             const profileDisplayEmail = mergedProfile?.email || user?.email || '';
@@ -3584,11 +3708,6 @@
                 : hasAdminAccessShortcut
                     ? t('adminArea')
                     : t('login');
-            const authButton = hasAdminAccessShortcut && !canAccessProfile
-                ? `<button onclick="goToAdminArea()" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('adminArea')}</button>`
-                : !hasVisibleAccountState
-                    ? `<button onclick="setViewWithTracking('login')" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('login')}</button>`
-                    : '';
             const accountButton = canAccessProfile
                 ? `
                     <div id="rayat-profile-menu-shell" class="rayat-profile-menu-shell ${isProfileMenuOpen ? 'is-open' : ''}">
@@ -3623,16 +3742,7 @@
                             <span class="rayat-account-trigger__initials">${escapeHtml(getUserInitials(adminDisplayName))}</span>
                         </button>
                     `
-                : `
-                    <button onclick="navigateToAccountPage()" class="rayat-account-trigger" aria-label="${escapeHtml(accountLabel)}" title="${escapeHtml(accountLabel)}">
-                        <span class="rayat-account-trigger__icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M20 21a8 8 0 0 0-16 0"></path>
-                                <circle cx="12" cy="8" r="4"></circle>
-                            </svg>
-                        </span>
-                    </button>
-                `;
+                : '';
 
             return `
                 <div id="offline-banner"></div>
@@ -3651,11 +3761,7 @@
                             </div>
                             <div class="flex items-center gap-3 md:gap-4">
                                 <nav class="rayat-desktop-nav items-center space-x-6 font-bold uppercase text-xs tracking-widest">
-                                    ${primaryLinks.map((link) => `
-                                        <a onclick="${link.tracked ? `setViewWithTracking('${link.view}')` : `setView('${link.view}')`}" class="cursor-pointer hover:text-orange-400 transition ${link.view === 'chi-siamo' ? 'whitespace-nowrap' : ''}">
-                                            ${link.label}
-                                        </a>
-                                    `).join('')}
+                                    ${desktopLinks.map((link) => renderNavigationItem(link)).join('')}
                                 </nav>
                                 <div class="relative group">
                                     <button data-lang-menu-toggle="true" onclick="toggleLangMenu(event)" class="flex items-center space-x-2 bg-green-700 hover:bg-green-600 px-3 py-1.5 rounded-xl transition text-xs border border-green-600 shadow-sm">
@@ -3674,7 +3780,6 @@
                                     </div>
                                 </div>
                                 ${accountButton}
-                                ${authButton ? `<div class="rayat-desktop-auth">${authButton}</div>` : ''}
                                 <button id="mobile-menu-button" type="button" class="rayat-mobile-toggle" aria-label="${t('navMenu')}" aria-expanded="${isMobileMenuOpen}" onclick="toggleMobileMenu()">
                                     ${isMobileMenuOpen ? '✕' : '☰'}
                                 </button>
@@ -3694,11 +3799,10 @@
                             </button>
                         </div>
                         <nav class="flex flex-col gap-2">
-                            ${mobileLinks.map((link) => `
-                                <button onclick="navigateFromMobileMenu('${link.view}')" class="text-left w-full px-4 py-4 rounded-2xl bg-slate-50 hover:bg-green-50 font-black uppercase tracking-widest text-xs text-slate-800 transition">
-                                    ${link.label}
-                                </button>
-                            `).join('')}
+                            ${mobileLinks.map((link) => renderNavigationItem({
+                                ...link,
+                                action: link.action || `navigateFromMobileMenu('${link.view}')`
+                            }, { mobile: true })).join('')}
                         </nav>
                         ${canAccessProfile ? `
                             <div class="rayat-mobile-account-card">
@@ -3723,10 +3827,6 @@
                         ${hasAdminAccessShortcut && !canAccessProfile ? `
                             <div class="mt-6 pt-6 border-t border-slate-200">
                                 <button onclick="goToAdminArea()" class="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs">${t('adminArea')}</button>
-                            </div>
-                        ` : !hasVisibleAccountState ? `
-                            <div class="mt-6 pt-6 border-t border-slate-200">
-                                <button onclick="navigateFromMobileMenu('login')" class="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs">${t('login')}</button>
                             </div>
                         ` : ''}
                     </div>
@@ -3974,8 +4074,11 @@
         }
 
         function renderRegisterPage() {
-            const selectedCrop = registrationData.crop_type || '';
-            const customCropValue = Object.values(CROP_CATEGORIES).flat().includes(selectedCrop) ? '' : selectedCrop;
+            const selectedCrop = normalizeRegistrationCropValue(registrationData.crop_type);
+            if (selectedCrop && registrationData.crop_type !== selectedCrop) {
+                registrationData.crop_type = selectedCrop;
+            }
+            const customCropValue = selectedCrop ? '' : String(registrationData.crop_type || '').trim();
             const coordinatesLabel = registrationData.latitude && registrationData.longitude
                 ? `${Number(registrationData.latitude).toFixed(5)}, ${Number(registrationData.longitude).toFixed(5)}`
                 : '—';
@@ -4042,13 +4145,7 @@
                                     <span class="text-[11px] font-bold uppercase tracking-widest text-green-700">Optional</span>
                                 </div>
                                 <div class="rayat-register-crop-grid grid grid-cols-2 md:grid-cols-3 gap-3">
-                                    ${Object.keys(CROP_CATEGORIES).slice(0, 4).map(cat =>
-                                        CROP_CATEGORIES[cat].slice(0, 3).map(crop => `
-                                            <button onclick="selectCrop('${crop.replace(/'/g, "\\'")}')" class="p-3 border-2 rounded-xl text-sm text-center transition ${selectedCrop === crop ? 'border-green-600 bg-white font-bold text-green-800' : 'border-green-100 bg-white/80 hover:border-green-300'}">
-                                                ${crop}
-                                            </button>
-                                        `).join('')
-                                    ).join('')}
+                                    ${renderCropOptions(selectedCrop)}
                                 </div>
                                 <div class="mt-4">
                                     <label class="block text-sm font-semibold mb-2">${t('regOtherCrop')}</label>
@@ -4058,7 +4155,7 @@
                                         value="${escapeHtml(customCropValue)}"
                                         oninput="registrationData.crop_type = this.value"
                                         class="w-full px-4 py-3 border rounded-xl"
-                                        placeholder="Zafferano, Erba medica..."
+                                        placeholder="${escapeHtml(t('cropCustomPlaceholder'))}"
                                     >
                                 </div>
                             </div>
@@ -4113,7 +4210,7 @@
                 const customCrop = customCropInput.value.trim();
                 if (customCrop) {
                     registrationData.crop_type = customCrop;
-                } else if (!Object.values(CROP_CATEGORIES).flat().includes(registrationData.crop_type)) {
+                } else if (!normalizeRegistrationCropValue(registrationData.crop_type)) {
                     registrationData.crop_type = '';
                 }
             }
@@ -5429,14 +5526,34 @@
             crop_type: '', latitude: null, longitude: null, location_name: '', location_address: ''
         };
 
-        const CROP_CATEGORIES = {
-            "Frutta tropicale": ["Banana", "Mango", "Avocado", "Papaya"],
-            "Agrumi": ["Arancia", "Limone", "Mandarino", "Pompelmo"],
-            "Ortaggi": ["Pomodoro", "Peperone", "Zucchina", "Cetriolo", "Melanzana"],
-            "Cereali": ["Grano", "Mais", "Orzo"],
-            "Serra": ["Pomodoro serra", "Fragola", "Peperone serra"],
-            "Idroponica": ["Lattuga idroponica", "Basilico idroponico"]
-        };
+        /* PATCH-02 — start */
+        function normalizeRegistrationCropValue(value) {
+            const normalized = String(value || '').trim().toLowerCase();
+            return REGISTER_CROPS.includes(normalized) ? normalized : '';
+        }
+
+        function getRegistrationCropLabel(crop) {
+            const translationKey = `crop.${crop}`;
+            const translatedValue = t(translationKey);
+            return translatedValue === translationKey ? crop : translatedValue;
+        }
+
+        function renderCropOptions(selectedCrop = '') {
+            const normalizedSelectedCrop = normalizeRegistrationCropValue(selectedCrop);
+            return REGISTER_CROPS
+                .map((crop) => ({
+                    value: crop,
+                    label: getRegistrationCropLabel(crop),
+                    selected: normalizedSelectedCrop === crop
+                }))
+                .map((crop) => `
+                    <button onclick="selectCrop('${crop.value}')" class="p-3 border-2 rounded-xl text-sm text-center transition ${crop.selected ? 'border-green-600 bg-white font-bold text-green-800' : 'border-green-100 bg-white/80 hover:border-green-300'}">
+                        ${escapeHtml(crop.label)}
+                    </button>
+                `)
+                .join('');
+        }
+        /* PATCH-02 — end */
 
         function render() {
             checkAlerts();
