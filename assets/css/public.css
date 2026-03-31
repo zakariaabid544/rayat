@@ -31,7 +31,8 @@
             font: inherit;
         }
 
-        input,
+        /* RAYAT FIX - checkbox remember me + desktop scroll */
+        input:not([type="checkbox"]):not([type="radio"]),
         select,
         textarea {
             font-size: 16px;
@@ -509,10 +510,30 @@
         }
 
         .rayat-remember-checkbox {
+            -webkit-appearance: checkbox;
+            appearance: auto;
             width: 18px;
             height: 18px;
+            min-width: 18px;
+            min-height: 18px;
+            display: inline-block;
+            flex: 0 0 18px;
+            margin: 0;
+            border: 1.5px solid #94a3b8;
             border-radius: 0.35rem;
+            background: #ffffff;
             accent-color: #166534;
+            cursor: pointer;
+            vertical-align: middle;
+        }
+
+        .rayat-remember-checkbox:focus-visible {
+            outline: 3px solid rgba(22, 101, 52, 0.18);
+            outline-offset: 2px;
+        }
+
+        .rayat-remember-checkbox:checked {
+            border-color: #166534;
         }
 
         .rayat-mobile-account-card {

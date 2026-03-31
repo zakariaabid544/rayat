@@ -1987,8 +1987,10 @@
             logout();
         }
 
+        // RAYAT FIX - checkbox remember me + desktop scroll
         function syncBodyScrollLock() {
-            document.body.classList.toggle('rayat-menu-open', isMobileMenuOpen);
+            const shouldLockScroll = isMobileMenuOpen && window.innerWidth <= 768;
+            document.body.classList.toggle('rayat-menu-open', shouldLockScroll);
         }
 
         // RAYAT FIX - mobile app ready optimization
@@ -5332,7 +5334,13 @@
             closeProfileMenu();
         });
 
+        // RAYAT FIX - checkbox remember me + desktop scroll
         window.addEventListener('resize', () => {
+            if (window.innerWidth > 768 && isMobileMenuOpen) {
+                toggleMobileMenu(false);
+            } else {
+                syncBodyScrollLock();
+            }
             invalidateVisibleMaps();
         });
 
