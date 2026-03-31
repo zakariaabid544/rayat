@@ -44,6 +44,13 @@
             overscroll-behavior-y: none;
         }
 
+        body.admin-auth-loading #login-screen,
+        body.admin-auth-loading #app-screen,
+        #login-screen.hidden,
+        #app-screen.hidden {
+            display: none !important;
+        }
+
         /* ─── Login ──────────────────── */
         #login-screen {
             min-height: 100vh;
@@ -495,7 +502,7 @@
         }
     </style>
 </head>
-<body>
+<body class="admin-auth-loading">
 
 <!-- ═══════════════════════════════ LOGIN ═══════════════════════════════════ -->
 <div id="login-screen">
@@ -1370,13 +1377,17 @@
     const API = window.location.origin + '/api/admin';
     let adminToken = sessionStorage.getItem('rayat_admin_token');
     let currentAdmin = null;
+    let loginErrorState = null;
     let allClients = [];
+    let clockTimer = null;
     let sensorRefreshTimer = null;
     let registrationRefreshTimer = null;
     let clientSearchTimer = null;
     let registrationSearchTimer = null;
     let deviceClientSearchTimer = null;
     let sensorModalClientSearchTimer = null;
+    const PRIVILEGED_ADMIN_ROLES = new Set(['super_admin', 'operator_admin']);
+    const DEFAULT_ADMIN_TAB = 'dashboard';
     const DEFAULT_MAP_CENTER = [30.4727, -8.8770];
     const clientListState = { page: 1, pageSize: 25, total: 0, totalPages: 1, query: '' };
     const registrationListState = { page: 1, pageSize: 20, total: 0, totalPages: 1, query: '', status: '' };
@@ -1421,6 +1432,14 @@
             password: 'Password',
             loginButton: 'ACCEDI',
             loginLoading: 'Accesso in corso…',
+            adminCredentialsRequired: 'Email e password obbligatorie.',
+            adminInvalidCredentials: 'Credenziali non valide.',
+            adminAccountRequired: 'Accesso negato. Account non amministratore.',
+            adminAccountDisabled: 'Account amministratore disattivato.',
+            adminSessionMissing: 'Sessione amministratore non trovata.',
+            adminSessionInvalid: 'Sessione amministratore non valida o scaduta.',
+            adminAccessDenied: 'Accesso negato. Accesso riservato agli amministratori.',
+            adminSuperRequired: 'Accesso riservato al Super Admin.',
             backToSite: 'Torna al sito Rayat',
             menu: 'Menu',
             navDashboard: 'Dashboard',
@@ -1648,6 +1667,14 @@
             password: 'Password',
             loginButton: 'SIGN IN',
             loginLoading: 'Signing in…',
+            adminCredentialsRequired: 'Email and password are required.',
+            adminInvalidCredentials: 'Invalid credentials.',
+            adminAccountRequired: 'Access denied. Non-admin account.',
+            adminAccountDisabled: 'Administrator account disabled.',
+            adminSessionMissing: 'Administrator session not found.',
+            adminSessionInvalid: 'Administrator session is invalid or expired.',
+            adminAccessDenied: 'Access denied. Administrators only.',
+            adminSuperRequired: 'Super Admin access only.',
             backToSite: 'Back to Rayat website',
             menu: 'Menu',
             navDashboard: 'Dashboard',
@@ -1875,6 +1902,14 @@
             password: 'Mot de passe',
             loginButton: 'SE CONNECTER',
             loginLoading: 'Connexion en cours…',
+            adminCredentialsRequired: 'Email et mot de passe obligatoires.',
+            adminInvalidCredentials: 'Identifiants invalides.',
+            adminAccountRequired: 'Accès refusé. Compte non administrateur.',
+            adminAccountDisabled: 'Compte administrateur désactivé.',
+            adminSessionMissing: 'Session administrateur introuvable.',
+            adminSessionInvalid: 'Session administrateur invalide ou expirée.',
+            adminAccessDenied: 'Accès refusé. Réservé aux administrateurs.',
+            adminSuperRequired: 'Accès réservé au Super Admin.',
             backToSite: 'Retour au site Rayat',
             menu: 'Menu',
             navDashboard: 'Tableau de bord',
@@ -2102,6 +2137,14 @@
             password: 'كلمة المرور',
             loginButton: 'تسجيل الدخول',
             loginLoading: 'جارٍ تسجيل الدخول…',
+            adminCredentialsRequired: 'البريد الإلكتروني وكلمة المرور مطلوبان.',
+            adminInvalidCredentials: 'بيانات الدخول غير صحيحة.',
+            adminAccountRequired: 'تم رفض الوصول. هذا الحساب ليس حساب إدارة.',
+            adminAccountDisabled: 'تم تعطيل حساب الإدارة.',
+            adminSessionMissing: 'تعذر العثور على جلسة الإدارة.',
+            adminSessionInvalid: 'جلسة الإدارة غير صالحة أو منتهية.',
+            adminAccessDenied: 'تم رفض الوصول. المنطقة مخصصة للإدارة فقط.',
+            adminSuperRequired: 'الوصول متاح للمشرف العام فقط.',
             backToSite: 'العودة إلى موقع رايات',
             menu: 'القائمة',
             navDashboard: 'لوحة التحكم',
@@ -2508,6 +2551,108 @@
         return value;
     }
 
+    function getAdminErrorTranslationKey(code) {
+        const map = {
+            admin_credentials_required: 'adminCredentialsRequired',
+            admin_invalid_credentials: 'adminInvalidCredentials',
+            admin_account_required: 'adminAccountRequired',
+            admin_account_disabled: 'adminAccountDisabled',
+            admin_session_missing: 'adminSessionMissing',
+            admin_session_invalid: 'adminSessionInvalid',
+            admin_access_denied: 'adminAccessDenied',
+            admin_super_required: 'adminSuperRequired'
+        };
+
+        return map[code] || null;
+    }
+
+    function isAllowedAdminRole(role) {
+        return PRIVILEGED_ADMIN_ROLES.has(role);
+    }
+
+    function resolveAdminErrorMessage(details = {}) {
+        const translationKey = getAdminErrorTranslationKey(details.code);
+        if (translationKey) {
+            return t(translationKey);
+        }
+
+        const fallbackMessage = String(details.message || '').trim();
+        return fallbackMessage || t('unknownError');
+    }
+
+    function renderLoginError(details = loginErrorState) {
+        const el = document.getElementById('login-error');
+        if (!el) return;
+
+        loginErrorState = details && (details.code || details.message)
+            ? details
+            : null;
+
+        if (!loginErrorState) {
+            el.textContent = '';
+            el.classList.add('hidden');
+            return;
+        }
+
+        el.textContent = resolveAdminErrorMessage(loginErrorState);
+        el.classList.remove('hidden');
+    }
+
+    function clearAdminTimers() {
+        if (clockTimer) {
+            clearInterval(clockTimer);
+            clockTimer = null;
+        }
+        if (sensorRefreshTimer) {
+            clearInterval(sensorRefreshTimer);
+            sensorRefreshTimer = null;
+        }
+        if (registrationRefreshTimer) {
+            clearInterval(registrationRefreshTimer);
+            registrationRefreshTimer = null;
+        }
+    }
+
+    function clearAdminSessionCache() {
+        clearAdminTimers();
+        sessionStorage.removeItem('rayat_admin_token');
+        sessionStorage.removeItem('rayat_admin_user');
+        adminToken = null;
+        currentAdmin = null;
+    }
+
+    function showAdminAppShell() {
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('app-screen').classList.remove('hidden');
+        document.body.classList.remove('admin-auth-loading');
+        renderLoginError(null);
+    }
+
+    function showAdminLoginScreen(options = {}) {
+        document.getElementById('app-screen').classList.add('hidden');
+        document.getElementById('login-screen').classList.remove('hidden');
+        document.body.classList.remove('admin-auth-loading');
+        toggleSidebar(false);
+
+        if (!['/admin', '/admin/'].includes(window.location.pathname)) {
+            window.history.replaceState({ tab: DEFAULT_ADMIN_TAB }, '', '/admin/');
+        }
+
+        renderLoginError(options.error || null);
+    }
+
+    function handleAdminSessionFailure(payload = {}, options = {}) {
+        clearAdminSessionCache();
+        showAdminLoginScreen({
+            error: options.showError
+                ? {
+                    code: payload?.errorCode || null,
+                    message: payload?.error || payload?.message || null
+                }
+                : null
+        });
+    }
+
     function syncLanguageSelectors() {
         ['lang-select-login', 'lang-select-admin'].forEach(id => {
             const el = document.getElementById(id);
@@ -2643,6 +2788,8 @@
             const locationAddress = document.getElementById(picker.addressId)?.value || '';
             setLocationText(type, locationName, locationAddress);
         });
+
+        renderLoginError();
     }
 
     function changeAdminLanguage(lang) {
@@ -2670,9 +2817,14 @@
                 ...(opts.headers || {})
             }
         }).then(async r => {
-            if (r.status === 401 || r.status === 403) { doLogout(); return; }
-            const data = await r.json();
-            if (!r.ok) throw new Error(data.error || t('unknownError'));
+            const data = await r.json().catch(() => null);
+            if (r.status === 401 || r.status === 403) {
+                handleAdminSessionFailure(data || {}, {
+                    showError: Boolean(data?.errorCode || data?.error)
+                });
+                return null;
+            }
+            if (!r.ok) throw new Error(data?.error || t('unknownError'));
             return data;
         });
     }
@@ -2875,13 +3027,23 @@
         }, 120);
     }
 
-    async function restoreAdminSessionFromCookie() {
+    async function restoreAdminSession() {
+        const headers = {};
+        if (adminToken) {
+            headers.Authorization = 'Bearer ' + adminToken;
+        }
+
         const res = await fetch(API + '/session', {
             method: 'GET',
-            credentials: 'same-origin'
+            credentials: 'same-origin',
+            headers
         });
         if (!res.ok) {
-            return false;
+            const payload = await res.json().catch(() => null);
+            return {
+                restored: false,
+                payload
+            };
         }
 
         const data = await res.json();
@@ -2889,7 +3051,10 @@
         currentAdmin = data.user;
         sessionStorage.setItem('rayat_admin_token', adminToken);
         sessionStorage.setItem('rayat_admin_user', JSON.stringify(currentAdmin));
-        return true;
+        return {
+            restored: true,
+            payload: data
+        };
     }
 
     function fmtDate(d) {
@@ -2959,6 +3124,7 @@
         e.preventDefault();
         const btn = document.getElementById('login-btn');
         const btnText = document.getElementById('login-btn-text');
+        renderLoginError(null);
         btnText.textContent = t('loginLoading');
         btn.disabled = true;
 
@@ -2973,7 +3139,11 @@
                 })
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Credenziali non valide');
+            if (!res.ok) {
+                const error = new Error(data.error || 'Credenziali non valide');
+                error.code = data.errorCode || null;
+                throw error;
+            }
 
             adminToken = data.token;
             currentAdmin = data.user;
@@ -2982,7 +3152,10 @@
 
             startApp();
         } catch (err) {
-            showError('login-error', err.message);
+            renderLoginError({
+                code: err.code || null,
+                message: err.message
+            });
         } finally {
             btnText.textContent = t('loginButton');
             btn.disabled = false;
@@ -2999,14 +3172,9 @@
         } catch (err) {
             console.warn('Logout warning:', err);
         }
-        sessionStorage.removeItem('rayat_admin_token');
-        sessionStorage.removeItem('rayat_admin_user');
+        clearAdminSessionCache();
         localStorage.removeItem('rayat_token');
         localStorage.removeItem('rayat_user');
-        adminToken = null;
-        currentAdmin = null;
-        if (sensorRefreshTimer) clearInterval(sensorRefreshTimer);
-        if (registrationRefreshTimer) clearInterval(registrationRefreshTimer);
         const appOrigin = window.location.origin && window.location.origin !== 'null'
             ? window.location.origin
             : 'http://localhost:3000';
@@ -3015,8 +3183,16 @@
 
     // ── App Init ──────────────────────────────────────────────────────────
     function startApp() {
-        document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('app-screen').classList.remove('hidden');
+        if (!currentAdmin || !isAllowedAdminRole(currentAdmin.role)) {
+            handleAdminSessionFailure(
+                { errorCode: 'admin_access_denied', error: 'Accesso negato. Accesso riservato agli amministratori.' },
+                { showError: true }
+            );
+            return;
+        }
+
+        clearAdminTimers();
+        showAdminAppShell();
         toggleSidebar(false);
 
         // Set user info in sidebar
@@ -3032,7 +3208,7 @@
 
         // Clock
         updateClock();
-        setInterval(updateClock, 1000);
+        clockTimer = setInterval(updateClock, 1000);
         applyStaticTranslations();
 
         showTab(resolveTabFromPath(), { skipHistory: true });
@@ -3045,6 +3221,14 @@
 
     // ── Tab routing ───────────────────────────────────────────────────────
     function showTab(tab, options = {}) {
+        if (!currentAdmin || !isAllowedAdminRole(currentAdmin.role)) {
+            handleAdminSessionFailure(
+                { errorCode: 'admin_access_denied', error: 'Accesso negato. Accesso riservato agli amministratori.' },
+                { showError: true }
+            );
+            return;
+        }
+
         if ((tab === 'analytics' || tab === 'users') && currentAdmin?.role !== 'super_admin') {
             tab = 'dashboard';
             window.history.replaceState({ tab }, '', pathForTab('dashboard'));
@@ -4383,28 +4567,27 @@
     window.onload = async () => {
         syncLanguageSelectors();
         applyStaticTranslations();
-
-        if (adminToken) {
-            const savedUser = sessionStorage.getItem('rayat_admin_user');
-            if (savedUser) {
-                currentAdmin = JSON.parse(savedUser);
-                startApp();
-                return;
-            }
-        }
+        const hasStoredAdminToken = Boolean(adminToken);
 
         try {
-            const restored = await restoreAdminSessionFromCookie();
-            if (restored) {
+            const sessionState = await restoreAdminSession();
+            if (sessionState.restored) {
                 startApp();
                 return;
             }
+
+            handleAdminSessionFailure(sessionState.payload || {}, {
+                showError: hasStoredAdminToken && Boolean(sessionState.payload?.errorCode || sessionState.payload?.error)
+            });
+            return;
         } catch (err) {
             console.warn('Admin session restore failed:', err);
+            handleAdminSessionFailure(
+                { errorCode: 'admin_session_invalid', error: 'Sessione admin non valida' },
+                { showError: hasStoredAdminToken }
+            );
+            return;
         }
-
-        document.getElementById('login-screen').style.display = 'flex';
-        document.getElementById('app-screen').classList.add('hidden');
     };
 </script>
 </body>

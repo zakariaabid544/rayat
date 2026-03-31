@@ -463,6 +463,30 @@ async function run() {
         const reloginJson = await reloginRes.json();
         assert.equal(reloginJson.user.role, 'super_admin');
 
+        const adminSessionRes = await fetch(`http://127.0.0.1:${port}/api/admin/session`, {
+          headers: { Authorization: `Bearer ${reloginJson.token}` }
+        });
+        assert.equal(adminSessionRes.status, 200);
+        const adminSessionJson = await adminSessionRes.json();
+        assert.equal(adminSessionJson.user.role, 'super_admin');
+        assert.ok(adminSessionJson.token);
+
+        const clientAdminLoginRes = await fetch(`http://127.0.0.1:${port}/api/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'client@rayat.ma', password: 'client123' })
+        });
+        assert.equal(clientAdminLoginRes.status, 403);
+        const clientAdminLoginJson = await clientAdminLoginRes.json();
+        assert.equal(clientAdminLoginJson.errorCode, 'admin_account_required');
+
+        const clientAdminSessionRes = await fetch(`http://127.0.0.1:${port}/api/admin/session`, {
+          headers: { Authorization: `Bearer ${clientToken}` }
+        });
+        assert.equal(clientAdminSessionRes.status, 403);
+        const clientAdminSessionJson = await clientAdminSessionRes.json();
+        assert.equal(clientAdminSessionJson.errorCode, 'admin_access_denied');
+
         const clientsRes = await fetch(`http://127.0.0.1:${port}/api/admin/clients?page=1&pageSize=25`, {
           headers: { Authorization: `Bearer ${reloginJson.token}` }
         });

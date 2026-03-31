@@ -58,10 +58,31 @@ const DEFAULT_SENSOR_PROFILES = {
     }
 };
 
-function createHttpError(statusCode, message) {
+function createHttpError(statusCode, message, errorCode = null) {
     const error = new Error(message);
     error.statusCode = statusCode;
+    if (errorCode) {
+        error.errorCode = errorCode;
+    }
     return error;
+}
+
+function sendAdminError(res, statusCode, message, errorCode = null) {
+    const payload = { error: message };
+    if (errorCode) {
+        payload.errorCode = errorCode;
+    }
+    return res.status(statusCode).json(payload);
+}
+
+function extractBearerToken(req) {
+    const authHeader = String(req.headers.authorization || '');
+    if (!authHeader.toLowerCase().startsWith('bearer ')) {
+        return null;
+    }
+
+    const token = authHeader.slice(7).trim();
+    return token || null;
 }
 
 function parsePositiveInt(value, fallback, max = 200) {
@@ -541,7 +562,7 @@ async function resolveAdminFromToken(token) {
     const tokenRole = normalizeAdminRole(decoded.role);
 
     if (!isPrivilegedAdminRole(tokenRole)) {
-        throw createHttpError(403, 'Token admin non valido per questa rotta.');
+        throw createHttpError(403, 'Accesso negato. Accesso riservato agli amministratori.', 'admin_access_denied');
     }
 
     const rows = await query(
@@ -550,25 +571,25 @@ async function resolveAdminFromToken(token) {
     );
 
     if (!rows.length || !rows[0].active) {
-        throw createHttpError(401, 'Utente non trovato o disattivato');
+        throw createHttpError(401, 'Utente non trovato o disattivato', 'admin_session_invalid');
     }
 
     const user = rows[0];
     const normalizedRole = normalizeAdminRole(user.role);
     if (!isPrivilegedAdminRole(normalizedRole)) {
-        throw createHttpError(403, 'Accesso negato. Accesso riservato agli amministratori.');
+        throw createHttpError(403, 'Accesso negato. Accesso riservato agli amministratori.', 'admin_access_denied');
     }
     if (normalizedRole !== tokenRole) {
-        throw createHttpError(403, 'Ruolo admin non coerente con la sessione corrente.');
+        throw createHttpError(403, 'Ruolo admin non coerente con la sessione corrente.', 'admin_session_invalid');
     }
 
     return { ...user, role: normalizedRole, originalRole: user.role };
 }
 
 const isAdminRole = async (req, res, next) => {
-    const token = (req.headers.authorization || '').split(' ')[1];
+    const token = extractBearerToken(req);
     if (!token) {
-        return res.status(401).json({ error: 'Token mancante' });
+        return sendAdminError(res, 401, 'Token mancante', 'admin_session_missing');
     }
 
     try {
@@ -576,7 +597,12 @@ const isAdminRole = async (req, res, next) => {
         next();
     } catch (error) {
         const statusCode = error.statusCode || 403;
-        return res.status(statusCode).json({ error: error.message || 'Token non valido o scaduto' });
+        return sendAdminError(
+            res,
+            statusCode,
+            error.message || 'Token non valido o scaduto',
+            error.errorCode || (statusCode === 401 ? 'admin_session_missing' : 'admin_session_invalid')
+        );
     }
 };
 
@@ -584,7 +610,7 @@ const isSuperAdmin = (req, res, next) => {
     if (req.adminUser && req.adminUser.role === 'super_admin') {
         return next();
     }
-    return res.status(403).json({ error: 'Accesso riservato al Super Admin.' });
+    return sendAdminError(res, 403, 'Accesso riservato al Super Admin.', 'admin_super_required');
 };
 
 // ─── AUTH ──────────────────────────────────────────────────────────────────────
@@ -594,29 +620,29 @@ router.post('/login', async (req, res) => {
         const email = String(req.body.email || '').trim().toLowerCase();
         const password = String(req.body.password || '').trim();
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email e password obbligatori' });
+            return sendAdminError(res, 400, 'Email e password obbligatori', 'admin_credentials_required');
         }
 
         const rows = await query('SELECT * FROM users WHERE email = ?', [email]);
         if (!rows.length) {
             console.log('❌ User not found');
-            return res.status(401).json({ error: 'Credenziali non valide' });
+            return sendAdminError(res, 401, 'Credenziali non valide', 'admin_invalid_credentials');
         }
 
         const user = rows[0];
         const normalizedRole = normalizeAdminRole(user.role);
 
         if (!isPrivilegedAdminRole(normalizedRole)) {
-            return res.status(403).json({ error: 'Accesso negato. Account non amministratore.' });
+            return sendAdminError(res, 403, 'Accesso negato. Account non amministratore.', 'admin_account_required');
         }
         if (!user.active) {
-            return res.status(403).json({ error: 'Account disattivato.' });
+            return sendAdminError(res, 403, 'Account disattivato.', 'admin_account_disabled');
         }
 
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) {
             console.log('❌ Wrong password');
-            return res.status(401).json({ error: 'Credenziali non valide' });
+            return sendAdminError(res, 401, 'Credenziali non valide', 'admin_invalid_credentials');
         }
 
         const token = signAdminToken({
@@ -646,21 +672,55 @@ router.post('/login', async (req, res) => {
         });
     } catch (error) {
         console.error('Admin login error:', error);
-        res.status(500).json({ error: 'Errore interno del server' });
+        sendAdminError(res, 500, 'Errore interno del server');
     }
 });
 
 router.get('/session', async (req, res) => {
     try {
-        const token = extractAdminSessionToken(req);
-        if (!token) {
-            return res.status(401).json({ error: 'Sessione admin non trovata' });
+        const cookieToken = extractAdminSessionToken(req);
+        const bearerToken = extractBearerToken(req);
+        const sessionCandidates = [cookieToken];
+        if (bearerToken && bearerToken !== cookieToken) {
+            sessionCandidates.push(bearerToken);
         }
 
-        const adminUser = await resolveAdminFromToken(token);
+        const activeToken = sessionCandidates.find(Boolean);
+        if (!activeToken) {
+            return sendAdminError(res, 401, 'Sessione admin non trovata', 'admin_session_missing');
+        }
+
+        let adminUser = null;
+        let resolvedWithToken = null;
+        let lastError = null;
+
+        for (const candidate of sessionCandidates.filter(Boolean)) {
+            try {
+                adminUser = await resolveAdminFromToken(candidate);
+                resolvedWithToken = candidate;
+                break;
+            } catch (error) {
+                lastError = error;
+            }
+        }
+
+        if (!adminUser || !resolvedWithToken) {
+            throw lastError || createHttpError(403, 'Sessione admin non valida', 'admin_session_invalid');
+        }
+
+        let nextToken = resolvedWithToken;
+        if (!cookieToken || bearerToken) {
+            nextToken = signAdminToken(adminUser);
+            res.cookie(
+                ADMIN_SESSION_COOKIE,
+                nextToken,
+                getAdminSessionCookieOptions(req)
+            );
+        }
+
         res.json({
             success: true,
-            token,
+            token: nextToken,
             user: {
                 id: adminUser.id,
                 email: adminUser.email,
@@ -670,7 +730,12 @@ router.get('/session', async (req, res) => {
         });
     } catch (error) {
         res.clearCookie(ADMIN_SESSION_COOKIE, { path: '/' });
-        res.status(error.statusCode || 403).json({ error: error.message || 'Sessione admin non valida' });
+        sendAdminError(
+            res,
+            error.statusCode || 403,
+            error.message || 'Sessione admin non valida',
+            error.errorCode || 'admin_session_invalid'
+        );
     }
 });
 

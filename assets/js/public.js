@@ -1801,18 +1801,8 @@
         function navigateToAccountPage() {
             closeProfileMenu();
 
-            if (!isAuthenticated()) {
+            if (!isAuthenticated() || !isCustomerRole(currentRole)) {
                 setViewWithTracking('login', { path: '/login' });
-                return;
-            }
-
-            if (!isCustomerRole(currentRole)) {
-                if (isPrivilegedRole(currentRole)) {
-                    window.location.href = `${API_ORIGIN}/admin/`;
-                    return;
-                }
-
-                setView('home', { replace: true, path: '/' });
                 return;
             }
 
@@ -3008,18 +2998,8 @@
             closeProfileMenu();
 
             if (view === 'profilo') {
-                if (!isAuthenticated()) {
+                if (!isAuthenticated() || !isCustomerRole(currentRole)) {
                     setView('login', { replace: true, path: '/login' });
-                    return;
-                }
-
-                if (!isCustomerRole(currentRole)) {
-                    if (isPrivilegedRole(currentRole)) {
-                        window.location.href = `${API_ORIGIN}/admin/`;
-                        return;
-                    }
-
-                    setView('home', { replace: true, path: '/' });
                     return;
                 }
             }
@@ -5441,8 +5421,8 @@
             currentView = 'login';
             history.replaceState({ view: 'login' }, '', '/login');
         } else if (currentView === 'profilo' && !isCustomerRole(currentRole)) {
-            currentView = 'home';
-            history.replaceState({ view: 'home' }, '', '/');
+            currentView = 'login';
+            history.replaceState({ view: 'login' }, '', '/login');
         }
         render();
         trackPageView(currentView);
