@@ -190,33 +190,29 @@ async function ensureCoreTables(changes) {
   if (
     await ensureTable(
       'alarm_events',
+      // RAYAT FIX - analytics followup
       `CREATE TABLE IF NOT EXISTS alarm_events (
-         id INT PRIMARY KEY AUTO_INCREMENT,
-         user_id INT NOT NULL,
-         sensor_id INT NULL,
+         id SERIAL PRIMARY KEY,
+         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         sensor_id INTEGER NULL REFERENCES sensors(id) ON DELETE SET NULL,
          sensor_type VARCHAR(50) NOT NULL,
          sensor_subtype VARCHAR(80) NULL,
          param VARCHAR(80) NOT NULL,
          crop VARCHAR(120) NULL,
-         level ENUM('attention', 'alert') NOT NULL,
-         priority ENUM('medium', 'high') NOT NULL DEFAULT 'medium',
-         value DECIMAL(12, 3) NOT NULL,
-         optimal_min DECIMAL(12, 3) NULL,
-         optimal_max DECIMAL(12, 3) NULL,
-         first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-         last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-         last_notified_at DATETIME NULL,
-         notification_count INT NOT NULL DEFAULT 0,
+         level VARCHAR(16) NOT NULL,
+         priority VARCHAR(16) NOT NULL DEFAULT 'medium',
+         value NUMERIC(12, 3) NOT NULL,
+         optimal_min NUMERIC(12, 3) NULL,
+         optimal_max NUMERIC(12, 3) NULL,
+         first_seen_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         last_seen_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         last_notified_at TIMESTAMPTZ NULL,
+         notification_count INTEGER NOT NULL DEFAULT 0,
          is_resolved BOOLEAN NOT NULL DEFAULT FALSE,
-         resolved_at DATETIME NULL,
-         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-         FOREIGN KEY (sensor_id) REFERENCES sensors(id) ON DELETE SET NULL,
-         INDEX idx_alarm_events_active (user_id, sensor_type, param, is_resolved),
-         INDEX idx_alarm_events_recent (created_at),
-         INDEX idx_alarm_events_sensor (sensor_id, created_at)
-       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+         resolved_at TIMESTAMPTZ NULL,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+       )`
     )
   ) {
     changes.push('alarm_events table');
@@ -255,6 +251,7 @@ async function ensureCoreTables(changes) {
   if (
     await ensureTable(
       'analytics_events',
+      // RAYAT FIX - analytics followup
       `CREATE TABLE IF NOT EXISTS analytics_events (
          id BIGSERIAL PRIMARY KEY,
          anonymous_id_hash VARCHAR(64),

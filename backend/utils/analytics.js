@@ -95,7 +95,15 @@ function hashAnonymousId(anonymousId = '') {
         .digest('hex');
 }
 
-// RAYAT FIX - email + analytics
+function logAnalyticsInfo(message, payload = {}) {
+    if (process.env.NODE_ENV === 'test') {
+        return;
+    }
+
+    console.info(`[analytics] ${message}`, payload);
+}
+
+// RAYAT FIX - analytics followup
 async function recordAnalyticsEvent(req, payload = {}) {
     const eventType = normalizeText(payload.eventType, 32);
     if (!eventType || !ALLOWED_EVENT_TYPES.has(eventType)) {
@@ -137,6 +145,12 @@ async function recordAnalyticsEvent(req, payload = {}) {
         ]
     );
 
+    logAnalyticsInfo('event_saved', {
+        eventType,
+        pagePath,
+        buttonName: buttonName || null
+    });
+
     return true;
 }
 
@@ -145,7 +159,7 @@ async function fetchCount(sql) {
     return Number(row?.count || 0);
 }
 
-// RAYAT FIX - email + analytics
+// RAYAT FIX - analytics followup
 async function buildAnalyticsSummary() {
     const [
         visitsToday,
@@ -178,7 +192,7 @@ async function buildAnalyticsSummary() {
              FROM analytics_events
              WHERE event_type = 'page_view'
                AND occurred_at >= NOW() - INTERVAL '30 days'
-             GROUP BY source
+             GROUP BY 1
              ORDER BY visits DESC, source ASC
              LIMIT 8`
         ),
@@ -190,7 +204,7 @@ async function buildAnalyticsSummary() {
              FROM analytics_events
              WHERE event_type = 'page_view'
                AND occurred_at >= NOW() - INTERVAL '30 days'
-             GROUP BY country_code, city_name
+             GROUP BY 1, 2
              ORDER BY visits DESC, country_code ASC, city_name ASC
              LIMIT 8`
         ),
@@ -207,7 +221,7 @@ async function buildAnalyticsSummary() {
              FROM analytics_events
              WHERE event_type = 'button_click'
                AND occurred_at >= NOW() - INTERVAL '30 days'
-             GROUP BY button_name
+             GROUP BY 1
              ORDER BY clicks DESC, button_name ASC
              LIMIT 12`
         ),
@@ -220,6 +234,14 @@ async function buildAnalyticsSummary() {
     const conversionRate = uniqueVisitors30d > 0
         ? Number(((convertedVisitors30d / uniqueVisitors30d) * 100).toFixed(1))
         : 0;
+
+    logAnalyticsInfo('summary_built', {
+        visitsToday,
+        visits7d,
+        visits30d,
+        registrationStarts30d,
+        registrationCompleted30d
+    });
 
     return {
         visitsToday,

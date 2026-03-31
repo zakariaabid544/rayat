@@ -44,6 +44,7 @@ function optionalAuth(req, res, next) {
 }
 
 // Middleware per bloccare utenti con abbonamento scaduto
+// RAYAT FIX - popup subscription / new customers / email
 async function checkSubscription(req, res, next) {
     if (!req.user) return res.status(401).json({ error: 'Utente non autenticato' });
 
@@ -69,6 +70,15 @@ async function checkSubscription(req, res, next) {
         if (userColumns.has('subscription_expiry')) {
             selectedColumns.push('subscription_expiry');
         }
+        if (userColumns.has('registration_status')) {
+            selectedColumns.push('registration_status');
+        }
+        if (userColumns.has('approved_at')) {
+            selectedColumns.push('approved_at');
+        }
+        if (userColumns.has('active')) {
+            selectedColumns.push('active');
+        }
 
         if (selectedColumns.length === 0) {
             return next();
@@ -81,12 +91,20 @@ async function checkSubscription(req, res, next) {
         if (!rows.length) return res.status(404).json({ error: 'Utente non trovato' });
 
         const user = rows[0];
+        const isConfirmedCustomer = user.registration_status === 'active'
+            || Boolean(user.approved_at)
+            || (user.registration_status == null && user.active === true);
 
-        if (user.payment_status === 'non_pagato') {
-            return res.status(403).json({ error: 'subscription_expired', message: 'Abonnement expiré. Contactez Rayat.' });
+        if (!isConfirmedCustomer) {
+            return next();
         }
 
-        if (user.subscription_expiry && new Date(user.subscription_expiry) < new Date()) {
+        const expiryDate = user.subscription_expiry ? new Date(user.subscription_expiry) : null;
+        if (!expiryDate || Number.isNaN(expiryDate.getTime())) {
+            return next();
+        }
+
+        if (expiryDate < new Date()) {
             return res.status(403).json({ error: 'subscription_expired', message: 'Abonnement expiré. Contactez Rayat.' });
         }
 

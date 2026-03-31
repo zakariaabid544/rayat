@@ -335,7 +335,8 @@
             expired: false,
             expiringSoon: false,
             daysRemaining: null,
-            expiryDate: null
+            expiryDate: null,
+            dismissed: false
         };
         let lastAlarmSyncSignature = '';
         let lastAlarmSyncAt = 0;
@@ -553,13 +554,38 @@
             return `${prefix} ${getSelectedCropLabel()}: ${formatMetricValue(range.min)} – ${formatMetricValue(range.max)}${unitSuffix}`;
         }
 
+        // RAYAT FIX - popup subscription / new customers / email
+        function isConfirmedCustomerAccount(userData = user) {
+            if (!userData || !isCustomerRole(userData.role)) {
+                return false;
+            }
+
+            if (userData.registration_status === 'active') {
+                return true;
+            }
+
+            return Boolean(userData.approved_at);
+        }
+
+        // RAYAT FIX - popup subscription / new customers / email
         function getSubscriptionStateFromUser(userData = user) {
             if (!userData || !isCustomerRole(userData.role)) {
                 return {
                     expired: false,
                     expiringSoon: false,
                     daysRemaining: null,
-                    expiryDate: null
+                    expiryDate: null,
+                    dismissed: false
+                };
+            }
+
+            if (!isConfirmedCustomerAccount(userData)) {
+                return {
+                    expired: false,
+                    expiringSoon: false,
+                    daysRemaining: null,
+                    expiryDate: null,
+                    dismissed: false
                 };
             }
 
@@ -569,16 +595,8 @@
                     expired: false,
                     expiringSoon: false,
                     daysRemaining: null,
-                    expiryDate: null
-                };
-            }
-
-            if (userData.payment_status === 'non_pagato') {
-                return {
-                    expired: true,
-                    expiringSoon: false,
-                    daysRemaining: 0,
-                    expiryDate
+                    expiryDate: null,
+                    dismissed: false
                 };
             }
 
@@ -587,7 +605,8 @@
                     expired: false,
                     expiringSoon: false,
                     daysRemaining: null,
-                    expiryDate: null
+                    expiryDate: null,
+                    dismissed: false
                 };
             }
 
@@ -598,7 +617,8 @@
                 expired: diffMs < 0,
                 expiringSoon: diffMs >= 0 && daysRemaining <= 7,
                 daysRemaining,
-                expiryDate
+                expiryDate,
+                dismissed: false
             };
         }
 
@@ -1838,7 +1858,7 @@
             return view !== 'profilo' && !window.location.pathname.startsWith('/admin');
         }
 
-        // RAYAT FIX - email + analytics
+        // RAYAT FIX - analytics followup
         function getAnalyticsAnonymousId() {
             try {
                 const existing = localStorage.getItem(ANALYTICS_STORAGE_KEY);
@@ -1865,32 +1885,44 @@
                 return;
             }
 
+            const anonymousId = getAnalyticsAnonymousId();
             const body = JSON.stringify({
                 ...payload,
-                anonymousId: getAnalyticsAnonymousId(),
+                anonymousId,
                 pagePath: payload.pagePath || getPathForView(payload.view || currentView),
                 referrer: typeof document !== 'undefined' ? document.referrer || '' : ''
             });
+
+            if (typeof fetch === 'function') {
+                fetch(CONFIG.ANALYTICS_TRACK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Rayat-Analytics-Id': anonymousId
+                    },
+                    body,
+                    keepalive: true
+                }).catch(() => {
+                    try {
+                        if (navigator.sendBeacon) {
+                            const beacon = new Blob([body], { type: 'application/json' });
+                            navigator.sendBeacon(CONFIG.ANALYTICS_TRACK_URL, beacon);
+                        }
+                    } catch (error) {
+                        // noop
+                    }
+                });
+                return;
+            }
 
             try {
                 if (navigator.sendBeacon) {
                     const beacon = new Blob([body], { type: 'application/json' });
                     navigator.sendBeacon(CONFIG.ANALYTICS_TRACK_URL, beacon);
-                    return;
                 }
             } catch (error) {
                 // noop
             }
-
-            fetch(CONFIG.ANALYTICS_TRACK_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Rayat-Analytics-Id': getAnalyticsAnonymousId()
-                },
-                body,
-                keepalive: true
-            }).catch(() => {});
         }
 
         function trackRegistrationStart(view = 'register') {
@@ -2772,7 +2804,9 @@
             }
 
             if (subscriptionUiState.expired) {
-                showSubscriptionExpiredModal();
+                if (!subscriptionUiState.dismissed) {
+                    showSubscriptionExpiredModal();
+                }
                 return;
             }
 
@@ -2787,7 +2821,8 @@
                         subscriptionUiState = {
                             ...subscriptionUiState,
                             expired: true,
-                            expiringSoon: false
+                            expiringSoon: false,
+                            dismissed: false
                         };
                         showSubscriptionExpiredModal();
                         return;
@@ -2991,7 +3026,7 @@
         }
         
         function showSubscriptionExpiredModal() {
-            if (!isAuthenticated() || !isCustomerRole(currentRole) || currentView !== 'demo' || !subscriptionUiState.expired) {
+            if (!isAuthenticated() || !isCustomerRole(currentRole) || currentView !== 'demo' || !subscriptionUiState.expired || subscriptionUiState.dismissed) {
                 return;
             }
 
@@ -3017,6 +3052,15 @@
             document.body.style.overflow = '';
             const skel = document.getElementById('view-skeleton');
             if (skel) skel.style.display = '';
+        }
+
+        // RAYAT FIX - popup subscription / new customers / email
+        function dismissSubscriptionExpiredModal() {
+            subscriptionUiState = {
+                ...subscriptionUiState,
+                dismissed: true
+            };
+            hideSubscriptionExpiredModal();
         }
 
         function goToLogin() {
@@ -3645,6 +3689,7 @@
         }
 
         async function completeRegistration() {
+            // RAYAT FIX - popup subscription / new customers / email
             // RAYAT FIX - registration/admin
             syncRegistrationFormState();
             registrationData.location_address = registrationData.location_address || registrationData.location_name;
@@ -3671,6 +3716,8 @@
                     localStorage.setItem('rayat_user', JSON.stringify(user));
                     currentRole = data.user.role || 'client';
                     syncStoredUserProfileIntoSession();
+                    syncSubscriptionUiState();
+                    hideSubscriptionExpiredModal();
                     setView('demo');
                     loadSensorData().catch(() => {});
                     alert('Benvenuto in Rayat! ✅');

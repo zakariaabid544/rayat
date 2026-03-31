@@ -35,6 +35,8 @@ async function getUserColumnFlags() {
         hasLanguage: columns.has('language'),
         hasClientCode: columns.has('client_code'),
         hasLocationAddress: columns.has('location_address'),
+        hasPaymentStatus: columns.has('payment_status'),
+        hasSubscriptionExpiry: columns.has('subscription_expiry'),
         hasRegistrationStatus: columns.has('registration_status'),
         hasRegistrationSource: columns.has('registration_source'),
         hasApprovedAt: columns.has('approved_at')
@@ -158,6 +160,7 @@ async function ensureUniqueContactInfo({ email, phone, excludeId = null }) {
     }
 }
 
+// RAYAT FIX - popup subscription / new customers / email
 async function createRegisteredClient(payload, options = {}) {
     const flags = await getUserColumnFlags();
     const { firstName, lastName } = normalizeRegistrationNameParts(payload);
@@ -210,7 +213,7 @@ async function createRegisteredClient(payload, options = {}) {
         longitude,
         locationName,
         true,
-        true,
+        false,
         'client'
     ];
 
@@ -261,7 +264,12 @@ async function createRegisteredClient(payload, options = {}) {
         longitude,
         client_code: clientCode,
         role: 'client',
+        active: false,
+        payment_status: flags.hasPaymentStatus ? 'non_pagato' : null,
+        subscription_expiry: flags.hasSubscriptionExpiry ? null : null,
         registration_status: options.registrationStatus || 'new',
+        registration_source: options.registrationSource || 'public',
+        approved_at: null,
         created_at: createdAt
     };
 }
@@ -327,8 +335,11 @@ router.post('/login', async (req, res) => {
                 last_name: user.last_name || null,
                 language: user.language,
                 role: normalizedRole,
+                active: user.active,
                 payment_status: user.payment_status || null,
-                subscription_expiry: user.subscription_expiry || null
+                subscription_expiry: user.subscription_expiry || null,
+                registration_status: user.registration_status || null,
+                approved_at: user.approved_at || null
             }
         });
     } catch (error) {

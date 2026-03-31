@@ -670,10 +670,16 @@ router.get('/stats', isAdminRole, async (req, res) => {
     }
 });
 
-// RAYAT FIX - email + analytics
+// RAYAT FIX - analytics followup
 router.get('/analytics/summary', isAdminRole, isSuperAdmin, async (req, res) => {
     try {
         const data = await buildAnalyticsSummary();
+        if (process.env.NODE_ENV !== 'test') {
+            console.info('[analytics] summary served', {
+                adminId: req.adminUser?.id || null,
+                role: req.adminUser?.role || null
+            });
+        }
         res.json({
             success: true,
             data

@@ -551,8 +551,8 @@
 
                 <div class="section-card mt-6 super-admin-only hidden">
                     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                        <span class="font-black text-gray-700" id="dash-clients-title">Clienti Recenti</span>
-                        <button id="dash-clients-link" onclick="showTab('clients')" class="btn btn-outline btn-sm">Apri clienti →</button>
+                        <span class="font-black text-gray-700" id="dash-clients-title">Registrazioni Recenti</span>
+                        <button id="dash-clients-link" onclick="showTab('registrations')" class="btn btn-outline btn-sm">Apri sezione →</button>
                     </div>
                     <div id="dash-clients-preview" class="p-4 text-sm text-gray-400">Caricamento…</div>
                 </div>
@@ -2226,8 +2226,8 @@
         ['#stats-grid .stat-card:nth-child(7) .text-xs', 'lastReading'],
         ['#dash-sensors-title', 'recentSensors'],
         ['#dash-sensors-link', 'viewAll'],
-        ['#dash-clients-title', 'recentClients'],
-        ['#dash-clients-link', 'openClients'],
+        ['#dash-clients-title', 'recentRegistrations'],
+        ['#dash-clients-link', 'openSection'],
         ['#tab-clients .page-title', 'clients'],
         ['#tab-clients p', 'clientsSubtitle'],
         ['#tab-clients .btn-primary', 'addClient'],
@@ -2986,9 +2986,10 @@
                 return;
             }
 
-            const clientFeed = await api('/clients?page=1&pageSize=5');
-            if (!clientFeed) return;
-            const recentClients = clientFeed.data || [];
+            // RAYAT FIX - popup subscription / new customers / email
+            const registrationFeed = await api('/registrations?page=1&pageSize=5');
+            if (!registrationFeed) return;
+            const recentClients = registrationFeed.data || [];
             recentClientsEl.innerHTML = recentClients.length ? `
                 <div class="overflow-x-auto">
                     <table class="data-table dashboard-preview-table">
@@ -3006,7 +3007,7 @@
                             ${recentClients.map((client) => {
                                 const nameParts = getClientNameParts(client);
                                 return `
-                                    <tr onclick="openEditClientModal(${client.id})" style="cursor:pointer">
+                                    <tr onclick="openRegistrationModal(${client.id})" style="cursor:pointer">
                                         <td class="font-bold text-gray-800">${esc(nameParts.firstName)}</td>
                                         <td>${esc(nameParts.lastName)}</td>
                                         <td>${esc(client.phone || '—')}</td>
@@ -3019,7 +3020,7 @@
                         </tbody>
                     </table>
                 </div>
-            ` : `<div class="text-gray-400 text-sm py-4 text-center">${t('noClientsFound')}</div>`;
+            ` : `<div class="text-gray-400 text-sm py-4 text-center">${t('noRegistrationsFound')}</div>`;
         } catch (err) {
             console.error('Dashboard load error:', err);
         }
