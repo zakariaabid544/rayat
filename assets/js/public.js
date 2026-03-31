@@ -52,6 +52,7 @@
         const WHATSAPP_DISPLAY_NUMBER = '+39 351 320 3307';
         const USER_PROFILE_STORAGE_PREFIX = 'rayat_user_profile_';
         const ANALYTICS_STORAGE_KEY = 'rayat_analytics_id';
+        const BRAND_LOGO_BLACK = '/assets/logo/logo-black.svg';
         const BRAND_LOGO_WHITE = '/assets/logo/logo-white.svg';
         let latestAssignedSensors = [];
         let userProfileNotice = '';
@@ -3885,9 +3886,16 @@
                         
                         <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl p-8 md:p-12 mb-12">
                             <div class="space-y-8">
-                                <div class="border-l-4 border-green-600 pl-6">
-                                    <h4 class="text-2xl font-bold mb-3 text-green-700"><span style="filter: sepia(100%) hue-rotate(70deg) saturate(500%) brightness(0.7);">🌾</span> ${t('ourReality')}</h4>
-                                    <p class="text-lg text-gray-700 leading-relaxed">${t('ourRealityDesc')}</p>
+                                <div class="rayat-home-about-feature">
+                                    <div class="rayat-brand-media rayat-brand-media--home">
+                                        <div class="rayat-brand-media-shell">
+                                            <img src="${BRAND_LOGO_BLACK}" alt="Rayat Logo" class="rayat-section-brand-logo rayat-section-brand-logo--home" />
+                                        </div>
+                                    </div>
+                                    <div class="border-l-4 border-green-600 pl-6 md:pl-8 rayat-home-about-copy">
+                                        <h4 class="text-2xl font-bold mb-3 text-green-700">${t('ourReality')}</h4>
+                                        <p class="text-lg text-gray-700 leading-relaxed">${t('ourRealityDesc')}</p>
+                                    </div>
                                 </div>
                                 <div class="border-l-4 border-blue-600 pl-6">
                                     <h4 class="text-2xl font-bold mb-3 text-blue-700">🎯 ${t('ourMission')}</h4>
@@ -4398,9 +4406,13 @@
                         <div class="bg-white rounded-[3rem] shadow-2xl p-10 md:p-20 border border-green-100 relative overflow-hidden">
                             <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-600 to-blue-600"></div>
                             <div class="flex flex-col gap-12 relative z-10">
-                                <div class="flex items-start gap-8">
-                                    <div class="text-7xl" style="filter: sepia(100%) hue-rotate(70deg) saturate(500%) brightness(0.7);">🌾</div>
-                                    <div>
+                                <div class="rayat-about-page-lead">
+                                    <div class="rayat-brand-media rayat-brand-media--about">
+                                        <div class="rayat-brand-media-shell rayat-brand-media-shell--hero">
+                                            <img src="${BRAND_LOGO_BLACK}" alt="Rayat Logo" class="rayat-section-brand-logo rayat-section-brand-logo--about" />
+                                        </div>
+                                    </div>
+                                    <div class="rayat-about-page-copy">
                                         <h3 class="text-4xl font-black text-green-900 mb-6 uppercase tracking-tight">${t('ourReality')}</h3>
                                         <p class="text-xl text-gray-700 leading-relaxed font-medium">${t('ourRealityDesc')}</p>
                                     </div>
