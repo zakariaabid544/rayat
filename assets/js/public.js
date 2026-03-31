@@ -52,6 +52,7 @@
         const WHATSAPP_DISPLAY_NUMBER = '+39 351 320 3307';
         const USER_PROFILE_STORAGE_PREFIX = 'rayat_user_profile_';
         const ANALYTICS_STORAGE_KEY = 'rayat_analytics_id';
+        const BRAND_LOGO_WHITE = '/assets/logo/logo-white.svg';
         let latestAssignedSensors = [];
         let userProfileNotice = '';
 
@@ -3751,9 +3752,8 @@
                     <div class="container mx-auto px-4">
                         <div class="flex justify-between items-center gap-4">
                             <div class="flex items-center space-x-3 cursor-pointer" onclick="setView('home')">
-                                <img src="icons/tree-silver.png" alt="Rayat Logo"
-                                     class="h-12 w-auto"
-                                     style="filter:brightness(0) invert(1);" />
+                                <img src="${BRAND_LOGO_WHITE}" alt="Rayat Logo"
+                                     class="h-12 w-auto" />
                                 <div>
                                     <h1 class="text-3xl font-black tracking-tighter text-white">RAYAT</h1>
                                     <p class="text-[10px] text-green-200 uppercase font-bold tracking-widest">${t('appSubtitle')}</p>
@@ -5112,9 +5112,8 @@
                 <footer class="bg-black text-white py-16 text-center safe-area-bottom">
                     <div class="container mx-auto px-4">
                         <div class="flex justify-center items-center space-x-3 mb-6">
-                            <img src="icons/tree-silver.png" alt="Rayat Logo"
-                                 class="h-14 w-auto"
-                                 style="filter:brightness(0) invert(1);" />
+                            <img src="${BRAND_LOGO_WHITE}" alt="Rayat Logo"
+                                 class="h-14 w-auto" />
                             <h2 class="text-4xl font-black tracking-tighter text-white">RAYAT</h2>
                         </div>
                         <nav class="rayat-footer-primary-nav">

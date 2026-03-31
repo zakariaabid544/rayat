@@ -2,7 +2,7 @@
 // RAYAT Service Worker - Offline Cache
 // =============================================
 // RAYAT FIX - mobile app ready optimization
-const CACHE_NAME = 'rayat-v1.2-mobile-app-ready';
+const CACHE_NAME = 'rayat-v1.3-logo-refresh';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -10,12 +10,17 @@ const ASSETS_TO_CACHE = [
     './manifest.json',
     './favicon.png',
     './favicon-32.png',
+    './favicon.ico',
     './assets/css/public.css?v=20260331-mobile-app-ready',
     './assets/js/public.js?v=20260331-mobile-app-ready',
+    './assets/logo/logo-black.svg',
+    './assets/logo/logo-green.svg',
+    './assets/logo/logo-white.svg',
+    './icons/apple-touch-icon.png',
+    './icons/favicon-16x16.png',
+    './icons/favicon-32x32.png',
     './icons/icon-192.png',
     './icons/icon-512.png',
-    './icons/logo.png',
-    './icons/tree-silver.png',
     'https://cdn.tailwindcss.com',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
