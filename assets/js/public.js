@@ -8,7 +8,6 @@
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
 
-        let lastRefreshed = new Date();
         let isRefreshingData = false;
         let activeRefreshPromise = null;
 
@@ -793,17 +792,9 @@
 
         function syncStoredAdminSessionIntoState() {
             adminSessionUser = readStoredAdminSessionUser();
-
-            if (!adminSessionUser && isPrivilegedAdminRole(currentRole) && user) {
-                adminSessionUser = user;
-            }
         }
 
         function getPrivilegedAdminSessionUser() {
-            if (isPrivilegedAdminRole(currentRole) && user) {
-                return user;
-            }
-
             return isPrivilegedAdminRole(adminSessionUser?.role) ? adminSessionUser : null;
         }
 
@@ -812,9 +803,7 @@
         }
 
         function getAdminSessionTokenCandidate() {
-            return sessionStorage.getItem(ADMIN_AUTH_TOKEN_STORAGE_KEY)
-                || (isPrivilegedAdminRole(currentRole) ? authToken : null)
-                || null;
+            return sessionStorage.getItem(ADMIN_AUTH_TOKEN_STORAGE_KEY) || null;
         }
 
         function shouldAttemptAdminSessionRestore() {
@@ -822,7 +811,6 @@
             return Boolean(
                 sessionStorage.getItem(ADMIN_AUTH_TOKEN_STORAGE_KEY)
                 || sessionStorage.getItem(ADMIN_AUTH_USER_STORAGE_KEY)
-                || isPrivilegedAdminRole(currentRole)
                 || document.referrer.startsWith(adminReferrer)
             );
         }
@@ -851,8 +839,8 @@
                 if (!response.ok) {
                     sessionStorage.removeItem(ADMIN_AUTH_TOKEN_STORAGE_KEY);
                     sessionStorage.removeItem(ADMIN_AUTH_USER_STORAGE_KEY);
-                    adminSessionUser = isPrivilegedAdminRole(currentRole) && user ? user : null;
-                    return adminSessionUser;
+                    adminSessionUser = null;
+                    return null;
                 }
 
                 const data = await response.json();
@@ -955,6 +943,7 @@
             sessionStorage.removeItem(AUTH_USER_STORAGE_KEY);
             sessionStorage.removeItem(ADMIN_AUTH_TOKEN_STORAGE_KEY);
             sessionStorage.removeItem(ADMIN_AUTH_USER_STORAGE_KEY);
+            localStorage.removeItem(AUTH_STORAGE_MODE_KEY);
             syncSubscriptionUiState();
             hideSubscriptionExpiredModal();
 
@@ -1041,7 +1030,7 @@
                 msgOk: 'Irrigazione sicura garantita', msgShortage: 'ATTENZIONE: Acqua insufficiente!',
                 footerRights: '© 2026 Rayat Smart Monitoring. Tutti i diritti riservati.',
                 banane: 'Banane', agrumi: 'Agrumi', pomodori: 'Pomodori', mais: 'Mais', fragole: 'Fragole', olive: 'Olive', citrus: 'Agrumi', tomatoes: 'Pomodori', banana: 'Banane', strawberry: 'Fragole',
-                lastUpdate: 'Ultimo Update', lastRefreshed: 'Ultimo Aggiornamento', export: 'Scarica CSV', search: 'Cerca', time: 'Data/Ora', status: 'Stato',
+                export: 'Scarica CSV', search: 'Cerca', time: 'Data/Ora', status: 'Stato',
                 refreshDataAction: 'Aggiorna dati', refreshingDataAction: 'Aggiornamento in corso', monitoringOnline: 'Sensori online', monitoringOffline: 'Connessione instabile',
                 appSubtitle: 'Rayat Smart Monitoring Professionale',
                 welcome: 'Benvenuto', protected: 'Il Tuo Campo è Protetto 24/7', controlActive: 'Controllo continuo - La tua assicurazione agricola sempre attiva',
@@ -1179,7 +1168,7 @@
                 msgOk: 'Safe Irrigation - Optimal Reserves', msgShortage: 'ATTENTION: Insufficient water for selected crop!',
                 footerRights: '© 2026 Rayat Smart Monitoring. All rights reserved.',
                 banane: 'Bananas', agrumi: 'Citrus (Oranges/Lemons)', pomodori: 'Tomatoes', mais: 'Corn', fragole: 'Strawberries', olive: 'Olives', citrus: 'Citrus', tomatoes: 'Tomatoes', banana: 'Bananas', strawberry: 'Strawberries',
-                lastUpdate: 'Last Update', lastRefreshed: 'Last Refreshed', export: 'Download Report (CSV)', search: 'Search', time: 'Time', status: 'Status',
+                export: 'Download Report (CSV)', search: 'Search', time: 'Time', status: 'Status',
                 refreshDataAction: 'Refresh data', refreshingDataAction: 'Refreshing data', monitoringOnline: 'Sensors online', monitoringOffline: 'Connection unstable',
                 appSubtitle: 'Rayat Smart Monitoring',
                 welcome: 'Welcome', protected: 'Your Field is Protected 24/7', controlActive: 'Continuous monitoring - Your agricultural insurance always active',
@@ -1315,7 +1304,7 @@
                 msgOk: 'Irrigation sécurisée garantie', msgShortage: 'ATTENTION : Eau insuffisante !',
                 footerRights: '© 2026 Rayat Smart Monitoring. Tous droits réservés.',
                 banane: 'Bananes', agrumi: 'Agrumes', pomodori: 'Tomates', mais: 'Maïs', fragole: 'Fraises', olive: 'Olives', citrus: 'Agrumes', tomatoes: 'Tomates', banana: 'Bananes', strawberry: 'Fraises',
-                lastUpdate: 'Mise à jour', lastRefreshed: 'Dernière mise à jour', export: 'Exporter CSV', search: 'Chercher', time: 'Date/Heure', status: 'Statut',
+                export: 'Exporter CSV', search: 'Chercher', time: 'Date/Heure', status: 'Statut',
                 refreshDataAction: 'Actualiser les donnees', refreshingDataAction: 'Actualisation en cours', monitoringOnline: 'Capteurs en ligne', monitoringOffline: 'Connexion instable',
                 appSubtitle: 'Rayat Smart Monitoring Professionnel',
                 welcome: 'Bienvenue', protected: 'Votre Champ est Protégé 24h/24', controlActive: 'Surveillance continue - Votre assurance agricole toujours active',
@@ -1451,7 +1440,7 @@
                 msgOk: 'ري آمن ومضمون', msgShortage: 'تنبيه: المياه غير كافية!',
                 footerRights: '© 2026 Rayat Smart Monitoring. جميع الحقوق محفوظة.',
                 banane: 'موز', agrumi: 'حمضيات', pomodori: 'طماطم', mais: 'ذرة', fragole: 'فراولة', olive: 'زيتون', citrus: 'حمضيات', tomatoes: 'طماطم', banana: 'موز', strawberry: 'فراولة',
-                lastUpdate: 'آخر تحديث', lastRefreshed: 'تم التحديث في', export: 'تصدير CSV', search: 'بحث', time: 'الوقت', status: 'الحالة',
+                export: 'تصدير CSV', search: 'بحث', time: 'الوقت', status: 'الحالة',
                 refreshDataAction: 'تحديث البيانات', refreshingDataAction: 'جار تحديث البيانات', monitoringOnline: 'المستشعرات متصلة', monitoringOffline: 'الاتصال غير مستقر',
                 appSubtitle: 'رايات للمراقبة الذكية المحترفة',
                 welcome: 'مرحبا', protected: 'حقلك محمي 24/7', controlActive: 'مراقبة مستمرة - تأمينك الزراعي نشط دائمًا',
@@ -1681,7 +1670,6 @@
                 available: 'ⵉⵜⵜⵓⴼⵔⴰⵏ',
                 statusOk: 'ⴰⵏⴰⵡ ⵉⵖⵓⴷⴰ',
                 statusAlert: 'ⴰⵍⵖⵓ ⵏ ⵜⵎⴰⵢⵏⵓⵜ',
-                lastRefreshed: 'ⴰⵙⵎⴰⵢⵏⵓ ⴰⵎⴳⴳⴰⵔⵓ',
                 ton: 'Ton',
                 ha: 'Ha',
                 banane: 'ⵜⵉⴳⴰⵢⵢⴰ',
@@ -1690,7 +1678,6 @@
                 mais: 'ⴰⴷⵔⴰⵔ',
                 fragole: 'ⵜⵉⴼⵔⴰⵙ',
                 olive: 'ⴰⵣⵎⵎⵓⵔ',
-                lastUpdate: 'ⴰⵎⴰⵢⵏⵓ ⴰⵎⴳⴳⴰⵔⵓ',
                 exportCSV: 'ⵙⵙⵓⴼⵖ ⴰⵍⵖⵓ (CSV)',
                 msgShortage: 'ⴰⵍⵖⵓ: ⴰⵎⴰⵏ ⵓⵔ ⵉⴳⵉⵏ ⵉⵎⴰⵏ ⵉ ⵜⵎⴳⵔⵜ ⵉⵜⵜⵓⴼⵔⴰⵏ!',
                 msgOk: 'ⴰⵙⵙⴰⵢ ⵉⵖⵓⴷⴰ - ⵜⵉⵎⴰⵢⵏⵓⵜ ⵉⵖⵓⴷⴰⵏ',
@@ -3257,7 +3244,6 @@
                     if (result.success && result.data) {
                         localStorage.setItem('rayat_sensor_cache', JSON.stringify(result.data));
                         updateSensorData(result.data);
-                        lastRefreshed = new Date();
                         dataError = false;
                         document.getElementById('offline-banner').style.display = 'none';
                     }
@@ -3294,7 +3280,6 @@
                 try {
                     if (!isAuthenticated() || !isCustomerRole(currentRole)) {
                         generateSimulationData();
-                        lastRefreshed = new Date();
                         dataError = false;
                         render();
                         await new Promise((resolve) => setTimeout(resolve, 3400));
@@ -3589,6 +3574,7 @@
             const canAccessProfile = isAuthenticated() && isCustomerRole(currentRole);
             const adminShortcutUser = getPrivilegedAdminSessionUser();
             const hasAdminAccessShortcut = Boolean(adminShortcutUser);
+            const hasVisibleAccountState = canAccessProfile || hasAdminAccessShortcut;
             const mergedProfile = canAccessProfile ? getMergedUserProfile() : null;
             const profileDisplayName = mergedProfile?.name || user?.name || 'Rayat';
             const profileDisplayEmail = mergedProfile?.email || user?.email || '';
@@ -3600,7 +3586,7 @@
                     : t('login');
             const authButton = hasAdminAccessShortcut && !canAccessProfile
                 ? `<button onclick="goToAdminArea()" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('adminArea')}</button>`
-                : !isAuthenticated()
+                : !hasVisibleAccountState
                     ? `<button onclick="setViewWithTracking('login')" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('login')}</button>`
                     : '';
             const accountButton = canAccessProfile
@@ -3738,7 +3724,7 @@
                             <div class="mt-6 pt-6 border-t border-slate-200">
                                 <button onclick="goToAdminArea()" class="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs">${t('adminArea')}</button>
                             </div>
-                        ` : !isAuthenticated() ? `
+                        ` : !hasVisibleAccountState ? `
                             <div class="mt-6 pt-6 border-t border-slate-200">
                                 <button onclick="navigateFromMobileMenu('login')" class="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs">${t('login')}</button>
                             </div>
@@ -4844,10 +4830,6 @@
                                                     <span>${escapeHtml(t('profileLatestReading'))}</span>
                                                     <strong>${escapeHtml(sensor.value)}</strong>
                                                 </div>
-                                                <div class="rayat-profile-meta-row">
-                                                    <span>${escapeHtml(t('lastRefreshed'))}</span>
-                                                    <strong>${escapeHtml(sensor.timestamp)}</strong>
-                                                </div>
                                             </div>
                                         </div>
                                     `).join('')}
@@ -5135,23 +5117,11 @@
                 </div>
             `;
 
-            // RAYAT FIX - remove duplicated section refresh actions in demo/live monitoring
-            const renderLastUpdateBlock = () => `
-                <div class="rayat-last-update" aria-live="polite">
-                    <div class="rayat-last-update-copy">
-                        <span class="rayat-last-update-label">${String(t('lastRefreshed')).toUpperCase()}:</span>
-                        <span class="rayat-last-update-time">${formatLocalizedTime(lastRefreshed)}</span>
-                    </div>
-                </div>
-            `;
-
-
             const render7in1 = () => {
                 const rows = sensorData.terreno.details.map((metric) => renderMetricCard('soil', metric)).join('');
 
                 return `
                 ${renderDemoSectionHeading(t('sensorSoName'))}
-                ${renderLastUpdateBlock()}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
@@ -5164,7 +5134,6 @@
 
                 return `
                 ${renderDemoSectionHeading(t('sensorClName'))}
-                ${renderLastUpdateBlock()}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
@@ -5185,7 +5154,6 @@
 
                 return `
                 ${renderDemoSectionHeading(t('sensorWaName'))}
-                ${renderLastUpdateBlock()}
                 <div class="rayat-water-compact mb-12">
                     <div>
                         <label class="block text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">${t('hectaresLabel')}</label>
@@ -5261,7 +5229,6 @@
                         <div class="relative z-10">
                             ${selectedSensor === 'acqua' ? renderWater() : (selectedSensor === 'terreno' ? render7in1() : (selectedSensor === 'clima' ? renderClimate() : `
                                     ${renderDemoSectionHeading(t(current.nome))}
-                                    ${renderLastUpdateBlock()}
                                     <div class="flex flex-col md:flex-row items-center justify-between mb-16">
                                         <div class="flex items-center justify-center">
                                             <div class="text-[10rem] transform -rotate-12 transition-transform hover:rotate-0 duration-700">${current.icon}</div>
@@ -5298,14 +5265,6 @@
 
                                     <!-- Export Button -->
                                     <button onclick="exportCSV()" class="bg-[#10b981] hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold uppercase tracking-tight text-[11px] shadow-xl transition-all shrink-0 flex items-center gap-2">📥 <span>${t('export')}</span></button>
-
-                                    <!-- Timestamp -->
-                                    <div class="ml-auto text-right pr-4 shrink-0 whitespace-nowrap flex items-center gap-3">
-                                        <div>
-                                            <p class="text-[9px] font-bold text-gray-400 uppercase tracking-tight leading-none">${t('lastRefreshed')}:</p>
-                                            <p class="text-[11px] font-bold text-gray-600 leading-tight">${formatLocalizedTime(lastRefreshed)}</p>
-                                        </div>
-                                    </div>
                             </div>
 
                             <!-- Dynamic History Table -->

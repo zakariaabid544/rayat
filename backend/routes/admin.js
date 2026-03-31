@@ -85,6 +85,16 @@ function extractBearerToken(req) {
     return token || null;
 }
 
+function clearAdminSessionCookie(res, req) {
+    const cookieOptions = getAdminSessionCookieOptions(req);
+    res.clearCookie(ADMIN_SESSION_COOKIE, {
+        path: cookieOptions.path,
+        sameSite: cookieOptions.sameSite,
+        secure: cookieOptions.secure,
+        httpOnly: cookieOptions.httpOnly
+    });
+}
+
 function parsePositiveInt(value, fallback, max = 200) {
     const parsed = Number.parseInt(value, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -729,7 +739,7 @@ router.get('/session', async (req, res) => {
             }
         });
     } catch (error) {
-        res.clearCookie(ADMIN_SESSION_COOKIE, { path: '/' });
+        clearAdminSessionCookie(res, req);
         sendAdminError(
             res,
             error.statusCode || 403,
@@ -740,7 +750,7 @@ router.get('/session', async (req, res) => {
 });
 
 router.post('/logout', async (req, res) => {
-    res.clearCookie(ADMIN_SESSION_COOKIE, { path: '/' });
+    clearAdminSessionCookie(res, req);
     res.json({ success: true });
 });
 

@@ -1158,10 +1158,6 @@
                 <div class="detail-value" id="rf-status-badge">—</div>
             </div>
             <div class="detail-card">
-                <div class="detail-label">Ultima modifica</div>
-                <div class="detail-value" id="rf-updated-at">—</div>
-            </div>
-            <div class="detail-card">
                 <div class="detail-label">Dispositivi associati</div>
                 <div class="detail-value" id="rf-device-count">0</div>
             </div>
@@ -1375,7 +1371,12 @@
 <script>
     // ── Config ────────────────────────────────────────────────────────────
     const API = window.location.origin + '/api/admin';
-    let adminToken = sessionStorage.getItem('rayat_admin_token');
+    const ADMIN_TOKEN_STORAGE_KEY = 'rayat_admin_token';
+    const ADMIN_USER_STORAGE_KEY = 'rayat_admin_user';
+    const PUBLIC_AUTH_TOKEN_STORAGE_KEY = 'rayat_token';
+    const PUBLIC_AUTH_USER_STORAGE_KEY = 'rayat_user';
+    const PUBLIC_AUTH_STORAGE_MODE_KEY = 'rayat_auth_storage_mode';
+    let adminToken = sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);
     let currentAdmin = null;
     let loginErrorState = null;
     let allClients = [];
@@ -1550,7 +1551,6 @@
             adminOnlyArea: 'Area riservata amministratori',
             registeredOn: 'Registrato il',
             currentStatus: 'Stato attuale',
-            lastUpdate: 'Ultima modifica',
             associatedDevices: 'Dispositivi associati',
             fullName: 'Nome Completo',
             phone: 'Telefono',
@@ -1785,7 +1785,6 @@
             adminOnlyArea: 'Administrators only area',
             registeredOn: 'Registered on',
             currentStatus: 'Current status',
-            lastUpdate: 'Last update',
             associatedDevices: 'Assigned devices',
             fullName: 'Full Name',
             phone: 'Phone',
@@ -2020,7 +2019,6 @@
             adminOnlyArea: 'Zone réservée aux administrateurs',
             registeredOn: 'Inscrit le',
             currentStatus: 'Statut actuel',
-            lastUpdate: 'Dernière modification',
             associatedDevices: 'Appareils associés',
             fullName: 'Nom complet',
             phone: 'Téléphone',
@@ -2255,7 +2253,6 @@
             adminOnlyArea: 'منطقة خاصة بالإدارة',
             registeredOn: 'تاريخ التسجيل',
             currentStatus: 'الحالة الحالية',
-            lastUpdate: 'آخر تعديل',
             associatedDevices: 'الأجهزة المرتبطة',
             fullName: 'الاسم الكامل',
             phone: 'رقم الهاتف',
@@ -2509,8 +2506,7 @@
         ['#client-form .form-field:nth-of-type(10) .form-label', 'subscriptionStart'],
         ['#registration-modal .detail-card:nth-child(1) .detail-label', 'registeredOn'],
         ['#registration-modal .detail-card:nth-child(2) .detail-label', 'currentStatus'],
-        ['#registration-modal .detail-card:nth-child(3) .detail-label', 'lastUpdate'],
-        ['#registration-modal .detail-card:nth-child(4) .detail-label', 'associatedDevices'],
+        ['#registration-modal .detail-card:nth-child(3) .detail-label', 'associatedDevices'],
         ['#registration-form .form-field:nth-of-type(1) .form-label', 'fullName'],
         ['#registration-form .form-field:nth-of-type(2) .form-label', 'email'],
         ['#registration-form .form-field:nth-of-type(3) .form-label', 'phone'],
@@ -2615,10 +2611,19 @@
 
     function clearAdminSessionCache() {
         clearAdminTimers();
-        sessionStorage.removeItem('rayat_admin_token');
-        sessionStorage.removeItem('rayat_admin_user');
+        sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+        sessionStorage.removeItem(ADMIN_USER_STORAGE_KEY);
         adminToken = null;
         currentAdmin = null;
+    }
+
+    function clearExplicitAdminLogoutState() {
+        clearAdminSessionCache();
+        sessionStorage.removeItem(PUBLIC_AUTH_TOKEN_STORAGE_KEY);
+        sessionStorage.removeItem(PUBLIC_AUTH_USER_STORAGE_KEY);
+        localStorage.removeItem(PUBLIC_AUTH_TOKEN_STORAGE_KEY);
+        localStorage.removeItem(PUBLIC_AUTH_USER_STORAGE_KEY);
+        localStorage.removeItem(PUBLIC_AUTH_STORAGE_MODE_KEY);
     }
 
     function showAdminAppShell() {
@@ -3049,8 +3054,8 @@
         const data = await res.json();
         adminToken = data.token;
         currentAdmin = data.user;
-        sessionStorage.setItem('rayat_admin_token', adminToken);
-        sessionStorage.setItem('rayat_admin_user', JSON.stringify(currentAdmin));
+        sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, adminToken);
+        sessionStorage.setItem(ADMIN_USER_STORAGE_KEY, JSON.stringify(currentAdmin));
         return {
             restored: true,
             payload: data
@@ -3147,8 +3152,8 @@
 
             adminToken = data.token;
             currentAdmin = data.user;
-            sessionStorage.setItem('rayat_admin_token', adminToken);
-            sessionStorage.setItem('rayat_admin_user', JSON.stringify(currentAdmin));
+            sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, adminToken);
+            sessionStorage.setItem(ADMIN_USER_STORAGE_KEY, JSON.stringify(currentAdmin));
 
             startApp();
         } catch (err) {
@@ -3172,13 +3177,11 @@
         } catch (err) {
             console.warn('Logout warning:', err);
         }
-        clearAdminSessionCache();
-        localStorage.removeItem('rayat_token');
-        localStorage.removeItem('rayat_user');
+        clearExplicitAdminLogoutState();
         const appOrigin = window.location.origin && window.location.origin !== 'null'
             ? window.location.origin
             : 'http://localhost:3000';
-        window.location.href = `${appOrigin}/`;
+        window.location.replace(`${appOrigin}/`);
     }
 
     // ── App Init ──────────────────────────────────────────────────────────
@@ -3760,7 +3763,6 @@
             document.getElementById('rf-address').value = data.location_address || data.location_name || '';
             document.getElementById('rf-status').value = data.registration_status || 'new';
             document.getElementById('rf-created-at').textContent = fmtDate(data.created_at);
-            document.getElementById('rf-updated-at').textContent = fmtDate(data.updated_at);
             document.getElementById('rf-device-count').textContent = String(data.device_count || 0);
             document.getElementById('rf-status-badge').innerHTML = registrationStatusBadge(data.registration_status);
             document.getElementById('registration-modal-title').textContent = t('registrationRef', { id: data.id });

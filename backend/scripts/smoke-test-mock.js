@@ -470,6 +470,21 @@ async function run() {
         const adminSessionJson = await adminSessionRes.json();
         assert.equal(adminSessionJson.user.role, 'super_admin');
         assert.ok(adminSessionJson.token);
+        const adminSessionCookieHeader = adminSessionRes.headers.get('set-cookie') || '';
+        assert.ok(adminSessionCookieHeader.includes('rayat_admin_session='));
+
+        const adminLogoutRes = await fetch(`http://127.0.0.1:${port}/api/admin/logout`, {
+          method: 'POST',
+          headers: adminSessionCookieHeader
+            ? { Cookie: adminSessionCookieHeader.split(';')[0] }
+            : {}
+        });
+        assert.equal(adminLogoutRes.status, 200);
+        const adminLogoutJson = await adminLogoutRes.json();
+        assert.equal(adminLogoutJson.success, true);
+        const adminLogoutCookieHeader = adminLogoutRes.headers.get('set-cookie') || '';
+        assert.ok(adminLogoutCookieHeader.includes('rayat_admin_session='));
+        assert.ok(/Expires=Thu, 01 Jan 1970/i.test(adminLogoutCookieHeader));
 
         const clientAdminLoginRes = await fetch(`http://127.0.0.1:${port}/api/admin/login`, {
           method: 'POST',
