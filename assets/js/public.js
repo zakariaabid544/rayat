@@ -3179,6 +3179,7 @@
                         lastRefreshed = new Date();
                         dataError = false;
                         render();
+                        await new Promise((resolve) => setTimeout(resolve, 3400));
                         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
                         return;
                     }
@@ -4922,19 +4923,20 @@
 
         function renderDemoPage() {
             const current = sensorData[selectedSensor];
+            const isLiveMonitoring = isAuthenticated() && isCustomerRole(currentRole);
 
-            // RAYAT FIX - global header refresh button for demo/live monitoring
-            const renderMonitoringRefreshControl = () => `
+            // RAYAT FIX - demo section refresh cleanup and repositioning
+            const renderMonitoringRefreshControl = (variant = 'toolbar') => `
                 <button
                     type="button"
                     onclick="refreshData()"
-                    class="rayat-header-refresh-button ${isRefreshingData ? 'is-loading' : ''}"
+                    class="${variant === 'section' ? 'rayat-section-refresh-button' : 'rayat-header-refresh-button'} ${isRefreshingData ? 'is-loading' : ''}"
                     aria-label="${escapeHtml(isRefreshingData ? t('refreshingDataAction') : t('refreshDataAction'))}"
                     title="${escapeHtml(isRefreshingData ? t('refreshingDataAction') : t('refreshDataAction'))}"
                     aria-busy="${isRefreshingData}"
                     ${isRefreshingData ? 'disabled' : ''}
                 >
-                    <span class="rayat-header-refresh-button__icon" aria-hidden="true">
+                    <span class="${variant === 'section' ? 'rayat-section-refresh-button__icon' : 'rayat-header-refresh-button__icon'}" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
                             <path d="M21 3v6h-6"></path>
@@ -4943,8 +4945,8 @@
                 </button>
             `;
 
-            // RAYAT FIX - global header refresh button for demo/live monitoring
-            const renderMonitoringHeaderBlock = () => `
+            // RAYAT FIX - demo section refresh cleanup and repositioning
+            const renderMonitoringHeaderBlock = () => isLiveMonitoring ? `
                 <div class="rayat-monitoring-toolbar">
                     <div class="rayat-monitoring-toolbar__copy">
                         <h2 class="rayat-monitoring-toolbar__title">${user ? t('dashboardBtn') : t('demoDashboard')}</h2>
@@ -4960,6 +4962,24 @@
                         </div>
                         ${renderMonitoringRefreshControl()}
                     </div>
+                </div>
+            ` : `
+                <div class="rayat-monitoring-toolbar rayat-monitoring-toolbar--demo-only">
+                    <div class="rayat-monitoring-toolbar__copy">
+                        <h2 class="rayat-monitoring-toolbar__title">${user ? t('dashboardBtn') : t('demoDashboard')}</h2>
+                        <p class="rayat-monitoring-toolbar__subtitle">${t('demoDesc')}</p>
+                    </div>
+                </div>
+            `;
+
+            // RAYAT FIX - demo section refresh cleanup and repositioning
+            const renderDemoSectionHeading = (title) => `
+                <div class="rayat-demo-section-heading">
+                    <div class="rayat-demo-section-heading__row">
+                        <h4 class="rayat-demo-section-heading__title">${title}</h4>
+                        ${renderMonitoringRefreshControl('section')}
+                    </div>
+                    <p class="rayat-demo-section-heading__subtitle">${t('realTimeMonitoring')}</p>
                 </div>
             `;
 
@@ -4978,13 +4998,15 @@
                 const rows = sensorData.terreno.details.map((metric) => renderMetricCard('soil', metric)).join('');
 
                 return `
-                <div style="margin-bottom:2.5rem;text-align:center;">
-                    <div style="display:inline-flex;align-items:center;gap:15px;justify-content:center;margin-bottom:0.3rem;">
-                        <h4 style="font-size:2rem;font-weight:900;color:#1e293b;text-transform:uppercase;letter-spacing:-0.03em;margin:0;">${t('sensorSoName')}</h4>
-                        <div class="w-4 h-4 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,1)]'} animate-pulse"></div>
+                ${isLiveMonitoring ? `
+                    <div style="margin-bottom:2.5rem;text-align:center;">
+                        <div style="display:inline-flex;align-items:center;gap:15px;justify-content:center;margin-bottom:0.3rem;">
+                            <h4 style="font-size:2rem;font-weight:900;color:#1e293b;text-transform:uppercase;letter-spacing:-0.03em;margin:0;">${t('sensorSoName')}</h4>
+                            <div class="w-4 h-4 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,1)]'} animate-pulse"></div>
+                        </div>
+                        <p style="font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.25em;margin-top:0;">${t('realTimeMonitoring')}</p>
                     </div>
-                    <p style="font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.25em;margin-top:0;">${t('realTimeMonitoring')}</p>
-                </div>
+                ` : renderDemoSectionHeading(t('sensorSoName'))}
                 ${renderLastUpdateBlock()}
                 <div class="mb-8">
                     ${renderCropSelector()}
@@ -4997,13 +5019,15 @@
                 const rows = sensorData.clima.details.map((metric) => renderMetricCard('climate', metric)).join('');
 
                 return `
-                <div class="mb-10 text-center">
-                    <div class="flex items-center justify-center gap-4 mb-2">
-                        <h4 class="text-4xl font-black text-gray-800 uppercase tracking-tight m-0">${t('sensorClName')}</h4>
-                        <div class="w-4 h-4 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,1)]'} animate-pulse"></div>
+                ${isLiveMonitoring ? `
+                    <div class="mb-10 text-center">
+                        <div class="flex items-center justify-center gap-4 mb-2">
+                            <h4 class="text-4xl font-black text-gray-800 uppercase tracking-tight m-0">${t('sensorClName')}</h4>
+                            <div class="w-4 h-4 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,1)]'} animate-pulse"></div>
+                        </div>
+                        <p class="text-gray-400 font-bold uppercase tracking-widest text-xs mt-0">${t('realTimeMonitoring')}</p>
                     </div>
-                    <p class="text-gray-400 font-bold uppercase tracking-widest text-xs mt-0">${t('realTimeMonitoring')}</p>
-                </div>
+                ` : renderDemoSectionHeading(t('sensorClName'))}
                 ${renderLastUpdateBlock()}
                 <div class="mb-8">
                     ${renderCropSelector()}
@@ -5024,13 +5048,15 @@
                 const isShortage = avail < req;
 
                 return `
-                <div class="mb-10 text-center">
-                    <div class="flex items-center justify-center gap-4 mb-2">
-                        <h4 class="text-4xl font-black text-gray-800 uppercase tracking-tight m-0">${t('sensorWaName')}</h4>
-                        <div class="w-4 h-4 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,1)]'} animate-pulse"></div>
+                ${isLiveMonitoring ? `
+                    <div class="mb-10 text-center">
+                        <div class="flex items-center justify-center gap-4 mb-2">
+                            <h4 class="text-4xl font-black text-gray-800 uppercase tracking-tight m-0">${t('sensorWaName')}</h4>
+                            <div class="w-4 h-4 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,1)]'} animate-pulse"></div>
+                        </div>
+                        <p class="text-gray-400 font-bold uppercase tracking-widest text-xs mt-0">${t('realTimeMonitoring')}</p>
                     </div>
-                    <p class="text-gray-400 font-bold uppercase tracking-widest text-xs mt-0">${t('realTimeMonitoring')}</p>
-                </div>
+                ` : renderDemoSectionHeading(t('sensorWaName'))}
                 ${renderLastUpdateBlock()}
                 <div class="rayat-water-compact mb-12">
                     <div>
@@ -5107,20 +5133,23 @@
                         <div class="relative z-10">
                             ${selectedSensor === 'acqua' ? renderWater() : (selectedSensor === 'terreno' ? render7in1() : (selectedSensor === 'clima' ? renderClimate() : `
                                     ${renderLastUpdateBlock()}
+                                    ${!isLiveMonitoring ? renderDemoSectionHeading(t(current.nome)) : ''}
                                     <div class="flex flex-col md:flex-row items-center justify-between mb-16">
-                                        <div class="flex items-center gap-10">
+                                        <div class="flex items-center ${isLiveMonitoring ? 'gap-10' : ''}">
                                             <div class="text-[10rem] transform -rotate-12 transition-transform hover:rotate-0 duration-700">${current.icon}</div>
-                                            <div>
-                                                <div class="flex items-center gap-4">
-                                                    <h3 class="text-7xl font-black text-slate-900 tracking-tighter uppercase leading-none m-0">${t(current.nome)}</h3>
-                                                </div>
-                                                <div class="flex items-center gap-4 mt-8">
-                                                    <div class="px-6 py-2 ${getStatusBadge(getMetricState(parseNumericValue(current.valore), { min: 12.2, max: 13.8, unit: current.unita || 'V' }).level).className} rounded-2xl font-black text-sm uppercase tracking-widest border border-current flex items-center gap-3">
-                                                        ${getStatusBadge(getMetricState(parseNumericValue(current.valore), { min: 12.2, max: 13.8, unit: current.unita || 'V' }).level).label}
-                                                        <div class="w-2.5 h-2.5 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,1)]'} animate-pulse"></div>
+                                            ${isLiveMonitoring ? `
+                                                <div>
+                                                    <div class="flex items-center gap-4">
+                                                        <h3 class="text-7xl font-black text-slate-900 tracking-tighter uppercase leading-none m-0">${t(current.nome)}</h3>
+                                                    </div>
+                                                    <div class="flex items-center gap-4 mt-8">
+                                                        <div class="px-6 py-2 ${getStatusBadge(getMetricState(parseNumericValue(current.valore), { min: 12.2, max: 13.8, unit: current.unita || 'V' }).level).className} rounded-2xl font-black text-sm uppercase tracking-widest border border-current flex items-center gap-3">
+                                                            ${getStatusBadge(getMetricState(parseNumericValue(current.valore), { min: 12.2, max: 13.8, unit: current.unita || 'V' }).level).label}
+                                                            <div class="w-2.5 h-2.5 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,1)]'} animate-pulse"></div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            ` : ''}
                                         </div>
                                         <div class="text-center md:text-right mt-12 md:mt-0">
                                             <div class="text-[10rem] md:text-[12rem] font-black text-slate-900 tracking-tighter leading-none">${current.valore}<span class="text-4xl text-slate-300 ml-4 uppercase font-black">${current.unita}</span></div>

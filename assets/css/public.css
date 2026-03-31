@@ -1181,6 +1181,103 @@
             animation: rayatRefreshSpin 0.95s linear infinite;
         }
 
+        .rayat-section-refresh-button {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 52px;
+            min-width: 52px;
+            height: 52px;
+            border-radius: 1.2rem;
+            border: 1px solid rgba(148, 163, 184, 0.24);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%);
+            color: #0f172a;
+            box-shadow:
+                0 16px 32px rgba(15, 23, 42, 0.12),
+                0 6px 14px rgba(15, 23, 42, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.98),
+                inset 0 -7px 12px rgba(148, 163, 184, 0.12);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .rayat-section-refresh-button::before {
+            content: '';
+            position: absolute;
+            inset: 1px;
+            border-radius: inherit;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.08) 100%);
+            pointer-events: none;
+        }
+
+        .rayat-section-refresh-button:hover {
+            transform: translateY(-2px);
+            border-color: rgba(34, 197, 94, 0.28);
+            box-shadow:
+                0 18px 36px rgba(15, 23, 42, 0.14),
+                0 9px 16px rgba(34, 197, 94, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.98),
+                inset 0 -7px 12px rgba(148, 163, 184, 0.08);
+        }
+
+        .rayat-section-refresh-button:active {
+            transform: translateY(0) scale(0.96);
+        }
+
+        .rayat-section-refresh-button:disabled {
+            cursor: progress;
+        }
+
+        .rayat-section-refresh-button__icon {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+        }
+
+        .rayat-section-refresh-button__icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .rayat-section-refresh-button.is-loading .rayat-section-refresh-button__icon {
+            animation: rayatRefreshSpin 0.95s linear infinite;
+        }
+
+        .rayat-demo-section-heading {
+            margin: 0 0 1.25rem;
+        }
+
+        .rayat-demo-section-heading__row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .rayat-demo-section-heading__title {
+            margin: 0;
+            font-size: clamp(1.7rem, 4vw, 2.45rem);
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: -0.04em;
+            text-transform: uppercase;
+            color: #1e293b;
+        }
+
+        .rayat-demo-section-heading__subtitle {
+            margin: 0.7rem 0 0;
+            font-size: 0.74rem;
+            font-weight: 800;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.24em;
+            text-align: left;
+        }
+
         @keyframes rayatRefreshSpin {
             from {
                 transform: rotate(0deg);
@@ -1758,6 +1855,10 @@
                 gap: 0.8rem;
             }
 
+            .rayat-monitoring-toolbar--demo-only .rayat-monitoring-toolbar__copy {
+                text-align: center;
+            }
+
             .rayat-monitoring-status-pill {
                 flex: 1;
                 min-width: 0;
@@ -1779,6 +1880,32 @@
                 min-width: 54px;
                 height: 54px;
                 border-radius: 1.2rem;
+            }
+
+            .rayat-demo-section-heading {
+                margin-bottom: 1rem;
+            }
+
+            .rayat-demo-section-heading__row {
+                gap: 0.85rem;
+                align-items: flex-start;
+            }
+
+            .rayat-demo-section-heading__title {
+                font-size: clamp(1.25rem, 6vw, 1.8rem);
+                line-height: 1.04;
+            }
+
+            .rayat-demo-section-heading__subtitle {
+                font-size: 0.66rem;
+                letter-spacing: 0.18em;
+            }
+
+            .rayat-section-refresh-button {
+                width: 48px;
+                min-width: 48px;
+                height: 48px;
+                border-radius: 1rem;
             }
 
             .rayat-water-compact {
