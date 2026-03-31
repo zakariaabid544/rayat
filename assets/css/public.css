@@ -3,14 +3,47 @@
             --safe-bottom: env(safe-area-inset-bottom, 0px);
             --safe-left: env(safe-area-inset-left, 0px);
             --safe-right: env(safe-area-inset-right, 0px);
+            --rayat-mobile-radius: 1.35rem;
+            --rayat-mobile-gap: 1rem;
+            --rayat-touch-size: 48px;
+        }
+
+        html {
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+            background: #f8fafc;
         }
 
         body {
-            padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+            padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
             -webkit-tap-highlight-color: transparent;
-            user-select: none;
+            user-select: auto;
             touch-action: manipulation;
+            overscroll-behavior-y: none;
             background-color: #f8fafc;
+        }
+
+        /* RAYAT FIX - mobile app ready optimization */
+        input,
+        select,
+        textarea,
+        button {
+            font: inherit;
+        }
+
+        input,
+        select,
+        textarea {
+            font-size: 16px;
+            line-height: 1.45;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        input,
+        textarea {
+            user-select: text;
+            -webkit-user-select: text;
         }
 
         /* Improved touch responsiveness for buttons */
@@ -20,10 +53,35 @@
             touch-action: manipulation;
         }
 
+        button,
+        .btn,
+        [role="button"] {
+            min-height: 44px;
+        }
+
         button:active,
         .rayat-card:active {
             transform: scale(0.96);
             transition: transform 0.1s ease;
+        }
+
+        body.rayat-standalone-mode header {
+            box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        body.rayat-standalone-mode .rayat-whatsapp-float {
+            bottom: calc(24px + var(--safe-bottom));
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
         }
 
         /* Hide scrollbars for a cleaner app look */
@@ -291,6 +349,246 @@
             text-transform: uppercase;
         }
 
+        /* RAYAT FIX - login/profile/final UX cleanup */
+
+        .rayat-account-trigger--menu {
+            gap: 0.55rem;
+            width: auto;
+            min-width: 44px;
+            padding: 0 0.9rem;
+        }
+
+        .rayat-account-trigger__chevron {
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s ease;
+        }
+
+        .rayat-account-trigger__chevron svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .rayat-profile-menu-shell {
+            position: relative;
+        }
+
+        .rayat-profile-menu-shell.is-open .rayat-account-trigger__chevron {
+            transform: rotate(180deg);
+        }
+
+        .rayat-profile-menu {
+            position: absolute;
+            top: calc(100% + 12px);
+            right: 0;
+            width: min(320px, calc(100vw - 2rem));
+            padding: 0.85rem;
+            border-radius: 1.5rem;
+            border: 1px solid rgba(226, 232, 240, 0.96);
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 22px 48px rgba(15, 23, 42, 0.18);
+            opacity: 0;
+            transform: translateY(8px);
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            backdrop-filter: blur(18px);
+            z-index: 70;
+        }
+
+        .rayat-profile-menu.is-open {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .rayat-profile-menu-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            padding: 0.7rem 0.85rem 0.95rem;
+            margin-bottom: 0.4rem;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.88);
+        }
+
+        .rayat-profile-menu-summary strong {
+            color: #0f172a;
+            font-size: 0.98rem;
+            font-weight: 900;
+            line-height: 1.3;
+        }
+
+        .rayat-profile-menu-summary span {
+            color: #64748b;
+            font-size: 0.84rem;
+            line-height: 1.45;
+            word-break: break-word;
+        }
+
+        .rayat-profile-menu-item {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 0.95rem 1rem;
+            border-radius: 1.1rem;
+            color: #0f172a;
+            font-size: 0.88rem;
+            font-weight: 800;
+            line-height: 1.35;
+            transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+        }
+
+        .rayat-profile-menu-item:hover {
+            background: #f8fafc;
+            color: #065f46;
+            transform: translateY(-1px);
+        }
+
+        .rayat-profile-menu-item--logout {
+            color: #b91c1c;
+        }
+
+        .rayat-profile-menu-item--logout:hover {
+            background: #fef2f2;
+            color: #b91c1c;
+        }
+
+        .rayat-password-field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .rayat-password-control {
+            position: relative;
+        }
+
+        .rayat-password-toggle {
+            position: absolute;
+            top: 50%;
+            right: 0.9rem;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 40px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .rayat-password-toggle:hover {
+            background: rgba(226, 232, 240, 0.7);
+            color: #0f172a;
+        }
+
+        .rayat-password-toggle svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .rayat-remember-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            margin-top: -0.2rem;
+        }
+
+        .rayat-remember-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: #334155;
+            font-size: 0.95rem;
+            font-weight: 700;
+            line-height: 1.4;
+            cursor: pointer;
+        }
+
+        .rayat-remember-checkbox {
+            width: 18px;
+            height: 18px;
+            border-radius: 0.35rem;
+            accent-color: #166534;
+        }
+
+        .rayat-mobile-account-card {
+            margin-top: 1.5rem;
+            padding: 1.2rem;
+            border-radius: 1.6rem;
+            background: #f8fafc;
+            border: 1px solid rgba(226, 232, 240, 0.94);
+        }
+
+        .rayat-mobile-account-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            margin-bottom: 1rem;
+        }
+
+        .rayat-mobile-account-label {
+            color: #16a34a;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }
+
+        .rayat-mobile-account-summary strong {
+            color: #0f172a;
+            font-size: 1rem;
+            font-weight: 900;
+        }
+
+        .rayat-mobile-account-summary span {
+            color: #64748b;
+            font-size: 0.88rem;
+            word-break: break-word;
+        }
+
+        .rayat-mobile-account-actions {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .rayat-mobile-account-action {
+            width: 100%;
+            min-height: 48px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.95rem 1rem;
+            border-radius: 1.15rem;
+            background: white;
+            border: 1px solid rgba(226, 232, 240, 0.94);
+            color: #0f172a;
+            font-size: 0.83rem;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+        }
+
+        .rayat-mobile-account-action:hover {
+            border-color: rgba(34, 197, 94, 0.35);
+            color: #166534;
+            background: #f0fdf4;
+        }
+
+        .rayat-mobile-account-action--logout {
+            color: #b91c1c;
+        }
+
+        .rayat-mobile-account-action--logout:hover {
+            border-color: rgba(248, 113, 113, 0.35);
+            color: #b91c1c;
+            background: #fef2f2;
+        }
+
         .rayat-mobile-overlay {
             position: fixed;
             inset: 0;
@@ -323,6 +621,63 @@
 
         .rayat-mobile-panel.is-open {
             transform: translateX(0);
+        }
+
+        .rayat-auth-screen,
+        .rayat-register-screen,
+        .rayat-profile-page,
+        .rayat-demo-page,
+        .rayat-contact-page {
+            padding-bottom: calc(1.5rem + var(--safe-bottom));
+        }
+
+        .rayat-auth-card,
+        .rayat-register-card {
+            border-radius: 1.75rem;
+        }
+
+        .rayat-auth-card input,
+        .rayat-auth-card button,
+        .rayat-register-card input,
+        .rayat-register-card select,
+        .rayat-register-card textarea,
+        .rayat-register-card button,
+        .rayat-profile-card input,
+        .rayat-profile-card textarea,
+        .rayat-profile-card button,
+        .rayat-contact-page input,
+        .rayat-contact-page select,
+        .rayat-contact-page textarea,
+        .rayat-contact-page button {
+            min-height: 48px;
+        }
+
+        .rayat-register-body {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .rayat-register-section {
+            border-radius: 1.5rem;
+        }
+
+        .rayat-register-crop-grid button {
+            min-height: 52px;
+            font-weight: 800;
+            line-height: 1.35;
+        }
+
+        .rayat-contact-grid {
+            align-items: start;
+        }
+
+        .rayat-demo-nav-grid button {
+            min-height: 176px;
+        }
+
+        .rayat-demo-panel {
+            border-radius: 2.5rem;
         }
 
         .rayat-crop-selector {
@@ -1062,13 +1417,50 @@
                 display: none !important;
             }
 
+            body {
+                padding-top: 0;
+            }
+
             .rayat-mobile-toggle {
                 display: inline-flex !important;
+                width: var(--rayat-touch-size);
+                height: var(--rayat-touch-size);
             }
 
             .container {
                 padding-left: 1rem !important;
                 padding-right: 1rem !important;
+            }
+
+            .rayat-auth-screen,
+            .rayat-register-screen,
+            .rayat-profile-page,
+            .rayat-demo-page,
+            .rayat-contact-page {
+                padding-top: 1rem;
+            }
+
+            .rayat-auth-card,
+            .rayat-register-card {
+                border-radius: var(--rayat-mobile-radius);
+                padding-left: 1rem !important;
+                padding-right: 1rem !important;
+            }
+
+            .rayat-register-hero {
+                padding: 1.25rem 1rem !important;
+            }
+
+            .rayat-register-body {
+                gap: 1.4rem;
+            }
+
+            .rayat-register-section {
+                padding: 1rem !important;
+            }
+
+            .rayat-register-crop-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             }
 
             .text-7xl {
@@ -1152,8 +1544,36 @@
                 line-height: 1.55;
             }
 
+            .rayat-demo-shell {
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+            }
+
+            .rayat-demo-nav-grid {
+                gap: 0.85rem !important;
+                margin-bottom: 1.2rem !important;
+            }
+
+            .rayat-demo-nav-grid button {
+                min-height: 126px;
+                padding: 1.25rem 0.9rem !important;
+                border-radius: 1.6rem !important;
+            }
+
+            .rayat-demo-nav-grid button .text-7xl {
+                font-size: 3.25rem !important;
+                margin-bottom: 0.9rem !important;
+            }
+
+            .rayat-demo-panel {
+                padding: 1.2rem !important;
+                border-radius: 1.8rem !important;
+            }
+
             .rayat-water-compact {
                 grid-template-columns: 1fr;
+                padding: 1rem;
+                border-radius: 1.5rem;
             }
 
             .rayat-last-update {
@@ -1298,6 +1718,25 @@
                 border-radius: 1.75rem;
             }
 
+            .rayat-profile-page .text-5xl,
+            .rayat-profile-page .md\:text-6xl {
+                font-size: 2rem !important;
+                line-height: 1.08 !important;
+            }
+
+            .rayat-contact-grid {
+                gap: 1.2rem !important;
+            }
+
+            .rayat-contact-page .rounded-3xl {
+                border-radius: 1.5rem !important;
+            }
+
+            .rayat-contact-page .shadow-xl,
+            .rayat-contact-page .shadow-2xl {
+                box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08) !important;
+            }
+
             .rayat-profile-hero {
                 flex-direction: column;
                 align-items: flex-start;
@@ -1310,6 +1749,14 @@
 
             .rayat-profile-sensors-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .rayat-profile-menu {
+                position: fixed;
+                top: calc(var(--safe-top, 0px) + 84px);
+                right: 1rem;
+                left: 1rem;
+                width: auto;
             }
 
             #map,
@@ -1363,6 +1810,35 @@
                 font-size: 5.75rem !important;
             }
 
+            .rayat-register-crop-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            .rayat-register-crop-grid button {
+                min-height: 50px;
+                padding: 0.9rem 1rem !important;
+            }
+
+            .rayat-auth-card,
+            .rayat-register-card,
+            .rayat-profile-card,
+            .rayat-demo-panel {
+                border-radius: 1.25rem !important;
+            }
+
+            .rayat-demo-nav-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            .rayat-demo-nav-grid button {
+                min-height: 108px;
+            }
+
+            .rayat-demo-panel .text-4xl,
+            .rayat-demo-panel .text-7xl {
+                line-height: 1.05 !important;
+            }
+
             .rayat-profile-meta-row {
                 flex-direction: column;
                 align-items: flex-start;
@@ -1382,7 +1858,6 @@
 
             header button,
             header a,
-            #mobile-menu-panel button,
             #lang-menu button {
                 width: auto !important;
             }

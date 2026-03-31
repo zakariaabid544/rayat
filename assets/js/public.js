@@ -10,7 +10,11 @@
 
         let lastRefreshed = new Date();
 
-        let authToken = localStorage.getItem('rayat_token');
+        const AUTH_TOKEN_STORAGE_KEY = 'rayat_token';
+        const AUTH_USER_STORAGE_KEY = 'rayat_user';
+        const AUTH_STORAGE_MODE_KEY = 'rayat_auth_storage_mode';
+
+        let authToken = null;
         let currentRole = 'guest';
 
         let currentView = 'home';
@@ -20,6 +24,7 @@
         let showSettings = false;
         let showNotifications = false;
         let isMobileMenuOpen = false;
+        let isProfileMenuOpen = false;
         let isAdminView = false;
         let dataError = false; // Track API availability
         const CUSTOMER_ROLES = new Set(['client', 'farmer']);
@@ -706,6 +711,52 @@
             }
         }
 
+        // RAYAT FIX - login/profile/final UX cleanup
+        function getStoredAuthValue(key) {
+            return localStorage.getItem(key) || sessionStorage.getItem(key);
+        }
+
+        // RAYAT FIX - login/profile/final UX cleanup
+        function getActiveAuthStorage() {
+            if (localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)) {
+                return localStorage;
+            }
+
+            if (sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)) {
+                return sessionStorage;
+            }
+
+            return localStorage.getItem(AUTH_STORAGE_MODE_KEY) === 'remember'
+                ? localStorage
+                : sessionStorage;
+        }
+
+        // RAYAT FIX - login/profile/final UX cleanup
+        function shouldRememberLogin() {
+            return localStorage.getItem(AUTH_STORAGE_MODE_KEY) === 'remember'
+                || Boolean(localStorage.getItem(AUTH_TOKEN_STORAGE_KEY));
+        }
+
+        // RAYAT FIX - login/profile/final UX cleanup
+        function persistPublicSession(token, userData, options = {}) {
+            const remember = Boolean(options.remember);
+            const targetStorage = remember ? localStorage : sessionStorage;
+
+            localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+            localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+            sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+            sessionStorage.removeItem(AUTH_USER_STORAGE_KEY);
+
+            targetStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+            targetStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(userData));
+
+            if (remember) {
+                localStorage.setItem(AUTH_STORAGE_MODE_KEY, 'remember');
+            } else {
+                localStorage.removeItem(AUTH_STORAGE_MODE_KEY);
+            }
+        }
+
         function isCustomerRole(role = currentRole) {
             return CUSTOMER_ROLES.has(role);
         }
@@ -725,7 +776,7 @@
         }
 
         function restorePublicSession() {
-            authToken = localStorage.getItem('rayat_token');
+            authToken = getStoredAuthValue(AUTH_TOKEN_STORAGE_KEY);
 
             if (!authToken) {
                 user = null;
@@ -734,7 +785,7 @@
                 return;
             }
 
-            const storedUser = localStorage.getItem('rayat_user');
+            const storedUser = getStoredAuthValue(AUTH_USER_STORAGE_KEY);
             if (storedUser) {
                 try {
                     user = JSON.parse(storedUser);
@@ -743,7 +794,8 @@
                     syncSubscriptionUiState();
                     return;
                 } catch (error) {
-                    localStorage.removeItem('rayat_user');
+                    localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+                    sessionStorage.removeItem(AUTH_USER_STORAGE_KEY);
                 }
             }
 
@@ -757,7 +809,7 @@
                 };
                 currentRole = decoded.role;
                 syncStoredUserProfileIntoSession();
-                localStorage.setItem('rayat_user', JSON.stringify(user));
+                getActiveAuthStorage().setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
                 syncSubscriptionUiState();
                 return;
             }
@@ -772,8 +824,11 @@
             isAdminView = false;
             latestAssignedSensors = [];
             userProfileNotice = '';
-            localStorage.removeItem('rayat_token');
-            localStorage.removeItem('rayat_user');
+            isProfileMenuOpen = false;
+            localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+            localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+            sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+            sessionStorage.removeItem(AUTH_USER_STORAGE_KEY);
             sessionStorage.removeItem('rayat_admin_token');
             sessionStorage.removeItem('rayat_admin_user');
             syncSubscriptionUiState();
@@ -835,6 +890,9 @@
                 profileRoleLabel: 'Ruolo',
                 profileDeviceLabel: 'Dispositivo',
                 profileLatestReading: 'Ultima lettura',
+                profileMenuInfo: 'Informazioni cliente',
+                profileMenuEdit: 'Modifica dati',
+                profileMenuLogout: 'Logout',
                 hero: 'Terreno Sano = Raccolto Ricco', heroSub: 'Monitoraggio 24/7 con sensori intelligenti Rayat',
                 heroEyebrow: 'Rayat Smart Monitoring',
                 heroTitleLine1: 'Agricoltura guidata dai dati',
@@ -863,6 +921,8 @@
                 appSubtitle: 'Rayat Smart Monitoring Professionale',
                 welcome: 'Benvenuto', protected: 'Il Tuo Campo è Protetto 24/7', controlActive: 'Controllo continuo - La tua assicurazione agricola sempre attiva',
                 loginTitle: 'Accedi', loginError: 'Email o password non corretti!', emailLabel: 'Email', passwordLabel: 'Password', loginBtn: 'ACCEDI', demoAccount: 'Account Demo:',
+                rememberMe: 'Ricordami', showPassword: 'Mostra password', hidePassword: 'Nascondi password',
+                loginNoAccount: 'Non hai un account?', loginRegisterNow: 'Registrati ora 🌾',
                 customSolutionsTitle: 'Soluzioni Personalizzate', customSolutionsDesc: 'Non per forza devi avere tutti i nostri sensori!', contactUs: 'Contattaci per una Consulenza', features: 'Funzionalità:',
                 sensorEnName: 'RAYAT ENERGIA', sensorEnDesc: 'Monitora consumo pompe e rileva guasti', sensorEnF1: 'Allarme salvavita', sensorEnF2: 'Ottimizzazione fasce', sensorEnF3: 'Rilevamento guasti',
                 sensorWaF1: 'Livello Acqua', sensorWaF2: 'Allarme Scarso', sensorWaF3: 'Storico Riserve',
@@ -967,6 +1027,9 @@
                 profileRoleLabel: 'Role',
                 profileDeviceLabel: 'Device',
                 profileLatestReading: 'Latest reading',
+                profileMenuInfo: 'Customer info',
+                profileMenuEdit: 'Edit details',
+                profileMenuLogout: 'Logout',
                 hero: 'Healthy Soil = Rich Harvest', heroSub: 'Monitor your field 24/7 with smart sensors',
                 heroEyebrow: 'Rayat Smart Monitoring',
                 heroTitleLine1: 'Data-Driven Agriculture',
@@ -995,6 +1058,8 @@
                 appSubtitle: 'Rayat Smart Monitoring',
                 welcome: 'Welcome', protected: 'Your Field is Protected 24/7', controlActive: 'Continuous monitoring - Your agricultural insurance always active',
                 loginTitle: 'Login', loginError: 'Incorrect email or password!', emailLabel: 'Email', passwordLabel: 'Password', loginBtn: 'LOGIN', demoAccount: 'Demo Account:',
+                rememberMe: 'Remember me', showPassword: 'Show password', hidePassword: 'Hide password',
+                loginNoAccount: 'Don\'t have an account?', loginRegisterNow: 'Register now 🌾',
                 customSolutionsTitle: 'Custom Solutions', customSolutionsDesc: 'You don\'t need all our sensors!', contactUs: 'Contact Us for Advice', features: 'Features:',
                 sensorEnName: 'RAYAT ENERGY', sensorEnDesc: 'Monitor pump consumption and faults', sensorEnF1: 'Life-saving alarm', sensorEnF2: 'Schedule optimization', sensorEnF3: 'Fault detection',
                 sensorWaF1: 'Water Level', sensorWaF2: 'Low Level Alarm', sensorWaF3: 'Reservoir History',
@@ -1097,6 +1162,9 @@
                 profileRoleLabel: 'Role',
                 profileDeviceLabel: 'Appareil',
                 profileLatestReading: 'Derniere mesure',
+                profileMenuInfo: 'Infos client',
+                profileMenuEdit: 'Modifier les donnees',
+                profileMenuLogout: 'Deconnexion',
                 hero: 'Sol Sain = Récolte Riche', heroSub: 'Surveillance 24h/24 avec capteurs intelligents Rayat',
                 heroEyebrow: 'Rayat Smart Monitoring',
                 heroTitleLine1: 'Agriculture pilotee par les donnees',
@@ -1125,6 +1193,8 @@
                 appSubtitle: 'Rayat Smart Monitoring Professionnel',
                 welcome: 'Bienvenue', protected: 'Votre Champ est Protégé 24h/24', controlActive: 'Surveillance continue - Votre assurance agricole toujours active',
                 loginTitle: 'Connexion', loginError: 'Email ou mot de passe incorrect!', emailLabel: 'Email', passwordLabel: 'Mot de passe', loginBtn: 'CONNEXION', demoAccount: 'Compte Démo:',
+                rememberMe: 'Se souvenir de moi', showPassword: 'Afficher le mot de passe', hidePassword: 'Masquer le mot de passe',
+                loginNoAccount: 'Vous n\'avez pas de compte ?', loginRegisterNow: 'Inscrivez-vous maintenant 🌾',
                 customSolutionsTitle: 'Solutions Personnalisées', customSolutionsDesc: 'Vous n\'avez pas besoin de tous nos capteurs !', contactUs: 'Contactez-nous pour Conseil', features: 'Fonctionnalités :',
                 sensorEnName: 'RAYAT ÉNERGIE', sensorEnDesc: 'Surveillance conso pompes et pannes', sensorEnF1: 'Alarme vitale', sensorEnF2: 'Optimisation horaires', sensorEnF3: 'Détection pannes',
                 sensorWaF1: 'Niveau d\'eau', sensorWaF2: 'Alarme puits vide', sensorWaF3: 'Historique nappe',
@@ -1227,6 +1297,9 @@
                 profileRoleLabel: 'الدور',
                 profileDeviceLabel: 'الجهاز',
                 profileLatestReading: 'آخر قراءة',
+                profileMenuInfo: 'معلومات العميل',
+                profileMenuEdit: 'تعديل البيانات',
+                profileMenuLogout: 'تسجيل الخروج',
                 hero: 'تربة صحية = حصاد غني', heroSub: 'مراقبة 24/7 بأجهزة استشعار رايات الذكية',
                 heroEyebrow: 'Rayat Smart Monitoring',
                 heroTitleLine1: 'زراعة مدفوعة بالبيانات',
@@ -1255,6 +1328,8 @@
                 appSubtitle: 'رايات للمراقبة الذكية المحترفة',
                 welcome: 'مرحبا', protected: 'حقلك محمي 24/7', controlActive: 'مراقبة مستمرة - تأمينك الزراعي نشط دائمًا',
                 loginTitle: 'تسجيل الدخول', loginError: 'البريد الإلكتروني أو كلمة المرور غير صحيحة!', emailLabel: 'البريد الإلكتروني', passwordLabel: 'كلمة المرور', loginBtn: 'دخول', demoAccount: 'حساب تجريبي:',
+                rememberMe: 'تذكرني', showPassword: 'إظهار كلمة المرور', hidePassword: 'إخفاء كلمة المرور',
+                loginNoAccount: 'ليس لديك حساب؟', loginRegisterNow: 'سجل الآن 🌾',
                 customSolutionsTitle: 'حلول مخصصة', customSolutionsDesc: 'لا تحتاج لجميع أجهزتنا!', contactUs: 'اتصل بنا للاستشارة', features: 'الميزات:',
                 sensorEnName: 'رايات للطاقة', sensorEnDesc: 'مراقبة استهلاك المضخات والأعطال', sensorEnF1: 'إنذار منقذ للحياة', sensorEnF2: 'تحسين الجداول', sensorEnF3: 'كشف الأعطال',
                 sensorWaF1: 'مستوى الماء', sensorWaF2: 'إنذار بئر فارغ', sensorWaF3: 'تاريخ المياه الجوفية',
@@ -1372,6 +1447,14 @@
                 emailLabel: 'ⵉⵎⵉⵍ',
                 passwordLabel: 'ⵜⴰⴳⵓⵔⵉ ⵏ ⵓⴽⵛⵓⵎ',
                 loginBtn: 'ⴰⴽⵛⵓⵎ',
+                rememberMe: 'ⴰⵔ ⴱⵇⵇⵉⵖ ⵉⵏⵏⵉ',
+                showPassword: 'ⵙⵙⴽⵏ ⵜⴰⴳⵓⵔⵉ',
+                hidePassword: 'ⴼⴼⵔ ⵜⴰⴳⵓⵔⵉ',
+                loginNoAccount: 'ⵓⵔ ⵖⵓⵔⴽ ⴰⴽⴰⵡⵏⵜ?',
+                loginRegisterNow: 'ⵙⴽⵔ ⴰⴽⴰⵡⵏⵜ ⵜⵓⵔⴰ 🌾',
+                profileMenuInfo: 'ⵉⵙⴼⴽⴰ ⵏ ⵓⵎⵙⴰⵡⴰⴹ',
+                profileMenuEdit: 'ⵙⵏⴼⵍ ⵉⵙⴼⴽⴰ',
+                profileMenuLogout: 'ⴼⴼⵓⵖ',
                 demoAccount: 'ⴰⴽⴰⵡⵏⵜ ⴷⵉⵎⵓ:',
                 ourReality: 'ⵜⵉⵍⴰⵡⵜ ⵏⵏⵖ',
                 ourRealityDesc: 'ⵔⴰⵢⴰⵜ ⵜⵍⵓⵍⴷ ⵙⴳ ⵜⵉⵔⵉⵜ ⵏ ⵜⴼⵍⵍⴰⵃⵜ. ⵏⴽⵏⵉ ⴷ ⵉⵎⴰⵣⵣⴰⵍⵏ ⵏ ⵜⵉⴽⵏⵓⵍⵓⵊⵉⵜ.',
@@ -1653,7 +1736,7 @@
                 description: mergedProfile.description || '',
                 photo: mergedProfile.photo || ''
             };
-            localStorage.setItem('rayat_user', JSON.stringify(user));
+            getActiveAuthStorage().setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
         }
 
         // RAYAT FIX - user profile
@@ -1710,6 +1793,8 @@
 
         // RAYAT FIX - user profile
         function navigateToAccountPage() {
+            closeProfileMenu();
+
             if (!isAuthenticated()) {
                 setViewWithTracking('login', { path: '/login' });
                 return;
@@ -1767,8 +1852,160 @@
                 .replace(/'/g, '&#39;');
         }
 
+        // RAYAT FIX - login/profile/final UX cleanup
+        function getPasswordToggleIcon(isVisible = false) {
+            if (isVisible) {
+                return `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 3l18 18"></path>
+                        <path d="M10.58 10.58a2 2 0 0 0 2.84 2.84"></path>
+                        <path d="M9.88 5.09A10.94 10.94 0 0 1 12 4.91c5.05 0 9.27 3.11 10.5 7.5a10.96 10.96 0 0 1-4.28 5.66"></path>
+                        <path d="M6.61 6.61A10.95 10.95 0 0 0 1.5 12.41a10.94 10.94 0 0 0 7.09 6.87"></path>
+                    </svg>
+                `;
+            }
+
+            return `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M1.5 12s4-7.5 10.5-7.5S22.5 12 22.5 12 18.5 19.5 12 19.5 1.5 12 1.5 12Z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            `;
+        }
+
+        // RAYAT FIX - login/profile/final UX cleanup
+        function renderPasswordField(options = {}) {
+            const {
+                inputId,
+                labelKey,
+                placeholder = '••••••••',
+                value = '',
+                required = true,
+                minLength = '',
+                autocomplete = 'current-password'
+            } = options;
+            const requirement = required ? 'required' : '';
+            const minLengthAttr = minLength ? `minlength="${minLength}"` : '';
+
+            return `
+                <div class="rayat-password-field">
+                    <label class="block text-sm font-medium mb-2" for="${escapeHtml(inputId)}">${t(labelKey)}</label>
+                    <div class="rayat-password-control">
+                        <input
+                            type="password"
+                            id="${escapeHtml(inputId)}"
+                            ${requirement}
+                            ${minLengthAttr}
+                            autocomplete="${escapeHtml(autocomplete)}"
+                            value="${escapeHtml(value)}"
+                            class="w-full px-4 py-3 pr-14 border rounded-2xl"
+                            placeholder="${escapeHtml(placeholder)}"
+                        >
+                        <button
+                            type="button"
+                            class="rayat-password-toggle"
+                            aria-label="${escapeHtml(t('showPassword'))}"
+                            title="${escapeHtml(t('showPassword'))}"
+                            aria-pressed="false"
+                            onclick="togglePasswordVisibility('${escapeHtml(inputId)}', this)"
+                        >
+                            ${getPasswordToggleIcon(false)}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // RAYAT FIX - login/profile/final UX cleanup
+        function togglePasswordVisibility(inputId, trigger) {
+            const input = document.getElementById(inputId);
+            if (!input || !trigger) {
+                return;
+            }
+
+            const isVisible = input.type === 'text';
+            input.type = isVisible ? 'password' : 'text';
+            trigger.innerHTML = getPasswordToggleIcon(!isVisible);
+            trigger.setAttribute('aria-pressed', String(!isVisible));
+            trigger.setAttribute('aria-label', isVisible ? t('showPassword') : t('hidePassword'));
+            trigger.setAttribute('title', isVisible ? t('showPassword') : t('hidePassword'));
+        }
+
+        // RAYAT FIX - login/profile/final UX cleanup
+        function closeProfileMenu() {
+            if (!isProfileMenuOpen) {
+                return;
+            }
+
+            isProfileMenuOpen = false;
+            document.getElementById('rayat-profile-menu-shell')?.classList.remove('is-open');
+            document.getElementById('rayat-profile-menu')?.classList.remove('is-open');
+            document.getElementById('rayat-profile-menu-trigger')?.setAttribute('aria-expanded', 'false');
+        }
+
+        // RAYAT FIX - login/profile/final UX cleanup
+        function toggleProfileMenu(event, forceState) {
+            event?.stopPropagation();
+
+            if (!isAuthenticated() || !isCustomerRole(currentRole)) {
+                navigateToAccountPage();
+                return;
+            }
+
+            isProfileMenuOpen = typeof forceState === 'boolean' ? forceState : !isProfileMenuOpen;
+            document.getElementById('rayat-profile-menu-shell')?.classList.toggle('is-open', isProfileMenuOpen);
+            document.getElementById('rayat-profile-menu')?.classList.toggle('is-open', isProfileMenuOpen);
+            document.getElementById('rayat-profile-menu-trigger')?.setAttribute('aria-expanded', String(isProfileMenuOpen));
+        }
+
+        // RAYAT FIX - login/profile/final UX cleanup
+        function openCustomerProfileOverview(event) {
+            event?.stopPropagation();
+            closeProfileMenu();
+            toggleMobileMenu(false);
+            setView('profilo');
+        }
+
+        // RAYAT FIX - login/profile/final UX cleanup
+        function openCustomerProfileEditor(event) {
+            event?.stopPropagation();
+            closeProfileMenu();
+            toggleMobileMenu(false);
+            setView('profilo');
+
+            requestAnimationFrame(() => {
+                const editorField = document.getElementById('profile-name');
+                editorField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                editorField?.focus({ preventScroll: true });
+            });
+        }
+
+        // RAYAT FIX - login/profile/final UX cleanup
+        function logoutFromProfileMenu(event) {
+            event?.stopPropagation();
+            closeProfileMenu();
+            logout();
+        }
+
         function syncBodyScrollLock() {
             document.body.classList.toggle('rayat-menu-open', isMobileMenuOpen);
+        }
+
+        // RAYAT FIX - mobile app ready optimization
+        function isStandaloneDisplayMode() {
+            return Boolean(
+                window.matchMedia?.('(display-mode: standalone)').matches
+                || window.navigator.standalone
+                || document.referrer.startsWith('android-app://')
+            );
+        }
+
+        // RAYAT FIX - mobile app ready optimization
+        function syncAppShellState() {
+            document.body.dataset.view = currentView;
+            document.body.classList.toggle('rayat-standalone-mode', isStandaloneDisplayMode());
+            document.body.classList.toggle('rayat-authenticated', isAuthenticated());
+            document.body.classList.toggle('rayat-public-admin-link', isPrivilegedRole(currentRole));
         }
 
         function renderCropSelector(options = {}) {
@@ -1830,6 +2067,9 @@
 
         function toggleMobileMenu(forceState) {
             isMobileMenuOpen = typeof forceState === 'boolean' ? forceState : !isMobileMenuOpen;
+            if (isMobileMenuOpen) {
+                closeProfileMenu();
+            }
 
             const overlay = document.getElementById('mobile-menu-overlay');
             const panel = document.getElementById('mobile-menu-panel');
@@ -1850,6 +2090,7 @@
 
         function navigateFromMobileMenu(view) {
             toggleMobileMenu(false);
+            closeProfileMenu();
             trackNavigationEvent(view);
             setView(view);
         }
@@ -1987,6 +2228,7 @@
             currentLang = lang;
             localStorage.setItem('rayat_lang', lang);
             document.getElementById('lang-menu')?.classList.add('hidden');
+            closeProfileMenu();
             render();
             // Re-initialize map to update popups and localized content immediately
             if (currentView === 'home') initHomeMap();
@@ -2531,10 +2773,12 @@
 
         /* --- Navigation & Auth Helpers --- */
 
+        // RAYAT FIX - login/profile/final UX cleanup
         async function login(e) {
             e.preventDefault();
             const email = document.getElementById('email').value.trim().toLowerCase();
             const password = document.getElementById('password').value.trim();
+            const remember = Boolean(document.getElementById('remember-me')?.checked);
 
             document.getElementById('error').classList.add('hidden');
 
@@ -2550,10 +2794,9 @@
 
                 if (response.ok && data.token) {
                     authToken = data.token;
-                    localStorage.setItem('rayat_token', authToken);
                     user = data.user;
                     currentRole = user.role || 'client';
-                    localStorage.setItem('rayat_user', JSON.stringify(user));
+                    persistPublicSession(authToken, user, { remember });
                     syncStoredUserProfileIntoSession();
                     syncSubscriptionUiState();
                     hideSubscriptionExpiredModal();
@@ -2700,11 +2943,15 @@
         }
 
         function logout() {
+            closeProfileMenu();
+            toggleMobileMenu(false);
             clearPublicSession();
             setView('home', { replace: true });
         }
 
         function setView(view, options = {}) {
+            closeProfileMenu();
+
             if (view === 'profilo') {
                 if (!isAuthenticated()) {
                     setView('login', { replace: true, path: '/login' });
@@ -3129,6 +3376,7 @@
             `;
         }
 
+        // RAYAT FIX - login/profile/final UX cleanup
         function renderHeader(isLoggedIn) {
             const flagBase = "inline-block shadow-sm rounded-sm align-middle h-[16px] w-[24px] min-w-[24px] mb-0.5 object-cover";
             const italyFlag = `<svg class="${flagBase}" viewBox="0 0 3 2" width="24" height="16"><rect width="1" height="2" fill="#009246"/><rect width="1" height="2" x="1" fill="#fff"/><rect width="1" height="2" x="2" fill="#ce2b37"/></svg>`;
@@ -3146,24 +3394,50 @@
             const mobileLinks = [...primaryLinks];
             const canAccessProfile = isAuthenticated() && isCustomerRole(currentRole);
             const mergedProfile = canAccessProfile ? getMergedUserProfile() : null;
+            const profileDisplayName = mergedProfile?.name || user?.name || 'Rayat';
+            const profileDisplayEmail = mergedProfile?.email || user?.email || '';
             const accountLabel = canAccessProfile ? t('profileNav') : t('login');
-            const authButton = isLoggedIn || user
-                ? `<button onclick="logout()" class="bg-red-500 hover:bg-red-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('logout')}</button>`
-                : `<button onclick="setViewWithTracking('login')" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('login')}</button>`;
-            const accountButton = `
-                <button onclick="navigateToAccountPage()" class="rayat-account-trigger ${canAccessProfile ? 'rayat-account-trigger--active' : ''}" aria-label="${escapeHtml(accountLabel)}" title="${escapeHtml(accountLabel)}">
-                    ${canAccessProfile ? `
-                        <span class="rayat-account-trigger__initials">${escapeHtml(getUserInitials(mergedProfile?.name || user?.name || 'Rayat'))}</span>
-                    ` : `
+            const authButton = !isAuthenticated()
+                ? `<button onclick="setViewWithTracking('login')" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('login')}</button>`
+                : '';
+            const accountButton = canAccessProfile
+                ? `
+                    <div id="rayat-profile-menu-shell" class="rayat-profile-menu-shell ${isProfileMenuOpen ? 'is-open' : ''}">
+                        <button id="rayat-profile-menu-trigger" onclick="toggleProfileMenu(event)" class="rayat-account-trigger rayat-account-trigger--menu ${canAccessProfile ? 'rayat-account-trigger--active' : ''}" aria-label="${escapeHtml(accountLabel)}" title="${escapeHtml(accountLabel)}" aria-expanded="${isProfileMenuOpen}" aria-haspopup="menu">
+                            <span class="rayat-account-trigger__initials">${escapeHtml(getUserInitials(profileDisplayName))}</span>
+                            <span class="rayat-account-trigger__chevron" aria-hidden="true">
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="m5 7 5 5 5-5"></path>
+                                </svg>
+                            </span>
+                        </button>
+                        <div id="rayat-profile-menu" class="rayat-profile-menu ${isProfileMenuOpen ? 'is-open' : ''}" role="menu">
+                            <div class="rayat-profile-menu-summary">
+                                <strong>${escapeHtml(profileDisplayName)}</strong>
+                                <span>${escapeHtml(profileDisplayEmail)}</span>
+                            </div>
+                            <button type="button" onclick="openCustomerProfileOverview(event)" class="rayat-profile-menu-item" role="menuitem">
+                                ${t('profileMenuInfo')}
+                            </button>
+                            <button type="button" onclick="openCustomerProfileEditor(event)" class="rayat-profile-menu-item" role="menuitem">
+                                ${t('profileMenuEdit')}
+                            </button>
+                            <button type="button" onclick="logoutFromProfileMenu(event)" class="rayat-profile-menu-item rayat-profile-menu-item--logout" role="menuitem">
+                                ${t('profileMenuLogout')}
+                            </button>
+                        </div>
+                    </div>
+                `
+                : `
+                    <button onclick="navigateToAccountPage()" class="rayat-account-trigger" aria-label="${escapeHtml(accountLabel)}" title="${escapeHtml(accountLabel)}">
                         <span class="rayat-account-trigger__icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M20 21a8 8 0 0 0-16 0"></path>
                                 <circle cx="12" cy="8" r="4"></circle>
                             </svg>
                         </span>
-                    `}
-                </button>
-            `;
+                    </button>
+                `;
 
             return `
                 <div id="offline-banner"></div>
@@ -3205,7 +3479,7 @@
                                     </div>
                                 </div>
                                 ${accountButton}
-                                <div class="rayat-desktop-auth">${authButton}</div>
+                                ${authButton ? `<div class="rayat-desktop-auth">${authButton}</div>` : ''}
                                 <button id="mobile-menu-button" type="button" class="rayat-mobile-toggle" aria-label="${t('navMenu')}" aria-expanded="${isMobileMenuOpen}" onclick="toggleMobileMenu()">
                                     ${isMobileMenuOpen ? '✕' : '☰'}
                                 </button>
@@ -3230,18 +3504,32 @@
                                     ${link.label}
                                 </button>
                             `).join('')}
-                            ${canAccessProfile ? `
-                                <button onclick="navigateFromMobileMenu('profilo')" class="text-left w-full px-4 py-4 rounded-2xl bg-slate-50 hover:bg-green-50 font-black uppercase tracking-widest text-xs text-slate-800 transition">
-                                    ${t('profileNav')}
-                                </button>
-                            ` : ''}
                         </nav>
-                        <div class="mt-6 pt-6 border-t border-slate-200">
-                            ${isLoggedIn || user
-                                ? `<button onclick="toggleMobileMenu(false); logout()" class="w-full bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs">${t('logout')}</button>`
-                                : `<button onclick="navigateFromMobileMenu('login')" class="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs">${t('login')}</button>`
-                            }
-                        </div>
+                        ${canAccessProfile ? `
+                            <div class="rayat-mobile-account-card">
+                                <div class="rayat-mobile-account-summary">
+                                    <p class="rayat-mobile-account-label">${t('profileNav')}</p>
+                                    <strong>${escapeHtml(profileDisplayName)}</strong>
+                                    <span>${escapeHtml(profileDisplayEmail)}</span>
+                                </div>
+                                <div class="rayat-mobile-account-actions">
+                                    <button type="button" onclick="openCustomerProfileOverview(event)" class="rayat-mobile-account-action">
+                                        ${t('profileMenuInfo')}
+                                    </button>
+                                    <button type="button" onclick="openCustomerProfileEditor(event)" class="rayat-mobile-account-action">
+                                        ${t('profileMenuEdit')}
+                                    </button>
+                                    <button type="button" onclick="logoutFromProfileMenu(event)" class="rayat-mobile-account-action rayat-mobile-account-action--logout">
+                                        ${t('profileMenuLogout')}
+                                    </button>
+                                </div>
+                            </div>
+                        ` : ''}
+                        ${!isAuthenticated() ? `
+                            <div class="mt-6 pt-6 border-t border-slate-200">
+                                <button onclick="navigateFromMobileMenu('login')" class="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs">${t('login')}</button>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>`;
         }
@@ -3390,11 +3678,12 @@
             `;
         }
 
+        // RAYAT FIX - login/profile/final UX cleanup
         function renderLoginPage() {
             return `
                 ${renderHeader(false)}
-            <div class="min-h-screen flex items-center justify-center py-12 px-4 bg-gray-50">
-                <div class="max-w-md w-full bg-white rounded-xl shadow-2xl p-8">
+            <div class="rayat-auth-screen min-h-screen flex items-center justify-center py-12 px-4 bg-gray-50">
+                <div class="rayat-auth-card max-w-md w-full bg-white rounded-xl shadow-2xl p-8">
                     <h2 class="text-3xl font-bold text-green-800 mb-6 text-center">${t('loginTitle')}</h2>
 
                     <div id="error" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-center">
@@ -3404,11 +3693,19 @@
                     <form onsubmit="login(event)" class="space-y-6">
                         <div>
                             <label class="block text-sm font-medium mb-2">${t('emailLabel')}</label>
-                            <input type="email" id="email" required class="w-full px-4 py-3 border rounded-lg" placeholder="nome@azienda.com">
+                            <input type="email" id="email" required autocomplete="email" inputmode="email" class="w-full px-4 py-3 border rounded-2xl" placeholder="nome@azienda.com">
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-2">${t('passwordLabel')}</label>
-                            <input type="password" id="password" required class="w-full px-4 py-3 border rounded-lg" placeholder="••••••••">
+                        ${renderPasswordField({
+                            inputId: 'password',
+                            labelKey: 'passwordLabel',
+                            placeholder: '••••••••',
+                            autocomplete: 'current-password'
+                        })}
+                        <div class="rayat-remember-row">
+                            <label for="remember-me" class="rayat-remember-label">
+                                <input type="checkbox" id="remember-me" class="rayat-remember-checkbox" ${shouldRememberLogin() ? 'checked' : ''}>
+                                <span>${t('rememberMe')}</span>
+                            </label>
                         </div>
                         <button type="submit" class="w-full bg-green-700 hover:bg-green-800 text-white py-3 rounded-lg font-semibold transition">
                             ${t('loginBtn')}
@@ -3422,9 +3719,9 @@
                     </div>
 
                     <div class="mt-8 text-center pt-6 border-t">
-                        <p class="text-gray-600 mb-2">Non hai un account?</p>
+                        <p class="text-gray-600 mb-2">${t('loginNoAccount')}</p>
                         <button onclick="registrationStep = 1; setView('register')" class="text-green-700 font-bold hover:underline">
-                            Registrati ora 🌾
+                            ${t('loginRegisterNow')}
                         </button>
                     </div>
                 </div>
@@ -3449,14 +3746,18 @@
                         <div id="reset-password-success" class="hidden bg-green-100 border border-green-300 text-green-800 px-4 py-3 rounded-2xl mb-4 text-center"></div>
 
                         <form id="reset-password-form" onsubmit="submitPasswordReset(event)" class="space-y-5">
-                            <div>
-                                <label class="block text-sm font-medium mb-2">${t('newPasswordLabel')}</label>
-                                <input type="password" id="reset-password" required class="w-full px-4 py-3 border rounded-2xl" minlength="8">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-2">${t('confirmPasswordLabel')}</label>
-                                <input type="password" id="reset-password-confirm" required class="w-full px-4 py-3 border rounded-2xl" minlength="8">
-                            </div>
+                            ${renderPasswordField({
+                                inputId: 'reset-password',
+                                labelKey: 'newPasswordLabel',
+                                minLength: '8',
+                                autocomplete: 'new-password'
+                            })}
+                            ${renderPasswordField({
+                                inputId: 'reset-password-confirm',
+                                labelKey: 'confirmPasswordLabel',
+                                minLength: '8',
+                                autocomplete: 'new-password'
+                            })}
                             <button type="submit" class="w-full bg-green-700 hover:bg-green-800 text-white py-3 rounded-2xl font-semibold transition">
                                 ${t('resetPasswordSubmit')}
                             </button>
@@ -3484,35 +3785,40 @@
 
             return `
                 ${renderHeader(false)}
-                <div class="min-h-screen py-8 px-4 bg-gray-50">
-                    <div class="max-w-3xl mx-auto bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
-                        <div class="bg-gradient-to-r from-green-900 via-green-800 to-green-700 text-white px-6 py-8">
+                <div class="rayat-register-screen min-h-screen py-8 px-4 bg-gray-50">
+                    <div class="rayat-register-card max-w-3xl mx-auto bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+                        <div class="rayat-register-hero bg-gradient-to-r from-green-900 via-green-800 to-green-700 text-white px-6 py-8">
                             <div class="text-xs font-black tracking-[0.28em] uppercase text-green-200 mb-3">${t('regPersonalData')}</div>
                             <h2 class="text-3xl font-black tracking-tight mb-3">${t('regVerifyTitle')}</h2>
                             <p class="text-sm text-green-50 max-w-2xl leading-relaxed">${t('regPrivacyNote')}</p>
                         </div>
 
-                        <div class="p-6 md:p-8 space-y-8">
+                        <div class="rayat-register-body p-6 md:p-8 space-y-8">
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-semibold mb-2">${t('regFirstName')} *</label>
-                                    <input type="text" id="reg-name" value="${escapeHtml(registrationData.name)}" class="w-full px-4 py-3 border rounded-xl" placeholder="Ahmed">
+                                    <input type="text" id="reg-name" value="${escapeHtml(registrationData.name)}" autocomplete="given-name" autocapitalize="words" class="w-full px-4 py-3 border rounded-xl" placeholder="Ahmed">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-semibold mb-2">${t('regLastName')} *</label>
-                                    <input type="text" id="reg-last-name" value="${escapeHtml(registrationData.last_name)}" class="w-full px-4 py-3 border rounded-xl" placeholder="El Mansouri">
+                                    <input type="text" id="reg-last-name" value="${escapeHtml(registrationData.last_name)}" autocomplete="family-name" autocapitalize="words" class="w-full px-4 py-3 border rounded-xl" placeholder="El Mansouri">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-semibold mb-2">${t('regPhone')} *</label>
-                                    <input type="tel" id="reg-phone" value="${escapeHtml(registrationData.phone)}" class="w-full px-4 py-3 border rounded-xl" placeholder="+212 6XX XXX XXX">
+                                    <input type="tel" id="reg-phone" value="${escapeHtml(registrationData.phone)}" autocomplete="tel" inputmode="tel" class="w-full px-4 py-3 border rounded-xl" placeholder="+212 6XX XXX XXX">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-semibold mb-2">${t('regEmailOpt')} *</label>
-                                    <input type="email" id="reg-email" value="${escapeHtml(registrationData.email)}" class="w-full px-4 py-3 border rounded-xl" placeholder="email@esempio.com">
+                                    <input type="email" id="reg-email" value="${escapeHtml(registrationData.email)}" autocomplete="email" inputmode="email" class="w-full px-4 py-3 border rounded-xl" placeholder="email@esempio.com">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-semibold mb-2">${t('regPass')} *</label>
-                                    <input type="password" id="reg-password" value="${escapeHtml(registrationData.password)}" class="w-full px-4 py-3 border rounded-xl" placeholder="${t('regPassHint')}">
+                                    ${renderPasswordField({
+                                        inputId: 'reg-password',
+                                        labelKey: 'regPass',
+                                        placeholder: t('regPassHint'),
+                                        value: registrationData.password,
+                                        autocomplete: 'new-password'
+                                    })}
                                 </div>
                                 <div class="md:col-span-2">
                                     <label class="block text-sm font-semibold mb-2">${t('regLocationRegion')} *</label>
@@ -3521,13 +3827,14 @@
                                         id="reg-location"
                                         value="${escapeHtml(registrationData.location_name)}"
                                         oninput="registrationData.location_name = this.value"
+                                        autocomplete="address-level2"
                                         class="w-full px-4 py-3 border rounded-xl"
                                         placeholder="${t('regLocationRegionHint')}"
                                     >
                                 </div>
                             </div>
 
-                            <div class="rounded-2xl border border-green-100 bg-green-50/70 p-5">
+                            <div class="rayat-register-section rounded-2xl border border-green-100 bg-green-50/70 p-5">
                                 <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
                                     <div>
                                         <h3 class="text-lg font-black text-green-900">${t('regCropOptional')}</h3>
@@ -3535,7 +3842,7 @@
                                     </div>
                                     <span class="text-[11px] font-bold uppercase tracking-widest text-green-700">Optional</span>
                                 </div>
-                                <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div class="rayat-register-crop-grid grid grid-cols-2 md:grid-cols-3 gap-3">
                                     ${Object.keys(CROP_CATEGORIES).slice(0, 4).map(cat =>
                                         CROP_CATEGORIES[cat].slice(0, 3).map(crop => `
                                             <button onclick="selectCrop('${crop.replace(/'/g, "\\'")}')" class="p-3 border-2 rounded-xl text-sm text-center transition ${selectedCrop === crop ? 'border-green-600 bg-white font-bold text-green-800' : 'border-green-100 bg-white/80 hover:border-green-300'}">
@@ -3557,7 +3864,7 @@
                                 </div>
                             </div>
 
-                            <div class="rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
+                            <div class="rayat-register-section rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
                                 <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
                                     <div>
                                         <h3 class="text-lg font-black text-blue-900">${t('regGpsOptional')}</h3>
@@ -3827,7 +4134,7 @@
         function renderContactPage() {
             return `
                 ${renderHeader(false)}
-                <div class="bg-gray-50 min-h-screen">
+                <div class="rayat-contact-page bg-gray-50 min-h-screen">
                     <!-- Hero Section -->
                     <section class="bg-green-800 text-white py-16 px-4">
                         <div class="container mx-auto text-center max-w-3xl">
@@ -3837,7 +4144,7 @@
                     </section>
 
                     <div class="container mx-auto px-4 -mt-10 pb-20">
-                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="rayat-contact-grid grid grid-cols-1 lg:grid-cols-3 gap-8">
                             
                             <!-- Sidebar: Contatti Rapidi & Orari -->
                             <div class="lg:col-span-1 space-y-6">
@@ -4205,7 +4512,7 @@
 
             return `
                 ${renderHeader(true)}
-                <section class="py-16 bg-gray-50 min-h-screen">
+                <section class="rayat-profile-page py-16 bg-gray-50 min-h-screen">
                     <div class="container mx-auto px-4 max-w-6xl">
                         <div class="mb-8 md:mb-10">
                             <p class="text-[11px] font-black uppercase tracking-[0.28em] text-green-700 mb-3">${t('profileNav')}</p>
@@ -4669,14 +4976,14 @@
 
             return `
                 ${renderHeader(!!user)}
-            <section class="py-24 bg-gray-50 min-h-screen">
-                <div class="container mx-auto px-4 max-w-[1300px]">
+            <section class="rayat-demo-page py-24 bg-gray-50 min-h-screen">
+                <div class="rayat-demo-shell container mx-auto px-4 max-w-[1300px]">
                     ${renderSubscriptionWarningBanner()}
                     <div class="text-center mb-20">
                         <h2 class="text-7xl font-black text-green-800 tracking-tighter uppercase mb-4">${user ? t('dashboardBtn') : t('demoDashboard')}</h2>
                         <p class="text-2xl font-bold text-gray-400 uppercase tracking-widest">${t('demoDesc')}</p>
                     </div>
-                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
+                    <div class="rayat-demo-nav-grid grid grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
                         ${Object.keys(sensorData).map(key => {
                 const isSel = selectedSensor === key;
                 return `<button onclick="setSensor('${key}')" class="p-10 rounded-[3rem] transition-all duration-700 transform hover:scale-110 ${isSel ? 'bg-green-700 text-white shadow-[0_35px_60px_-15px_rgba(21,128,61,0.3)] scale-110 z-10' : 'bg-white text-gray-800 shadow-2xl hover:bg-green-50'}">
@@ -4685,7 +4992,7 @@
                                 </button>`;
             }).join('')}
                     </div>
-                    <div class="bg-white rounded-[4rem] shadow-[-20px_40px_100px_rgba(0,0,0,0.1)] p-12 md:p-20 border border-gray-50 relative overflow-hidden">
+                    <div class="rayat-demo-panel bg-white rounded-[4rem] shadow-[-20px_40px_100px_rgba(0,0,0,0.1)] p-12 md:p-20 border border-gray-50 relative overflow-hidden">
                         <div class="absolute top-0 right-0 w-64 h-64 bg-green-50 rounded-full -mr-32 -mt-32 opacity-50"></div>
                         ${/* Demo Mode: Error overlay removed */ ''}
                         <div class="relative z-10">
@@ -4942,6 +5249,7 @@
             const viewFn = routes[currentView] || renderHomePage;
             app.innerHTML = `${viewFn()}${renderPublicWhatsappButton()}`;
             syncBodyScrollLock();
+            syncAppShellState();
             syncStaticI18n();
 
             // Post-render initialization
@@ -5005,6 +5313,10 @@
             if (!event.target.closest('[data-lang-menu-toggle="true"]') && !event.target.closest('#lang-menu')) {
                 document.getElementById('lang-menu')?.classList.add('hidden');
             }
+
+            if (!event.target.closest('#rayat-profile-menu-shell')) {
+                closeProfileMenu();
+            }
         });
 
         document.addEventListener('keydown', (event) => {
@@ -5017,6 +5329,7 @@
             }
 
             document.getElementById('lang-menu')?.classList.add('hidden');
+            closeProfileMenu();
         });
 
         window.addEventListener('resize', () => {
@@ -5027,6 +5340,11 @@
             if (!document.hidden) {
                 invalidateVisibleMaps();
             }
+        });
+
+        // RAYAT FIX - mobile app ready optimization
+        window.matchMedia?.('(display-mode: standalone)').addEventListener?.('change', () => {
+            syncAppShellState();
         });
 
         // Capacitor: Network Connectivity Handler
@@ -5045,7 +5363,7 @@
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20260328-upgrade08', { updateViaCache: 'none' })
+                navigator.serviceWorker.register('./sw.js?v=20260331-mobile-app-ready', { updateViaCache: 'none' })
                     .then(reg => {
                         reg.update().catch(() => {});
                     })

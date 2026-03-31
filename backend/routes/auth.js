@@ -160,7 +160,7 @@ async function ensureUniqueContactInfo({ email, phone, excludeId = null }) {
     }
 }
 
-// RAYAT FIX - popup subscription / new customers / email
+// RAYAT FIX - full critical admin flow
 async function createRegisteredClient(payload, options = {}) {
     const flags = await getUserColumnFlags();
     const { firstName, lastName } = normalizeRegistrationNameParts(payload);
@@ -251,6 +251,14 @@ async function createRegisteredClient(payload, options = {}) {
 
     const createdAt = new Date().toISOString();
 
+    if (process.env.NODE_ENV !== 'test') {
+        console.info('[auth] public registration saved', {
+            userId: result.insertId,
+            email,
+            registrationStatus: options.registrationStatus || 'new'
+        });
+    }
+
     return {
         id: result.insertId,
         name,
@@ -274,7 +282,7 @@ async function createRegisteredClient(payload, options = {}) {
     };
 }
 
-// RAYAT FIX - email + analytics
+// RAYAT FIX - full critical admin flow
 async function finalizeClientRegistration(req, createdUser) {
     try {
         await sendNewClientRegistrationEmail(createdUser);

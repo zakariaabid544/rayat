@@ -201,6 +201,65 @@ function normalizeRegistrationStatus(status) {
     return status === 'active' ? 'active' : 'new';
 }
 
+// RAYAT FIX - full critical admin flow
+function normalizeManagedNameParts(payload = {}) {
+    const rawFirstName = String(
+        payload.name ||
+        payload.first_name ||
+        ''
+    ).trim();
+    const rawLastName = String(
+        payload.last_name ||
+        payload.lastName ||
+        payload.surname ||
+        ''
+    ).trim();
+
+    if (rawFirstName && rawLastName) {
+        return {
+            firstName: rawFirstName,
+            lastName: rawLastName
+        };
+    }
+
+    if (!rawFirstName) {
+        return {
+            firstName: '',
+            lastName: ''
+        };
+    }
+
+    const parts = rawFirstName.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+        return {
+            firstName: parts.slice(0, -1).join(' '),
+            lastName: parts.slice(-1).join('')
+        };
+    }
+
+    return {
+        firstName: rawFirstName,
+        lastName: ''
+    };
+}
+
+// RAYAT FIX - full critical admin flow
+function buildConfirmedClientPredicate(flags, alias = 'u') {
+    const clauses = [];
+
+    if (flags.hasRegistrationStatus) {
+        clauses.push(`${alias}.registration_status = 'active'`);
+    }
+    if (flags.hasApprovedAt) {
+        clauses.push(`${alias}.approved_at IS NOT NULL`);
+    }
+    if (!clauses.length) {
+        clauses.push(`${alias}.active = TRUE`);
+    }
+
+    return `(${clauses.join(' OR ')})`;
+}
+
 function buildRegistrationWhereClause(req, flags) {
     const where = [`u.role IN ('client', 'farmer')`];
     const params = [];
@@ -253,7 +312,10 @@ function buildRegistrationWhereClause(req, flags) {
 }
 
 function buildClientWhereClause(searchTerm, flags) {
-    const where = [`u.role IN ('client', 'farmer')`];
+    const where = [
+        `u.role IN ('client', 'farmer')`,
+        buildConfirmedClientPredicate(flags)
+    ];
     const params = [];
 
     if (searchTerm) {
@@ -625,7 +687,8 @@ router.get('/stats', isAdminRole, async (req, res) => {
         const [clientCount] = await query(
             `SELECT COUNT(*) AS count
              FROM users
-             WHERE role IN ('client','farmer')`
+             WHERE role IN ('client','farmer')
+               AND ${buildConfirmedClientPredicate(flags, 'users')}`
         );
         const [deviceCount] = await query('SELECT COUNT(*) AS count FROM devices');
         const [onlineDevices] = await query(
@@ -641,16 +704,17 @@ router.get('/stats', isAdminRole, async (req, res) => {
              WHERE role IN ('super_admin','operator_admin','operator','admin')`
         );
         let newRegistrations = { count: 0 };
-        if (flags.hasRegistrationStatus) {
-            const whereSource = flags.hasRegistrationSource ? "AND registration_source = 'public'" : '';
-            [newRegistrations] = await query(
-                `SELECT COUNT(*) AS count
-                 FROM users
-                 WHERE role IN ('client','farmer')
-                   AND registration_status = 'new'
-                   ${whereSource}`
-            );
-        }
+        const whereSource = flags.hasRegistrationSource ? "AND registration_source = 'public'" : '';
+        const wherePending = flags.hasRegistrationStatus
+            ? "AND registration_status = 'new'"
+            : 'AND active = FALSE';
+        [newRegistrations] = await query(
+            `SELECT COUNT(*) AS count
+             FROM users
+             WHERE role IN ('client','farmer')
+               ${whereSource}
+               ${wherePending}`
+        );
 
         res.json({
             success: true,
@@ -785,7 +849,8 @@ router.get('/clients/:id', isAdminRole, async (req, res) => {
                 GROUP BY user_id
              ) dc ON dc.user_id = u.id
              WHERE u.id = ?
-               AND u.role IN ('client','farmer')`,
+               AND u.role IN ('client','farmer')
+               AND ${buildConfirmedClientPredicate(flags)}`,
             [req.params.id]
         );
 
@@ -802,9 +867,8 @@ router.get('/clients/:id', isAdminRole, async (req, res) => {
 
 router.post('/clients', isAdminRole, async (req, res) => {
     try {
+        const { firstName, lastName } = normalizeManagedNameParts(req.body);
         const {
-            name,
-            last_name,
             email,
             phone,
             password,
@@ -820,7 +884,7 @@ router.post('/clients', isAdminRole, async (req, res) => {
             longitude
         } = normalizeLocationFields(req.body);
 
-        if (!name || !phone || !password) {
+        if (!firstName || !phone || !password) {
             return res.status(400).json({ error: 'Nome, telefono e password sono obbligatori' });
         }
 
@@ -828,6 +892,12 @@ router.post('/clients', isAdminRole, async (req, res) => {
             const existing = await query('SELECT id FROM users WHERE email = ?', [email]);
             if (existing.length > 0) {
                 return res.status(409).json({ error: 'Email già registrata' });
+            }
+        }
+        if (phone) {
+            const existingPhone = await query('SELECT id FROM users WHERE phone = ?', [phone]);
+            if (existingPhone.length > 0) {
+                return res.status(409).json({ error: 'Numero di telefono già registrato' });
             }
         }
 
@@ -850,8 +920,8 @@ router.post('/clients', isAdminRole, async (req, res) => {
             'role'
         ];
         const values = [
-            name,
-            ...(flags.hasLastName ? [String(last_name || '').trim() || null] : []),
+            firstName,
+            ...(flags.hasLastName ? [lastName || null] : []),
             email || null,
             phone,
             passwordHash,
@@ -919,9 +989,13 @@ router.post('/clients', isAdminRole, async (req, res) => {
 router.put('/clients/:id', isAdminRole, async (req, res) => {
     try {
         const id = Number.parseInt(req.params.id, 10);
+        const { firstName, lastName } = normalizeManagedNameParts(req.body);
+        const hasManagedName = Object.prototype.hasOwnProperty.call(req.body, 'name')
+            || Object.prototype.hasOwnProperty.call(req.body, 'first_name')
+            || Object.prototype.hasOwnProperty.call(req.body, 'last_name')
+            || Object.prototype.hasOwnProperty.call(req.body, 'lastName')
+            || Object.prototype.hasOwnProperty.call(req.body, 'surname');
         const {
-            name,
-            last_name,
             email,
             phone,
             crop_type,
@@ -936,12 +1010,14 @@ router.put('/clients/:id', isAdminRole, async (req, res) => {
             latitude,
             longitude
         } = normalizeLocationFields(req.body);
+        const flags = await getUserColumnFlags();
 
         const existing = await query(
             `SELECT id
              FROM users
              WHERE id = ?
-               AND role IN ('client','farmer')`,
+               AND role IN ('client','farmer')
+               AND ${buildConfirmedClientPredicate(flags)}`,
             [id]
         );
         if (!existing.length) {
@@ -957,10 +1033,17 @@ router.put('/clients/:id', isAdminRole, async (req, res) => {
                 return res.status(409).json({ error: 'Email già registrata' });
             }
         }
+        if (phone) {
+            const duplicatePhone = await query(
+                'SELECT id FROM users WHERE phone = ? AND id <> ?',
+                [phone, id]
+            );
+            if (duplicatePhone.length > 0) {
+                return res.status(409).json({ error: 'Numero di telefono già registrato' });
+            }
+        }
 
-        const flags = await getUserColumnFlags();
         const assignments = [
-            'name = COALESCE(?, name)',
             'email = ?',
             'phone = COALESCE(?, phone)',
             'crop_type = ?',
@@ -971,7 +1054,6 @@ router.put('/clients/:id', isAdminRole, async (req, res) => {
             'updated_at = NOW()'
         ];
         const params = [
-            name || null,
             email || null,
             phone || null,
             crop_type || null,
@@ -981,13 +1063,19 @@ router.put('/clients/:id', isAdminRole, async (req, res) => {
             active === undefined ? null : (active ? 1 : 0)
         ];
 
-        if (flags.hasLocationAddress) {
-            assignments.splice(5, 0, 'location_address = ?');
-            params.splice(5, 0, locationAddress);
+        if (hasManagedName) {
+            assignments.unshift('name = COALESCE(?, name)');
+            params.unshift(firstName || null);
         }
-        if (flags.hasLastName) {
-            assignments.splice(1, 0, 'last_name = COALESCE(?, last_name)');
-            params.splice(1, 0, String(last_name || '').trim() || null);
+
+        if (flags.hasLocationAddress) {
+            const locationInsertIndex = hasManagedName ? 4 : 3;
+            assignments.splice(locationInsertIndex, 0, 'location_address = ?');
+            params.splice(locationInsertIndex, 0, locationAddress);
+        }
+        if (flags.hasLastName && hasManagedName) {
+            assignments.splice(1, 0, 'last_name = ?');
+            params.splice(1, 0, lastName || null);
         }
         if (flags.hasPaymentStatus) {
             assignments.push('payment_status = COALESCE(?, payment_status)');
@@ -1032,11 +1120,13 @@ router.put('/clients/:id', isAdminRole, async (req, res) => {
 
 router.delete('/clients/:id', isAdminRole, isSuperAdmin, async (req, res) => {
     try {
+        const flags = await getUserColumnFlags();
         const existing = await query(
             `SELECT id
              FROM users
              WHERE id = ?
-               AND role IN ('client','farmer')`,
+               AND role IN ('client','farmer')
+               AND ${buildConfirmedClientPredicate(flags)}`,
             [req.params.id]
         );
 
@@ -1162,9 +1252,13 @@ router.get('/registrations/:id', isAdminRole, async (req, res) => {
 router.put('/registrations/:id', isAdminRole, async (req, res) => {
     try {
         const id = Number.parseInt(req.params.id, 10);
+        const { firstName, lastName } = normalizeManagedNameParts(req.body);
+        const hasManagedName = Object.prototype.hasOwnProperty.call(req.body, 'name')
+            || Object.prototype.hasOwnProperty.call(req.body, 'first_name')
+            || Object.prototype.hasOwnProperty.call(req.body, 'last_name')
+            || Object.prototype.hasOwnProperty.call(req.body, 'lastName')
+            || Object.prototype.hasOwnProperty.call(req.body, 'surname');
         const {
-            name,
-            last_name,
             email,
             phone,
             crop_type,
@@ -1212,39 +1306,46 @@ router.put('/registrations/:id', isAdminRole, async (req, res) => {
         }
 
         const assignments = [
-            'name = COALESCE(?, name)',
             'email = COALESCE(?, email)',
             'phone = COALESCE(?, phone)',
             'location_name = COALESCE(?, location_name)',
             'crop_type = ?',
             'latitude = ?',
             'longitude = ?',
-            'active = COALESCE(?, active)',
             'updated_at = NOW()'
         ];
         const params = [
-            name || null,
             email || null,
             phone || null,
             locationName,
             crop_type || null,
             latitude,
-            longitude,
-            active === undefined ? null : (active ? 1 : 0)
+            longitude
         ];
 
-        if (flags.hasLocationAddress) {
-            assignments.splice(4, 0, 'location_address = ?');
-            params.splice(4, 0, locationAddress);
+        if (hasManagedName) {
+            assignments.unshift('name = COALESCE(?, name)');
+            params.unshift(firstName || null);
         }
-        if (flags.hasLastName) {
-            assignments.splice(1, 0, 'last_name = COALESCE(?, last_name)');
-            params.splice(1, 0, String(last_name || '').trim() || null);
+
+        if (flags.hasLocationAddress) {
+            const locationInsertIndex = hasManagedName ? 4 : 3;
+            assignments.splice(locationInsertIndex, 0, 'location_address = ?');
+            params.splice(locationInsertIndex, 0, locationAddress);
+        }
+        if (flags.hasLastName && hasManagedName) {
+            assignments.splice(1, 0, 'last_name = ?');
+            params.splice(1, 0, lastName || null);
         }
         if (flags.hasRegistrationStatus && registration_status) {
             const normalizedStatus = normalizeRegistrationStatus(registration_status);
             assignments.push('registration_status = ?');
             params.push(normalizedStatus);
+            assignments.push('active = ?');
+            params.push(normalizedStatus === 'active');
+        } else {
+            assignments.push('active = COALESCE(?, active)');
+            params.push(active === undefined ? null : (active ? 1 : 0));
         }
         if (flags.hasApprovedAt && registration_status) {
             const normalizedStatus = normalizeRegistrationStatus(registration_status);
@@ -1291,6 +1392,13 @@ router.post('/registrations/:id/approve', isAdminRole, async (req, res) => {
 
         if (!result.affectedRows) {
             return res.status(404).json({ error: 'Registrazione non trovata' });
+        }
+
+        if (process.env.NODE_ENV !== 'test') {
+            console.info('[admin] registration approved', {
+                registrationId: Number(req.params.id),
+                adminId: req.adminUser?.id || null
+            });
         }
 
         res.json({ success: true, message: 'Registrazione approvata' });
@@ -1495,7 +1603,7 @@ router.post('/devices', isAdminRole, async (req, res) => {
             api_key: created.apiKey
         });
     } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') {
+        if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
             return res.status(409).json({ error: 'Seriale già esistente' });
         }
         if (error.statusCode) {
@@ -1532,7 +1640,7 @@ router.post('/clients/:id/devices', isAdminRole, async (req, res) => {
             api_key: created.apiKey
         });
     } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') {
+        if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
             return res.status(409).json({ error: 'Seriale già esistente' });
         }
         if (error.statusCode) {
@@ -1583,7 +1691,7 @@ router.put('/devices/:id', isAdminRole, async (req, res) => {
 
         res.json({ success: true, message: 'Sensore aggiornato' });
     } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') {
+        if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
             return res.status(409).json({ error: 'Seriale già esistente' });
         }
         if (error.statusCode) {

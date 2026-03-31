@@ -40,6 +40,7 @@ RAYAT - README DEPLOY
   SMTP_FROM
   EMAIL_USER
   EMAIL_PASS
+  EMAIL_FROM
   EMAIL_TO
   ADMIN_DEFAULT_EMAIL
   ADMIN_DEFAULT_PASSWORD
@@ -49,7 +50,8 @@ RAYAT - README DEPLOY
 - SMTP_PORT=587 for STARTTLS or SMTP_PORT=465 for implicit TLS
 - PASSWORD_RESET_URL must point to your live reset page
 - Test forgot-password before opening the platform to users
-- EMAIL_USER / EMAIL_PASS / EMAIL_TO are used for the automatic "new client registered" email notification
+- EMAIL_USER / EMAIL_PASS / EMAIL_FROM / EMAIL_TO are used for the automatic "new client registered" email notification
+- If EMAIL_USER / EMAIL_PASS are omitted, the registration notification can fall back to SMTP_USER / SMTP_PASS
 
 6. Create the first super admin
 - Run once after backend/.env is ready:

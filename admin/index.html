@@ -2,9 +2,13 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Rayat Admin Panel</title>
     <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#064e3b">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -15,15 +19,29 @@
             --green-700: #047857;
             --silver: #C0C0C0;
             --sidebar-w: 240px;
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-left: env(safe-area-inset-left, 0px);
+            --safe-right: env(safe-area-inset-right, 0px);
         }
 
+        /* RAYAT FIX - mobile app ready optimization */
         * { box-sizing: border-box; }
+
+        html {
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+            background: #f0f4f0;
+        }
 
         body {
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             background: #f0f4f0;
             margin: 0;
             min-height: 100vh;
+            padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: none;
         }
 
         /* ─── Login ──────────────────── */
@@ -56,6 +74,7 @@
             top: 0; left: 0; bottom: 0;
             z-index: 40;
             overflow-y: auto;
+            padding-bottom: calc(1rem + var(--safe-bottom));
         }
 
         #main-content {
@@ -80,7 +99,11 @@
             box-shadow: 0 1px 4px rgba(0,0,0,0.05);
         }
 
-        #page-content { padding: 1.5rem; flex: 1; }
+        #page-content {
+            padding: 1.5rem;
+            padding-bottom: calc(1.5rem + var(--safe-bottom));
+            flex: 1;
+        }
 
         /* ─── Sidebar nav items ───────── */
         .nav-item {
@@ -96,6 +119,7 @@
             font-weight: 600;
             transition: all 0.2s;
             text-decoration: none;
+            min-height: 48px;
         }
         .nav-item:hover { background: rgba(255,255,255,0.12); color: white; }
         .nav-item.active { background: rgba(255,255,255,0.18); color: white; }
@@ -125,6 +149,7 @@
             width: 100%;
             border-collapse: collapse;
             font-size: 0.875rem;
+            min-width: 100%;
         }
         .data-table th {
             background: #f9fafb;
@@ -179,6 +204,8 @@
             transition: all 0.15s;
             text-transform: uppercase;
             letter-spacing: 0.05em;
+            min-height: 44px;
+            justify-content: center;
         }
         .btn-primary { background: #065f46; color: white; }
         .btn-primary:hover { background: #047857; }
@@ -217,10 +244,11 @@
             padding: 0.6rem 0.875rem;
             border: 1.5px solid #d1d5db;
             border-radius: 0.6rem;
-            font-size: 0.9rem;
+            font-size: 16px;
             color: #111827;
             outline: none;
             transition: border-color 0.2s;
+            min-height: 48px;
         }
         .form-input:focus { border-color: #047857; box-shadow: 0 0 0 3px rgba(4,120,87,0.12); }
 
@@ -244,10 +272,11 @@
             padding: 0.45rem 0.75rem;
             border: 1px solid #d1d5db;
             border-radius: 0.75rem;
-            font-size: 0.85rem;
+            font-size: 16px;
             font-weight: 700;
             color: #111827;
             background: white;
+            min-height: 44px;
         }
 
         .location-map {
@@ -282,6 +311,26 @@
             flex-wrap: wrap;
         }
 
+        #tab-analytics .grid.grid-cols-2.xl\:grid-cols-3 {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .section-card.overflow-x-auto,
+        .overflow-x-auto {
+            -webkit-overflow-scrolling: touch;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+
         html[dir="rtl"] body { direction: rtl; }
         html[dir="rtl"] .data-table th,
         html[dir="rtl"] .data-table td,
@@ -295,10 +344,19 @@
 
         @media (max-width: 768px) {
             body { overflow-x: hidden; }
+            #login-screen {
+                padding: calc(1rem + var(--safe-top)) 1rem calc(1rem + var(--safe-bottom));
+                align-items: flex-start;
+            }
+            .login-card {
+                padding: 1.5rem 1rem;
+                border-radius: 1.25rem;
+                margin-top: 0.25rem;
+            }
             #sidebar {
                 transform: translateX(-100%);
                 transition: transform 0.3s;
-                width: min(86vw, 320px);
+                width: min(92vw, 360px);
                 box-shadow: 0 18px 40px rgba(0,0,0,0.18);
             }
             #sidebar.open { transform: translateX(0); }
@@ -319,6 +377,7 @@
             #main-content { margin-left: 0; min-width: 0; }
             #topbar {
                 padding: 0.8rem 1rem;
+                padding-top: calc(0.8rem + var(--safe-top));
                 height: auto;
                 gap: 0.8rem;
                 flex-wrap: wrap;
@@ -367,6 +426,72 @@
             .data-table th { font-size: 0.71rem; }
             .data-table td { font-size: 0.84rem; }
             .detail-grid { grid-template-columns: 1fr; }
+            .section-card {
+                border-radius: 1rem;
+            }
+            #tab-clients > .flex,
+            #tab-registrations > .flex,
+            #tab-devices > .flex,
+            #tab-sensors > .flex,
+            #tab-analytics > .flex,
+            #tab-users > .flex {
+                align-items: flex-start;
+            }
+            #tab-clients > .flex .btn,
+            #tab-registrations > .flex .btn,
+            #tab-devices > .flex .btn,
+            #tab-sensors > .flex .btn,
+            #tab-analytics > .flex .btn,
+            #tab-users > .flex .btn {
+                width: 100%;
+            }
+            .modal-overlay {
+                padding: max(0.75rem, var(--safe-top)) 0.75rem max(0.75rem, var(--safe-bottom));
+                align-items: flex-end;
+            }
+            .modal-box {
+                max-width: none !important;
+                max-height: calc(100vh - var(--safe-top) - 0.75rem);
+                border-radius: 1.25rem 1.25rem 0 0;
+                padding: 1.2rem 1rem 1.2rem;
+            }
+            .admin-action-row {
+                flex-direction: column;
+            }
+            .admin-action-row .btn {
+                width: 100%;
+            }
+            #topbar-time {
+                display: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            #page-content {
+                padding: 0.85rem;
+                padding-bottom: calc(1rem + var(--safe-bottom));
+            }
+            .page-title {
+                font-size: 1.05rem;
+                line-height: 1.2;
+            }
+            .stat-card {
+                border-radius: 0.9rem;
+                padding: 0.95rem;
+            }
+            .badge {
+                font-size: 0.66rem;
+            }
+            #tab-analytics .grid.grid-cols-2.xl\:grid-cols-3 {
+                grid-template-columns: 1fr;
+            }
+            .data-table {
+                min-width: 660px;
+            }
+            .form-label,
+            .detail-label {
+                font-size: 0.72rem;
+            }
         }
     </style>
 </head>
@@ -2772,7 +2897,7 @@
         return new Date(d).toLocaleString(getCurrentLocale(), { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
     }
 
-    // RAYAT FIX - registration/admin
+    // RAYAT FIX - full critical admin flow
     function getClientNameParts(record = {}) {
         const rawName = String(record.name || '').trim();
         const rawLastName = String(record.last_name || '').trim();
@@ -2799,6 +2924,24 @@
             lastName: rawLastName,
             fullName: [rawName, rawLastName].filter(Boolean).join(' ') || '—'
         };
+    }
+
+    // RAYAT FIX - full critical admin flow
+    function refreshAdminCollections(options = {}) {
+        const { dashboard = false, clients = false, registrations = false, devices = false } = options;
+
+        if (dashboard && document.getElementById('tab-dashboard') && !document.getElementById('tab-dashboard').classList.contains('hidden')) {
+            loadDashboard();
+        }
+        if (clients) {
+            loadClients(clientListState.page);
+        }
+        if (registrations) {
+            loadRegistrations(registrationListState.page, dashboard);
+        }
+        if (devices && document.getElementById('tab-devices') && !document.getElementById('tab-devices').classList.contains('hidden')) {
+            loadDeviceRegistry(deviceRegistryState.page);
+        }
     }
 
     function showError(id, msg) {
@@ -2987,7 +3130,7 @@
             }
 
             // RAYAT FIX - popup subscription / new customers / email
-            const registrationFeed = await api('/registrations?page=1&pageSize=5');
+            const registrationFeed = await api('/registrations?page=1&pageSize=5&status=new');
             if (!registrationFeed) return;
             const recentClients = registrationFeed.data || [];
             recentClientsEl.innerHTML = recentClients.length ? `
@@ -3075,6 +3218,7 @@
                 <td>
                     <div class="admin-action-row">
                         <button onclick="openEditClientModal(${c.id})" class="btn btn-outline btn-sm">✏️ ${t('edit')}</button>
+                        <button onclick="openAddSensorModal(${c.id})" class="btn btn-outline btn-sm">📡 ${t('addSensor')}</button>
                         ${isSA ? `<button onclick="confirmDelete('client', ${c.id}, '${esc(getClientNameParts(c).fullName)}')" class="btn btn-danger btn-sm">🗑</button>` : ''}
                     </div>
                 </td>
@@ -3294,7 +3438,7 @@
 
 
             closeModal('client-modal');
-            loadClients(clientListState.page);
+            refreshAdminCollections({ clients: true, dashboard: true });
         } catch (err) {
             showError('client-modal-error', err.message);
         } finally {
@@ -3471,7 +3615,7 @@
                 })
             });
             closeModal('registration-modal');
-            loadRegistrations(registrationListState.page, true);
+            refreshAdminCollections({ registrations: true, clients: true, dashboard: true });
         } catch (err) {
             showError('registration-modal-error', err.message);
         } finally {
@@ -3486,7 +3630,7 @@
         try {
             await api('/registrations/' + targetId + '/approve', { method: 'POST' });
             if (!id) closeModal('registration-modal');
-            loadRegistrations(registrationListState.page, true);
+            refreshAdminCollections({ registrations: true, clients: true, dashboard: true });
         } catch (err) {
             if (!id) {
                 showError('registration-modal-error', err.message);
@@ -3925,7 +4069,8 @@
 
     function syncClient() { /* no-op, kept for compatibility */ }
 
-    async function loadSensorModalClients(query = '') {
+    // RAYAT FIX - full critical admin flow
+    async function loadSensorModalClients(query = '', preselectedClientId = null) {
         const sel = document.getElementById('sf-client-select');
         const params = new URLSearchParams({ page: '1', pageSize: '50' });
         if (query) params.set('q', query);
@@ -3936,6 +4081,16 @@
             if (sel) {
                 sel.innerHTML = `<option value="">${t('noClient')}</option>` +
                     clients.map(c => `<option value="${c.id}">#${c.client_code || '----'} — ${esc(getClientNameParts(c).fullName)}</option>`).join('');
+                if (preselectedClientId) {
+                    const selectedValue = String(preselectedClientId);
+                    if (!Array.from(sel.options).some(option => option.value === selectedValue)) {
+                        const fallbackClient = allClients.find((client) => String(client.id) === selectedValue);
+                        if (fallbackClient) {
+                            sel.innerHTML += `<option value="${fallbackClient.id}">#${fallbackClient.client_code || '----'} — ${esc(getClientNameParts(fallbackClient).fullName)}</option>`;
+                        }
+                    }
+                    sel.value = selectedValue;
+                }
             }
         } catch (e) {
             console.error('Error loading clients in modal:', e);
@@ -3951,7 +4106,7 @@
         }, 250);
     }
 
-    async function openAddSensorModal() {
+    async function openAddSensorModal(preselectedClientId = null) {
         // Reset form
         const sel = document.getElementById('sf-client-select');
         if (sel) sel.innerHTML = `<option value="">${t('loadingClients')}</option>`;
@@ -3964,7 +4119,7 @@
         openModal('sensor-modal');
 
         // Fetch and populate clients
-        await loadSensorModalClients();
+        await loadSensorModalClients('', preselectedClientId);
     }
 
     async function saveDevice(e) {
@@ -4006,7 +4161,7 @@
                     : null)
                 .filter(Boolean);
             closeModal('sensor-modal');
-            setTimeout(() => refreshDeviceViews(), 300);
+            setTimeout(() => refreshAdminCollections({ devices: true, clients: true, dashboard: true }), 300);
             if (saved > 0) {
                 const preview = createdKeys.slice(0, 5).join('\n');
                 const suffix = createdKeys.length > 5 ? '\n...' : '';
@@ -4204,8 +4359,8 @@
                     ? '/registrations/'
                     : '/users/';
             await api(endpoint + id, { method: 'DELETE' });
-            if (type === 'client') loadClients(clientListState.page);
-            else if (type === 'registration') loadRegistrations(registrationListState.page, true);
+            if (type === 'client') refreshAdminCollections({ clients: true, dashboard: true, devices: true });
+            else if (type === 'registration') refreshAdminCollections({ registrations: true, clients: true, dashboard: true });
             else loadAdminUsers();
         } catch (err) {
             alert(t('errorPrefix') + err.message);

@@ -1,13 +1,21 @@
 // =============================================
 // RAYAT Service Worker - Offline Cache
 // =============================================
-const CACHE_NAME = 'rayat-v1.1-navfix';
+// RAYAT FIX - mobile app ready optimization
+const CACHE_NAME = 'rayat-v1.2-mobile-app-ready';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
+    './admin/index.html',
     './manifest.json',
+    './favicon.png',
+    './favicon-32.png',
+    './assets/css/public.css?v=20260331-mobile-app-ready',
+    './assets/js/public.js?v=20260331-mobile-app-ready',
     './icons/icon-192.png',
     './icons/icon-512.png',
+    './icons/logo.png',
+    './icons/tree-silver.png',
     'https://cdn.tailwindcss.com',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
@@ -17,8 +25,10 @@ const ASSETS_TO_CACHE = [
 // Install: pre-cache all assets
 self.addEventListener('install', event => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => {
-            return cache.addAll(ASSETS_TO_CACHE).catch(() => undefined);
+        caches.open(CACHE_NAME).then(async (cache) => {
+            await Promise.allSettled(
+                ASSETS_TO_CACHE.map((asset) => cache.add(asset))
+            );
         })
     );
     self.skipWaiting();
@@ -43,7 +53,9 @@ function isLocalStaticAsset(url) {
         url.pathname.endsWith('.js') ||
         url.pathname.endsWith('.css') ||
         url.pathname.endsWith('.html') ||
-        url.pathname.endsWith('.json')
+        url.pathname.endsWith('.json') ||
+        url.pathname.endsWith('.png') ||
+        url.pathname.endsWith('.svg')
     );
 }
 
