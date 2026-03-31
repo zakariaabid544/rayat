@@ -4924,6 +4924,26 @@
         function renderDemoPage() {
             const current = sensorData[selectedSensor];
             const isLiveMonitoring = isAuthenticated() && isCustomerRole(currentRole);
+            const hasMetricValue = (value) => Number.isFinite(parseNumericValue(value));
+            const demoStatusState = (() => {
+                if (dataError || !current || !globalHistory.length) {
+                    return 'offline';
+                }
+
+                if (selectedSensor === 'terreno') {
+                    return sensorData.terreno?.details?.every((metric) => hasMetricValue(metric.value)) ? 'online' : 'offline';
+                }
+
+                if (selectedSensor === 'clima') {
+                    return sensorData.clima?.details?.every((metric) => hasMetricValue(metric.value)) ? 'online' : 'offline';
+                }
+
+                if (selectedSensor === 'acqua' || selectedSensor === 'energia') {
+                    return hasMetricValue(current.valore) ? 'online' : 'offline';
+                }
+
+                return 'offline';
+            })();
 
             // RAYAT FIX - demo section refresh cleanup and repositioning
             const renderMonitoringRefreshControl = (variant = 'toolbar') => `
@@ -4976,8 +4996,15 @@
             const renderDemoSectionHeading = (title) => `
                 <div class="rayat-demo-section-heading">
                     <div class="rayat-demo-section-heading__row">
-                        <h4 class="rayat-demo-section-heading__title">${title}</h4>
-                        ${renderMonitoringRefreshControl('section')}
+                        <div class="rayat-demo-section-heading__group">
+                            <h4 class="rayat-demo-section-heading__title">${title}</h4>
+                            ${renderMonitoringRefreshControl('section')}
+                            <span
+                                class="rayat-demo-section-heading__status ${demoStatusState === 'online' ? 'is-online' : 'is-offline'}"
+                                aria-label="${escapeHtml(demoStatusState === 'online' ? t('monitoringOnline') : t('monitoringOffline'))}"
+                                title="${escapeHtml(demoStatusState === 'online' ? t('monitoringOnline') : t('monitoringOffline'))}"
+                            ></span>
+                        </div>
                     </div>
                     <p class="rayat-demo-section-heading__subtitle">${t('realTimeMonitoring')}</p>
                 </div>
@@ -5007,7 +5034,7 @@
                         <p style="font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.25em;margin-top:0;">${t('realTimeMonitoring')}</p>
                     </div>
                 ` : renderDemoSectionHeading(t('sensorSoName'))}
-                ${renderLastUpdateBlock()}
+                ${isLiveMonitoring ? renderLastUpdateBlock() : ''}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
@@ -5028,7 +5055,7 @@
                         <p class="text-gray-400 font-bold uppercase tracking-widest text-xs mt-0">${t('realTimeMonitoring')}</p>
                     </div>
                 ` : renderDemoSectionHeading(t('sensorClName'))}
-                ${renderLastUpdateBlock()}
+                ${isLiveMonitoring ? renderLastUpdateBlock() : ''}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
@@ -5057,7 +5084,7 @@
                         <p class="text-gray-400 font-bold uppercase tracking-widest text-xs mt-0">${t('realTimeMonitoring')}</p>
                     </div>
                 ` : renderDemoSectionHeading(t('sensorWaName'))}
-                ${renderLastUpdateBlock()}
+                ${isLiveMonitoring ? renderLastUpdateBlock() : ''}
                 <div class="rayat-water-compact mb-12">
                     <div>
                         <label class="block text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">${t('hectaresLabel')}</label>
@@ -5132,7 +5159,7 @@
                         ${/* Demo Mode: Error overlay removed */ ''}
                         <div class="relative z-10">
                             ${selectedSensor === 'acqua' ? renderWater() : (selectedSensor === 'terreno' ? render7in1() : (selectedSensor === 'clima' ? renderClimate() : `
-                                    ${renderLastUpdateBlock()}
+                                    ${isLiveMonitoring ? renderLastUpdateBlock() : ''}
                                     ${!isLiveMonitoring ? renderDemoSectionHeading(t(current.nome)) : ''}
                                     <div class="flex flex-col md:flex-row items-center justify-between mb-16">
                                         <div class="flex items-center ${isLiveMonitoring ? 'gap-10' : ''}">
