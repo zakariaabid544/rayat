@@ -25,6 +25,7 @@ const {
     ADMIN_SESSION_COOKIE
 } = require('../utils/admin-auth');
 const { attachPasswordResetRoutes } = require('../utils/password-reset');
+const { buildAnalyticsSummary } = require('../utils/analytics');
 
 const router = express.Router();
 
@@ -132,6 +133,8 @@ async function ensureClientExists(clientId, executor = query) {
 async function getUserColumnFlags() {
     const columns = await getTableColumns('users');
     return {
+        // RAYAT FIX - registration/admin
+        hasLastName: columns.has('last_name'),
         hasClientCode: columns.has('client_code'),
         hasLocationAddress: columns.has('location_address'),
         hasPaymentStatus: columns.has('payment_status'),
@@ -145,6 +148,7 @@ async function getUserColumnFlags() {
 
 function optionalUserSelect(flags, fieldName) {
     const map = {
+        last_name: flags.hasLastName,
         client_code: flags.hasClientCode,
         location_address: flags.hasLocationAddress,
         payment_status: flags.hasPaymentStatus,
@@ -217,12 +221,17 @@ function buildRegistrationWhereClause(req, flags) {
         const normalizedCode = `%${searchTerm.replace(/^#/, '')}%`;
         const searchClauses = [
             'u.name LIKE ?',
+            ...(flags.hasLastName ? ['u.last_name LIKE ?'] : []),
             'u.email LIKE ?',
             'u.phone LIKE ?',
             'u.location_name LIKE ?'
         ];
 
-        params.push(like, like, like, like);
+        params.push(like);
+        if (flags.hasLastName) {
+            params.push(like);
+        }
+        params.push(like, like, like);
 
         if (flags.hasLocationAddress) {
             searchClauses.push('u.location_address LIKE ?');
@@ -252,12 +261,17 @@ function buildClientWhereClause(searchTerm, flags) {
         const normalizedCode = `%${searchTerm.replace(/^#/, '')}%`;
         const searchClauses = [
             'u.name LIKE ?',
+            ...(flags.hasLastName ? ['u.last_name LIKE ?'] : []),
             'u.email LIKE ?',
             'u.phone LIKE ?',
             'u.location_name LIKE ?'
         ];
 
-        params.push(like, like, like, like);
+        params.push(like);
+        if (flags.hasLastName) {
+            params.push(like);
+        }
+        params.push(like, like, like);
 
         if (flags.hasLocationAddress) {
             searchClauses.push('u.location_address LIKE ?');
@@ -656,6 +670,20 @@ router.get('/stats', isAdminRole, async (req, res) => {
     }
 });
 
+// RAYAT FIX - email + analytics
+router.get('/analytics/summary', isAdminRole, isSuperAdmin, async (req, res) => {
+    try {
+        const data = await buildAnalyticsSummary();
+        res.json({
+            success: true,
+            data
+        });
+    } catch (error) {
+        console.error('Get analytics summary error:', error);
+        res.status(500).json({ error: 'Errore nel recupero analytics' });
+    }
+});
+
 // ─── CLIENTS ───────────────────────────────────────────────────────────────────
 
 router.get('/clients', isAdminRole, async (req, res) => {
@@ -676,6 +704,7 @@ router.get('/clients', isAdminRole, async (req, res) => {
             `SELECT
                 u.id,
                 u.name,
+                ${optionalUserSelect(flags, 'last_name')},
                 u.email,
                 u.phone,
                 u.crop_type,
@@ -724,6 +753,7 @@ router.get('/clients/:id', isAdminRole, async (req, res) => {
             `SELECT
                 u.id,
                 u.name,
+                ${optionalUserSelect(flags, 'last_name')},
                 u.email,
                 u.phone,
                 u.crop_type,
@@ -768,6 +798,7 @@ router.post('/clients', isAdminRole, async (req, res) => {
     try {
         const {
             name,
+            last_name,
             email,
             phone,
             password,
@@ -800,6 +831,7 @@ router.post('/clients', isAdminRole, async (req, res) => {
 
         const columns = [
             'name',
+            ...(flags.hasLastName ? ['last_name'] : []),
             'email',
             'phone',
             'password_hash',
@@ -813,6 +845,7 @@ router.post('/clients', isAdminRole, async (req, res) => {
         ];
         const values = [
             name,
+            ...(flags.hasLastName ? [String(last_name || '').trim() || null] : []),
             email || null,
             phone,
             passwordHash,
@@ -882,6 +915,7 @@ router.put('/clients/:id', isAdminRole, async (req, res) => {
         const id = Number.parseInt(req.params.id, 10);
         const {
             name,
+            last_name,
             email,
             phone,
             crop_type,
@@ -944,6 +978,10 @@ router.put('/clients/:id', isAdminRole, async (req, res) => {
         if (flags.hasLocationAddress) {
             assignments.splice(5, 0, 'location_address = ?');
             params.splice(5, 0, locationAddress);
+        }
+        if (flags.hasLastName) {
+            assignments.splice(1, 0, 'last_name = COALESCE(?, last_name)');
+            params.splice(1, 0, String(last_name || '').trim() || null);
         }
         if (flags.hasPaymentStatus) {
             assignments.push('payment_status = COALESCE(?, payment_status)');
@@ -1027,6 +1065,7 @@ router.get('/registrations', isAdminRole, async (req, res) => {
             `SELECT
                 u.id,
                 u.name,
+                ${optionalUserSelect(flags, 'last_name')},
                 u.email,
                 u.phone,
                 u.location_name,
@@ -1074,6 +1113,7 @@ router.get('/registrations/:id', isAdminRole, async (req, res) => {
             `SELECT
                 u.id,
                 u.name,
+                ${optionalUserSelect(flags, 'last_name')},
                 u.email,
                 u.phone,
                 u.location_name,
@@ -1118,6 +1158,7 @@ router.put('/registrations/:id', isAdminRole, async (req, res) => {
         const id = Number.parseInt(req.params.id, 10);
         const {
             name,
+            last_name,
             email,
             phone,
             crop_type,
@@ -1189,6 +1230,10 @@ router.put('/registrations/:id', isAdminRole, async (req, res) => {
         if (flags.hasLocationAddress) {
             assignments.splice(4, 0, 'location_address = ?');
             params.splice(4, 0, locationAddress);
+        }
+        if (flags.hasLastName) {
+            assignments.splice(1, 0, 'last_name = COALESCE(?, last_name)');
+            params.splice(1, 0, String(last_name || '').trim() || null);
         }
         if (flags.hasRegistrationStatus && registration_status) {
             const normalizedStatus = normalizeRegistrationStatus(registration_status);

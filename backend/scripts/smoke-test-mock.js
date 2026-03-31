@@ -13,6 +13,7 @@ const state = {
       email: 'sa@rayat.ma',
       password_hash: bcrypt.hashSync('secret123', 10),
       name: 'Super Admin',
+      last_name: null,
       role: 'super_admin',
       active: 1,
       client_code: null,
@@ -30,7 +31,8 @@ const state = {
       id: 2,
       email: 'client@rayat.ma',
       password_hash: bcrypt.hashSync('client123', 10),
-      name: 'Cliente Demo',
+      name: 'Cliente',
+      last_name: 'Demo',
       role: 'client',
       active: 1,
       client_code: '0001',
@@ -98,6 +100,7 @@ function listClients(offset = 0, limit = 25, singleId = null) {
     .map((user) => ({
       id: user.id,
       name: user.name,
+      last_name: user.last_name || null,
       email: user.email,
       phone: user.phone,
       crop_type: user.crop_type,
@@ -202,7 +205,8 @@ async function fakeQuery(sql, params = []) {
   }
 
   if (
-    text.startsWith('SELECT u.id, u.name, u.email') &&
+    text.startsWith('SELECT u.id, u.name,') &&
+    text.includes('u.email') &&
     text.includes('FROM users u') &&
     text.includes('LEFT JOIN ( SELECT user_id, COUNT(*) AS device_count')
   ) {
@@ -379,6 +383,7 @@ async function run() {
               'email',
               'password_hash',
               'name',
+              'last_name',
               'role',
               'active',
               'phone',

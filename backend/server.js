@@ -42,6 +42,7 @@ const iotLimiter = rateLimit({
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/sensors/simple', require('./routes/simple')); // Simplified API format - registered broad first
 app.use('/api/sensors', require('./routes/sensors'));
 app.use('/api/iot/upload', iotLimiter);
@@ -88,7 +89,23 @@ async function requireProtectedAdminPage(req, res, next) {
 }
 
 app.get(
-    ['/admin/recent-clients', '/admin/recent-clients/', '/admin/recent-clients.html'],
+    [
+        '/admin/clients',
+        '/admin/clients/',
+        '/admin/clients.html',
+        '/admin/recent-clients',
+        '/admin/recent-clients/',
+        '/admin/recent-clients.html',
+        '/admin/sensors',
+        '/admin/sensors/',
+        '/admin/sensors.html',
+        '/admin/devices',
+        '/admin/devices/',
+        '/admin/devices.html',
+        '/admin/analytics',
+        '/admin/analytics/',
+        '/admin/analytics.html'
+    ],
     requireProtectedAdminPage,
     (req, res) => {
         res.sendFile(adminIndexPath);

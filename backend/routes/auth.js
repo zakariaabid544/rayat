@@ -6,6 +6,8 @@ const { query, getTableColumns } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { isPrivilegedAdminRole, normalizeAdminRole } = require('../utils/admin-auth');
 const { attachPasswordResetRoutes } = require('../utils/password-reset');
+const { sendNewClientRegistrationEmail } = require('../utils/registration-email');
+const { recordAnalyticsEvent } = require('../utils/analytics');
 
 const router = express.Router();
 
@@ -29,6 +31,7 @@ function buildAuthToken(user) {
 async function getUserColumnFlags() {
     const columns = await getTableColumns('users');
     return {
+        hasLastName: columns.has('last_name'),
         hasLanguage: columns.has('language'),
         hasClientCode: columns.has('client_code'),
         hasLocationAddress: columns.has('location_address'),
@@ -72,6 +75,40 @@ function normalizeLocationAddress(payload, locationName) {
         locationName ||
         ''
     ).trim();
+}
+
+// RAYAT FIX - registration/admin
+function normalizeRegistrationNameParts(payload = {}) {
+    const rawFirstName = String(payload.name || payload.first_name || '').trim();
+    const rawLastName = String(payload.last_name || payload.surname || payload.lastName || '').trim();
+
+    if (rawFirstName && rawLastName) {
+        return {
+            firstName: rawFirstName,
+            lastName: rawLastName
+        };
+    }
+
+    const fullName = rawFirstName;
+    if (!fullName) {
+        return {
+            firstName: '',
+            lastName: ''
+        };
+    }
+
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+        return {
+            firstName: parts.slice(0, -1).join(' '),
+            lastName: parts.slice(-1).join('')
+        };
+    }
+
+    return {
+        firstName: fullName,
+        lastName: ''
+    };
 }
 
 async function getNextClientCode(flags) {
@@ -123,7 +160,8 @@ async function ensureUniqueContactInfo({ email, phone, excludeId = null }) {
 
 async function createRegisteredClient(payload, options = {}) {
     const flags = await getUserColumnFlags();
-    const name = String(payload.name || '').trim();
+    const { firstName, lastName } = normalizeRegistrationNameParts(payload);
+    const name = firstName;
     const email = String(payload.email || '').trim().toLowerCase();
     const phone = String(payload.phone || '').trim();
     const password = String(payload.password || '').trim();
@@ -132,8 +170,8 @@ async function createRegisteredClient(payload, options = {}) {
     const latitude = normalizeCoordinate(payload.latitude);
     const longitude = normalizeCoordinate(payload.longitude);
 
-    if (!name || !email || !phone || !password || !locationName) {
-        const error = new Error('Nome, email, telefono, password e località sono obbligatori');
+    if (!name || !lastName || !email || !phone || !password || !locationName) {
+        const error = new Error('Nome, cognome, email, telefono, password e località sono obbligatori');
         error.statusCode = 400;
         throw error;
     }
@@ -149,6 +187,7 @@ async function createRegisteredClient(payload, options = {}) {
     const clientCode = await getNextClientCode(flags);
     const columns = [
         'name',
+        ...(flags.hasLastName ? ['last_name'] : []),
         'email',
         'phone',
         'password_hash',
@@ -162,6 +201,7 @@ async function createRegisteredClient(payload, options = {}) {
     ];
     const values = [
         name,
+        ...(flags.hasLastName ? [lastName] : []),
         email,
         phone,
         passwordHash,
@@ -206,19 +246,43 @@ async function createRegisteredClient(payload, options = {}) {
         values
     );
 
+    const createdAt = new Date().toISOString();
+
     return {
         id: result.insertId,
         name,
+        last_name: lastName,
         email,
         phone,
+        crop_type: payload.crop_type || null,
         location_name: locationName,
         location_address: locationAddress,
         latitude,
         longitude,
         client_code: clientCode,
         role: 'client',
-        registration_status: options.registrationStatus || 'new'
+        registration_status: options.registrationStatus || 'new',
+        created_at: createdAt
     };
+}
+
+// RAYAT FIX - email + analytics
+async function finalizeClientRegistration(req, createdUser) {
+    try {
+        await sendNewClientRegistrationEmail(createdUser);
+    } catch (error) {
+        console.warn('Nuova registrazione salvata ma email non inviata:', error.message);
+    }
+
+    try {
+        await recordAnalyticsEvent(req, {
+            eventType: 'registration_completed',
+            eventName: 'Registration Completed',
+            pagePath: '/register'
+        });
+    } catch (error) {
+        console.warn('Analytics registrazione completata non salvato:', error.message);
+    }
 }
 
 // POST /api/auth/login - Login utente
@@ -260,6 +324,7 @@ router.post('/login', async (req, res) => {
                 id: user.id,
                 email: user.email,
                 name: user.name,
+                last_name: user.last_name || null,
                 language: user.language,
                 role: normalizedRole,
                 payment_status: user.payment_status || null,
@@ -322,6 +387,7 @@ router.post('/register', async (req, res) => {
             registrationStatus: 'new',
             registrationSource: 'public'
         });
+        await finalizeClientRegistration(req, createdUser);
 
         const token = buildAuthToken(createdUser);
         res.status(201).json({
@@ -351,6 +417,7 @@ router.post('/register-full', async (req, res) => {
             registrationStatus: 'new',
             registrationSource: 'public'
         });
+        await finalizeClientRegistration(req, createdUser);
 
         const token = buildAuthToken(createdUser);
         res.status(201).json({

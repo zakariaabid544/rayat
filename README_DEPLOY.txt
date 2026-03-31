@@ -23,11 +23,7 @@ RAYAT - README DEPLOY
 4. .env setup
 - Copy backend/.env.example to backend/.env on the server
 - Fill all required values:
-  DB_HOST
-  DB_PORT
-  DB_USER
-  DB_PASSWORD
-  DB_NAME
+  DATABASE_URL
   JWT_SECRET
   PORT
   NODE_ENV
@@ -42,14 +38,18 @@ RAYAT - README DEPLOY
   SMTP_USER
   SMTP_PASS
   SMTP_FROM
-  SUPER_ADMIN_EMAIL
-  SUPER_ADMIN_PASSWORD
+  EMAIL_USER
+  EMAIL_PASS
+  EMAIL_TO
+  ADMIN_DEFAULT_EMAIL
+  ADMIN_DEFAULT_PASSWORD
 
 5. SMTP setup
 - Use a real SMTP provider
 - SMTP_PORT=587 for STARTTLS or SMTP_PORT=465 for implicit TLS
 - PASSWORD_RESET_URL must point to your live reset page
 - Test forgot-password before opening the platform to users
+- EMAIL_USER / EMAIL_PASS / EMAIL_TO are used for the automatic "new client registered" email notification
 
 6. Create the first super admin
 - Run once after backend/.env is ready:

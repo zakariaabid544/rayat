@@ -66,6 +66,7 @@ async function ensureCoreTables(changes) {
          email TEXT UNIQUE,
          password_hash TEXT NOT NULL,
          name TEXT,
+         last_name TEXT,
          language VARCHAR(5) DEFAULT 'it',
          phone TEXT,
          crop_type TEXT,
@@ -250,6 +251,28 @@ async function ensureCoreTables(changes) {
   ) {
     changes.push('password_resets table');
   }
+
+  if (
+    await ensureTable(
+      'analytics_events',
+      `CREATE TABLE IF NOT EXISTS analytics_events (
+         id BIGSERIAL PRIMARY KEY,
+         anonymous_id_hash VARCHAR(64),
+         event_type VARCHAR(32) NOT NULL,
+         event_name VARCHAR(120),
+         page_path TEXT,
+         referrer_host VARCHAR(120),
+         device_type VARCHAR(16),
+         country_code VARCHAR(8),
+         city_name VARCHAR(120),
+         button_name VARCHAR(120),
+         occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+       )`
+    )
+  ) {
+    changes.push('analytics_events table');
+  }
 }
 
 async function ensurePlatformSchema() {
@@ -259,6 +282,13 @@ async function ensurePlatformSchema() {
 
   if (await ensureColumn('users', 'client_code', 'VARCHAR(20)')) {
     changes.push('users.client_code');
+  }
+  // RAYAT FIX - registration/admin
+  if (await ensureColumn('users', 'last_name', 'TEXT')) {
+    changes.push('users.last_name');
+  }
+  if (await ensureColumn('users', 'crop_type', 'TEXT')) {
+    changes.push('users.crop_type');
   }
   if (await ensureColumn('users', 'payment_status', "VARCHAR(20) DEFAULT 'non_pagato'")) {
     changes.push('users.payment_status');
@@ -361,6 +391,33 @@ async function ensurePlatformSchema() {
     )
   ) {
     changes.push('idx_password_resets_token_hash');
+  }
+  if (
+    await ensureIndex(
+      'analytics_events',
+      'idx_analytics_events_type_occurred_at',
+      'CREATE INDEX idx_analytics_events_type_occurred_at ON analytics_events (event_type, occurred_at)'
+    )
+  ) {
+    changes.push('idx_analytics_events_type_occurred_at');
+  }
+  if (
+    await ensureIndex(
+      'analytics_events',
+      'idx_analytics_events_page_path',
+      'CREATE INDEX idx_analytics_events_page_path ON analytics_events (page_path)'
+    )
+  ) {
+    changes.push('idx_analytics_events_page_path');
+  }
+  if (
+    await ensureIndex(
+      'analytics_events',
+      'idx_analytics_events_anonymous_id',
+      'CREATE INDEX idx_analytics_events_anonymous_id ON analytics_events (anonymous_id_hash)'
+    )
+  ) {
+    changes.push('idx_analytics_events_anonymous_id');
   }
   if (
     await ensureIndex(

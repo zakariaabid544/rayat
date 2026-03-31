@@ -4,7 +4,8 @@
 
         const CONFIG = {
             API_BASE_URL: `${API_ORIGIN}/api`,
-            REAL_API_URL: `${API_ORIGIN}/api/sensors/simple/latest`
+            REAL_API_URL: `${API_ORIGIN}/api/sensors/simple/latest`,
+            ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
 
         let lastRefreshed = new Date();
@@ -28,6 +29,7 @@
             login: '/login',
             register: '/register',
             demo: '/demo',
+            profilo: '/profilo',
             servizi: '/services',
             'chi-siamo': '/chi-siamo',
             contatti: '/contatti',
@@ -37,6 +39,10 @@
         };
         const WHATSAPP_CTA_URL = 'https://wa.me/393513203307';
         const WHATSAPP_DISPLAY_NUMBER = '+39 351 320 3307';
+        const USER_PROFILE_STORAGE_PREFIX = 'rayat_user_profile_';
+        const ANALYTICS_STORAGE_KEY = 'rayat_analytics_id';
+        let latestAssignedSensors = [];
+        let userProfileNotice = '';
 
         // Professional Water Management Config
         const CROP_OPTIONS = [
@@ -713,6 +719,7 @@
                 try {
                     user = JSON.parse(storedUser);
                     currentRole = user?.role || 'guest';
+                    syncStoredUserProfileIntoSession();
                     syncSubscriptionUiState();
                     return;
                 } catch (error) {
@@ -729,6 +736,7 @@
                     role: decoded.role
                 };
                 currentRole = decoded.role;
+                syncStoredUserProfileIntoSession();
                 localStorage.setItem('rayat_user', JSON.stringify(user));
                 syncSubscriptionUiState();
                 return;
@@ -742,6 +750,8 @@
             authToken = null;
             currentRole = 'guest';
             isAdminView = false;
+            latestAssignedSensors = [];
+            userProfileNotice = '';
             localStorage.removeItem('rayat_token');
             localStorage.removeItem('rayat_user');
             sessionStorage.removeItem('rayat_admin_token');
@@ -788,11 +798,28 @@
         const translations = {
             it: {
                 home: 'Home', services: 'Servizi', aboutUs: 'Chi Siamo', demo: 'Demo', login: 'Accedi', logout: 'Logout',
+                profileNav: 'Profilo',
+                profileTitle: 'Il tuo profilo Rayat',
+                profileSubtitle: 'Gestisci i tuoi dati personali e consulta i sensori assegnati in sola lettura.',
+                profilePersonalInfo: 'Dati account',
+                profileDescription: 'Descrizione',
+                profilePhoto: 'Foto profilo',
+                profilePhotoHint: 'Carica una immagine chiara e professionale.',
+                profilePhotoRemove: 'Rimuovi foto',
+                profileSave: 'Salva profilo',
+                profileSaved: 'Profilo aggiornato correttamente.',
+                profileSensorsTitle: 'Sensori assegnati',
+                profileSensorsHint: 'Questa sezione e in sola visualizzazione.',
+                profileNoSensors: 'Nessun sensore assegnato disponibile al momento.',
+                profileViewOnly: 'Solo visualizzazione',
+                profileRoleLabel: 'Ruolo',
+                profileDeviceLabel: 'Dispositivo',
+                profileLatestReading: 'Ultima lettura',
                 hero: 'Terreno Sano = Raccolto Ricco', heroSub: 'Monitoraggio 24/7 con sensori intelligenti Rayat',
                 heroEyebrow: 'Rayat Smart Monitoring',
                 heroTitleLine1: 'Agricoltura guidata dai dati',
-                heroTitleLine2: 'Decisioni migliori. Raccolti',
-                heroTitleAccent: 'migliori.',
+                heroTitleLine2: 'Decisioni migliori.',
+                heroTitleAccent: 'Raccolti migliori.',
                 heroPlatformSub: 'Monitoraggio IoT avanzato di suolo, clima, acqua ed energia, tutto in un\'unica piattaforma.',
                 tryDemo: 'Prova la Demo', discoverServices: 'Scopri i Servizi', insurance: 'Assicurazione Agricola Rayat Smart Monitoring',
                 ourSensors: 'Tecnologia Rayat', ourReality: 'La Nostra Realtà',
@@ -836,7 +863,7 @@
                 usingCache: 'Dati offline (cache)', contactSupport: 'Contatta Supporto',
                 privacyPolicy: 'Privacy Policy',
                 regStep: 'Step', regOf: 'di', regPersonalData: 'Dati personali', regAgriType: 'Profilo agricolo', regFieldLoc: 'Posizione campo',
-                regVerifyTitle: 'Crea il tuo account Rayat', regFullName: 'Nome e Cognome', regPhone: 'Numero di telefono', regEmailOpt: 'Email',
+                regVerifyTitle: 'Crea il tuo account Rayat', regFullName: 'Nome e Cognome', regFirstName: 'Nome', regLastName: 'Cognome', regPhone: 'Numero di telefono', regEmailOpt: 'Email',
                 regPass: 'Password', regPassHint: 'Scegli una password sicura', regOtpLabel: 'Inserisci codice OTP ricevuto su WhatsApp',
                 regVerifyBtn: 'Verifica e continua', regSendOtpBtn: 'Invia codice via WhatsApp 📲', regCropTitle: 'Cosa coltivi?',
                 regOtherCrop: 'Altro (scrivi qui)', regContinue: 'Continua ➡️', regLocTitle: 'Posizione del campo',
@@ -903,11 +930,28 @@
             },
             en: {
                 home: 'Home', services: 'Services', aboutUs: 'About Us', demo: 'Demo', login: 'Login', logout: 'Logout',
+                profileNav: 'Profile',
+                profileTitle: 'Your Rayat profile',
+                profileSubtitle: 'Manage your personal details and review assigned sensors in read-only mode.',
+                profilePersonalInfo: 'Account details',
+                profileDescription: 'Description',
+                profilePhoto: 'Profile photo',
+                profilePhotoHint: 'Upload a clear, professional image.',
+                profilePhotoRemove: 'Remove photo',
+                profileSave: 'Save profile',
+                profileSaved: 'Profile updated successfully.',
+                profileSensorsTitle: 'Assigned sensors',
+                profileSensorsHint: 'This section is view-only.',
+                profileNoSensors: 'No assigned sensors are available right now.',
+                profileViewOnly: 'View only',
+                profileRoleLabel: 'Role',
+                profileDeviceLabel: 'Device',
+                profileLatestReading: 'Latest reading',
                 hero: 'Healthy Soil = Rich Harvest', heroSub: 'Monitor your field 24/7 with smart sensors',
                 heroEyebrow: 'Rayat Smart Monitoring',
                 heroTitleLine1: 'Data-Driven Agriculture',
-                heroTitleLine2: 'Better Decisions. Better',
-                heroTitleAccent: 'Yields.',
+                heroTitleLine2: 'Better Decisions.',
+                heroTitleAccent: 'Better Yields.',
                 heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy, all in one platform.',
                 tryDemo: 'Try Demo', discoverServices: 'Discover Services', insurance: 'Your agricultural insurance - Continuous real-time monitoring',
                 ourSensors: 'Our Sensors', ourReality: 'Our Reality',
@@ -949,7 +993,7 @@
                 realTimeMonitoring: 'REAL-TIME MONITORING', last7Days: 'LAST 7 DAYS',
                 privacyPolicy: 'Privacy Policy',
                 regStep: 'Step', regOf: 'of', regPersonalData: 'Personal Details', regAgriType: 'Farm Profile', regFieldLoc: 'Field Location',
-                regVerifyTitle: 'Create your Rayat account', regFullName: 'Full Name', regPhone: 'Phone Number', regEmailOpt: 'Email',
+                regVerifyTitle: 'Create your Rayat account', regFullName: 'Full Name', regFirstName: 'First Name', regLastName: 'Last Name', regPhone: 'Phone Number', regEmailOpt: 'Email',
                 regPass: 'Password', regPassHint: 'Choose a secure password', regOtpLabel: 'Enter OTP code received on WhatsApp',
                 regVerifyBtn: 'Verify and continue', regSendOtpBtn: 'Send code via WhatsApp 📲', regCropTitle: 'What do you grow?',
                 regOtherCrop: 'Other (write here)', regContinue: 'Continue ➡️', regLocTitle: 'Field Location',
@@ -1016,11 +1060,28 @@
             },
             fr: {
                 home: 'Accueil', services: 'Services', aboutUs: 'Qui Sommes-Nous', demo: 'Démo', login: 'Connexion', logout: 'Déconnexion',
+                profileNav: 'Profil',
+                profileTitle: 'Votre profil Rayat',
+                profileSubtitle: 'Gerez vos informations personnelles et consultez les capteurs attribues en lecture seule.',
+                profilePersonalInfo: 'Informations du compte',
+                profileDescription: 'Description',
+                profilePhoto: 'Photo de profil',
+                profilePhotoHint: 'Telechargez une image claire et professionnelle.',
+                profilePhotoRemove: 'Supprimer la photo',
+                profileSave: 'Enregistrer le profil',
+                profileSaved: 'Profil mis a jour avec succes.',
+                profileSensorsTitle: 'Capteurs attribues',
+                profileSensorsHint: 'Cette section est en lecture seule.',
+                profileNoSensors: 'Aucun capteur attribue n est disponible pour le moment.',
+                profileViewOnly: 'Lecture seule',
+                profileRoleLabel: 'Role',
+                profileDeviceLabel: 'Appareil',
+                profileLatestReading: 'Derniere mesure',
                 hero: 'Sol Sain = Récolte Riche', heroSub: 'Surveillance 24h/24 avec capteurs intelligents Rayat',
                 heroEyebrow: 'Rayat Smart Monitoring',
                 heroTitleLine1: 'Agriculture pilotee par les donnees',
-                heroTitleLine2: 'Meilleures decisions. Meilleurs',
-                heroTitleAccent: 'rendements.',
+                heroTitleLine2: 'Meilleures decisions.',
+                heroTitleAccent: 'Meilleurs rendements.',
                 heroPlatformSub: 'Surveillance IoT avancee du sol, du climat, de l\'eau et de l\'energie, dans une seule plateforme.',
                 tryDemo: 'Tester la Démo', discoverServices: 'Nos Services', insurance: 'Assurance Agricole Rayat Smart Monitoring',
                 ourSensors: 'Technologie Rayat', ourReality: 'Notre Réalité',
@@ -1062,7 +1123,7 @@
                 realTimeMonitoring: 'SURVEILLANCE EN TEMPS RÉEL', last7Days: '7 DERNIERS JOURS',
                 privacyPolicy: 'Politique de Confidentialité',
                 regStep: 'Étape', regOf: 'sur', regPersonalData: 'Données personnelles', regAgriType: 'Profil agricole', regFieldLoc: 'Position du champ',
-                regVerifyTitle: 'Créer votre compte Rayat', regFullName: 'Nom et Prénom', regPhone: 'Numéro de téléphone', regEmailOpt: 'Email',
+                regVerifyTitle: 'Créer votre compte Rayat', regFullName: 'Nom et Prénom', regFirstName: 'Prénom', regLastName: 'Nom', regPhone: 'Numéro de téléphone', regEmailOpt: 'Email',
                 regPass: 'Mot de passe', regPassHint: 'Choisissez un mot de passe sécurisé', regOtpLabel: 'Entrez le code OTP reçu sur WhatsApp',
                 regVerifyBtn: 'Vérifier et continuer', regSendOtpBtn: 'Envoyer le code via WhatsApp 📲', regCropTitle: 'Que cultivez-vous ?',
                 regOtherCrop: 'Autre (écrire ici)', regContinue: 'Continuer ➡️', regLocTitle: 'Emplacement du champ',
@@ -1129,11 +1190,28 @@
             },
             ar: {
                 home: 'الرئيسية', services: 'الخدمات', aboutUs: 'من نحن', demo: 'تجريبي', login: 'دخول', logout: 'خروج',
+                profileNav: 'الملف الشخصي',
+                profileTitle: 'ملفك الشخصي في رايات',
+                profileSubtitle: 'قم بإدارة بياناتك الشخصية وراجع الحساسات المخصصة لك في وضع العرض فقط.',
+                profilePersonalInfo: 'بيانات الحساب',
+                profileDescription: 'الوصف',
+                profilePhoto: 'صورة الملف الشخصي',
+                profilePhotoHint: 'حمّل صورة واضحة واحترافية.',
+                profilePhotoRemove: 'إزالة الصورة',
+                profileSave: 'حفظ الملف الشخصي',
+                profileSaved: 'تم تحديث الملف الشخصي بنجاح.',
+                profileSensorsTitle: 'الحساسات المخصصة',
+                profileSensorsHint: 'هذا القسم للعرض فقط.',
+                profileNoSensors: 'لا توجد حساسات مخصصة متاحة حاليا.',
+                profileViewOnly: 'عرض فقط',
+                profileRoleLabel: 'الدور',
+                profileDeviceLabel: 'الجهاز',
+                profileLatestReading: 'آخر قراءة',
                 hero: 'تربة صحية = حصاد غني', heroSub: 'مراقبة 24/7 بأجهزة استشعار رايات الذكية',
                 heroEyebrow: 'Rayat Smart Monitoring',
                 heroTitleLine1: 'زراعة مدفوعة بالبيانات',
-                heroTitleLine2: 'قرارات أفضل. محاصيل',
-                heroTitleAccent: 'أفضل.',
+                heroTitleLine2: 'قرارات أفضل.',
+                heroTitleAccent: 'محاصيل أفضل.',
                 heroPlatformSub: 'مراقبة IoT متقدمة للتربة والمناخ والمياه والطاقة في منصة واحدة.',
                 tryDemo: 'تجريب النسخة', discoverServices: 'خدماتنا', insurance: 'تأمينك الزراعي مع رايات',
                 ourSensors: 'تكنولوجيا رايات', ourReality: 'واقعنا',
@@ -1175,7 +1253,7 @@
                 realTimeMonitoring: 'المراقبة في الوقت الفعلي', last7Days: 'آخر 7 أيام',
                 dataUnavailable: 'البيانات غير متوفرة حاليا', privacyPolicy: 'سياسة الخصوصية', termsOfService: 'شروط الخدمة',
                 regStep: 'خطوة', regOf: 'من', regPersonalData: 'البيانات الشخصية', regAgriType: 'الملف الزراعي', regFieldLoc: 'موقع الحقل',
-                regVerifyTitle: 'أنشئ حسابك في رايات', regFullName: 'الاسم الكامل', regPhone: 'رقم الهاتف', regEmailOpt: 'البريد الإلكتروني',
+                regVerifyTitle: 'أنشئ حسابك في رايات', regFullName: 'الاسم الكامل', regFirstName: 'الاسم', regLastName: 'النسب', regPhone: 'رقم الهاتف', regEmailOpt: 'البريد الإلكتروني',
                 regPass: 'كلمة المرور', regPassHint: 'اختر كلمة مرور آمنة', regOtpLabel: 'أدخل رمز التحقق المستلم عبر واتساب',
                 regVerifyBtn: 'تحقق واستمر', regSendOtpBtn: 'إرسال الرمز عبر واتساب 📲', regCropTitle: 'ماذا تزرع؟',
                 regOtherCrop: 'أخرى (اكتب هنا)', regContinue: 'استمرار ➡️', regLocTitle: 'موقع الحقل',
@@ -1250,8 +1328,8 @@
                 heroSub: 'ⵀⴰⵏⴰ ⴽⵓⵍⵍⵓ',
                 heroEyebrow: 'Rayat Smart Monitoring',
                 heroTitleLine1: 'ⵜⴰⴼⵍⵍⴰⵃⵜ ⵙ ⵉⵙⴼⴽⴰ',
-                heroTitleLine2: 'ⵉⵖⵣⵣⵉⵏ ⵉⴼⵓⵍⴽⵉⵏⵜ. ⴰⵎⴳⵔ',
-                heroTitleAccent: 'ⵉⴼⵓⵍⴽⵉⵏ.',
+                heroTitleLine2: 'ⵉⵖⵣⵣⵉⵏ ⵉⴼⵓⵍⴽⵉⵏⵜ.',
+                heroTitleAccent: 'ⴰⵎⴳⵔ ⵉⴼⵓⵍⴽⵉⵏ.',
                 heroPlatformSub: 'ⵜⴰⴳⴳⴰ IoT i wakal, anzwi, aman d tazmert deg yiwen umkan.',
                 insurance: 'ⵍⴰⵙⵉⵔⵓⵏⵙ ⵏ ⵜⴼⵍⵍⴰⵃⵜ',
                 tryDemo: 'ⴰⵔⴰⵎ ⴷⵉⵎⵓ',
@@ -1406,7 +1484,7 @@
                 privacyPolicy: 'ⵜⴰⵙⵔⵜⵉⵜ ⵏ ⵜⵉⵏⵏⵓⵜⴼⴰ',
                 termsOfService: 'ⵜⵉⴼⴰⴷⵉⵡⵉⵏ ⵏ ⵓⵙⵎⵔⵙ',
                 regStep: 'ⵜⴰⵙⴽⵯⴼⵍⵜ', regOf: 'ⵙⴳ', regPersonalData: 'ⵉⵙⴼⴽⴰ ⵉⵢⵉⵎⴰⵏ', regAgriType: 'ⴰⵙⵉⴳⴳⵯⵍ ⴰⴳⵔⵉⴽⵓⵍ', regFieldLoc: 'ⴰⴷⵖⴰⵔ ⵏ ⵓⴽⴰⵍ',
-                regVerifyTitle: 'ⵙⴽⵔ ⴰⴽⴰⵡⵏⵜ ⵏ ⵔⴰⵢⴰⵜ', regFullName: 'ⵉⵙⵎ ⴰⵎⴳⴳⴰⵔⵓ', regPhone: 'ⵜⵉⵍⵉⴼⵓⵏ', regEmailOpt: 'ⵉⵎⵉⵍ',
+                regVerifyTitle: 'ⵙⴽⵔ ⴰⴽⴰⵡⵏⵜ ⵏ ⵔⴰⵢⴰⵜ', regFullName: 'ⵉⵙⵎ ⴰⵎⴳⴳⴰⵔⵓ', regFirstName: 'ⵉⵙⵎ', regLastName: 'ⵏⵙⴰⴱ', regPhone: 'ⵜⵉⵍⵉⴼⵓⵏ', regEmailOpt: 'ⵉⵎⵉⵍ',
                 regPass: 'ⵜⴰⴳⵓⵔⵉ ⵏ ⵓⴽⵛⵓⵎ', regPassHint: 'ⴼⵔⵏ ⵜⴰⴳⵓⵔⵉ ⵏ ⵓⴽⵛⵓⵎ ⵉⵖⵓⴷⴰⵏ', regOtpLabel: 'ⴰⴽⵛⵓⵎ ⵏ ⵓⴽⵓⴷ OTP ⵙⴳ WhatsApp',
                 regVerifyBtn: 'ⴰⵙⵏⵜⴰⵎ ⴷ ⵓⴼⵔⵔⵓ', regSendOtpBtn: 'ⴰⵣⵏ ⴰⴽⵓⴷ ⵙ WhatsApp 📲', regCropTitle: 'ⵎⴰ ⵜⴳⵔⴷ?',
                 regOtherCrop: 'ⵢⴰⴹⵏ (ⴰⵔⴰ ⴷⴰ)', regContinue: 'ⴰⴼⵔⵔⵓ ➡️', regLocTitle: 'ⴰⴷⵖⴰⵔ ⵏ ⵓⴽⴰⵍ',
@@ -1502,6 +1580,132 @@
                 hour: '2-digit',
                 minute: '2-digit'
             });
+        }
+
+        // RAYAT FIX - user profile
+        function getUserProfileStorageKey(userId = user?.id) {
+            return userId ? `${USER_PROFILE_STORAGE_PREFIX}${userId}` : null;
+        }
+
+        // RAYAT FIX - user profile
+        function readStoredUserProfile(userId = user?.id) {
+            const storageKey = getUserProfileStorageKey(userId);
+            if (!storageKey) return {};
+
+            try {
+                const stored = localStorage.getItem(storageKey);
+                return stored ? JSON.parse(stored) : {};
+            } catch (error) {
+                return {};
+            }
+        }
+
+        // RAYAT FIX - user profile
+        function writeStoredUserProfile(profile, userId = user?.id) {
+            const storageKey = getUserProfileStorageKey(userId);
+            if (!storageKey) return;
+            localStorage.setItem(storageKey, JSON.stringify(profile));
+        }
+
+        // RAYAT FIX - user profile
+        function getMergedUserProfile(userData = user) {
+            const baseUser = userData || {};
+            const storedProfile = readStoredUserProfile(baseUser.id);
+            return {
+                name: storedProfile.name || baseUser.name || '',
+                email: storedProfile.email || baseUser.email || '',
+                phone: storedProfile.phone || '',
+                description: storedProfile.description || '',
+                photo: storedProfile.photo || '',
+                role: baseUser.role || currentRole || 'guest'
+            };
+        }
+
+        // RAYAT FIX - user profile
+        function syncStoredUserProfileIntoSession() {
+            if (!user || !user.id) return;
+            const mergedProfile = getMergedUserProfile(user);
+            user = {
+                ...user,
+                name: mergedProfile.name || user.name,
+                email: mergedProfile.email || user.email,
+                phone: mergedProfile.phone || '',
+                description: mergedProfile.description || '',
+                photo: mergedProfile.photo || ''
+            };
+            localStorage.setItem('rayat_user', JSON.stringify(user));
+        }
+
+        // RAYAT FIX - user profile
+        function getUserInitials(name = '') {
+            return String(name || '')
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((part) => part.charAt(0).toUpperCase())
+                .join('') || 'R';
+        }
+
+        // RAYAT FIX - user profile
+        function getAssignedSensorsForProfile() {
+            return latestAssignedSensors.slice().sort((left, right) => {
+                return String(left.type || '').localeCompare(String(right.type || '')) || String(left.name || '').localeCompare(String(right.name || ''));
+            });
+        }
+
+        // RAYAT FIX - user profile
+        function buildProfileSensorSnapshot(apiData = []) {
+            if (!Array.isArray(apiData)) return [];
+
+            const typeMeta = {
+                energia: { labelKey: 'sensorEnName', icon: '⚡' },
+                acqua: { labelKey: 'sensorWaName', icon: '💧' },
+                terreno: { labelKey: 'sensorSoName', icon: '🌱' },
+                clima: { labelKey: 'sensorClName', icon: '🌤️' }
+            };
+
+            return apiData
+                .filter((reading) => reading && reading.type)
+                .map((reading) => {
+                    const meta = typeMeta[reading.type] || { labelKey: reading.type, icon: '📟' };
+                    const numericValue = parseNumericValue(reading.value);
+                    const formattedValue = Number.isFinite(numericValue)
+                        ? `${formatMetricValue(numericValue)} ${reading.unit || ''}`.trim()
+                        : '--';
+
+                    return {
+                        id: reading.sensor_id || `${reading.type}-${reading.subtype || reading.name || Math.random()}`,
+                        type: reading.type,
+                        subtype: reading.subtype || '',
+                        icon: meta.icon,
+                        typeLabel: t(meta.labelKey),
+                        name: reading.name || t(meta.labelKey),
+                        deviceName: reading.device_name || '--',
+                        value: formattedValue,
+                        timestamp: reading.timestamp ? formatLocalizedTime(new Date(reading.timestamp)) : '--'
+                    };
+                });
+        }
+
+        // RAYAT FIX - user profile
+        function navigateToAccountPage() {
+            if (!isAuthenticated()) {
+                setViewWithTracking('login', { path: '/login' });
+                return;
+            }
+
+            if (!isCustomerRole(currentRole)) {
+                if (isPrivilegedRole(currentRole)) {
+                    window.location.href = `${API_ORIGIN}/admin/`;
+                    return;
+                }
+
+                setView('home', { replace: true, path: '/' });
+                return;
+            }
+
+            setView('profilo');
         }
 
         function formatTemplate(template, tokens = {}) {
@@ -1631,7 +1835,71 @@
         }
 
         function shouldTrackAnalytics(view = currentView) {
-            return view !== 'demo' && !window.location.pathname.startsWith('/admin');
+            return view !== 'profilo' && !window.location.pathname.startsWith('/admin');
+        }
+
+        // RAYAT FIX - email + analytics
+        function getAnalyticsAnonymousId() {
+            try {
+                const existing = localStorage.getItem(ANALYTICS_STORAGE_KEY);
+                if (existing) {
+                    return existing;
+                }
+
+                let generatedId = '';
+                if (window.crypto?.randomUUID) {
+                    generatedId = window.crypto.randomUUID();
+                } else {
+                    generatedId = `rayat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+                }
+
+                localStorage.setItem(ANALYTICS_STORAGE_KEY, generatedId);
+                return generatedId;
+            } catch (error) {
+                return `rayat-${Date.now()}`;
+            }
+        }
+
+        function sendInternalAnalytics(payload = {}) {
+            if (!payload.eventType || !shouldTrackAnalytics(payload.view || currentView)) {
+                return;
+            }
+
+            const body = JSON.stringify({
+                ...payload,
+                anonymousId: getAnalyticsAnonymousId(),
+                pagePath: payload.pagePath || getPathForView(payload.view || currentView),
+                referrer: typeof document !== 'undefined' ? document.referrer || '' : ''
+            });
+
+            try {
+                if (navigator.sendBeacon) {
+                    const beacon = new Blob([body], { type: 'application/json' });
+                    navigator.sendBeacon(CONFIG.ANALYTICS_TRACK_URL, beacon);
+                    return;
+                }
+            } catch (error) {
+                // noop
+            }
+
+            fetch(CONFIG.ANALYTICS_TRACK_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Rayat-Analytics-Id': getAnalyticsAnonymousId()
+                },
+                body,
+                keepalive: true
+            }).catch(() => {});
+        }
+
+        function trackRegistrationStart(view = 'register') {
+            sendInternalAnalytics({
+                eventType: 'registration_start',
+                eventName: 'Registration Started',
+                view,
+                pagePath: getPathForView(view)
+            });
         }
 
         function trackEvent(name) {
@@ -1642,6 +1910,12 @@
             if (typeof window !== 'undefined' && typeof window.plausible === 'function') {
                 window.plausible(name);
             }
+
+            sendInternalAnalytics({
+                eventType: 'button_click',
+                eventName: name,
+                buttonName: name
+            });
         }
 
         function trackPageView(view = currentView) {
@@ -1652,6 +1926,13 @@
             if (typeof window !== 'undefined' && typeof window.plausible === 'function') {
                 window.plausible('pageview', { u: `${window.location.origin}${getPathForView(view)}` });
             }
+
+            sendInternalAnalytics({
+                eventType: 'page_view',
+                eventName: 'Page View',
+                view,
+                pagePath: getPathForView(view)
+            });
         }
 
         function getNavigationEventName(view) {
@@ -2241,6 +2522,7 @@
                     user = data.user;
                     currentRole = user.role || 'client';
                     localStorage.setItem('rayat_user', JSON.stringify(user));
+                    syncStoredUserProfileIntoSession();
                     syncSubscriptionUiState();
                     hideSubscriptionExpiredModal();
 
@@ -2255,6 +2537,7 @@
                         window.location.href = `${API_ORIGIN}/admin/`;
                     } else {
                         setView('demo');
+                        loadSensorData().catch(() => {});
                     }
                 } else {
                     const errorEl = document.getElementById('error');
@@ -2390,6 +2673,27 @@
         }
 
         function setView(view, options = {}) {
+            if (view === 'profilo') {
+                if (!isAuthenticated()) {
+                    setView('login', { replace: true, path: '/login' });
+                    return;
+                }
+
+                if (!isCustomerRole(currentRole)) {
+                    if (isPrivilegedRole(currentRole)) {
+                        window.location.href = `${API_ORIGIN}/admin/`;
+                        return;
+                    }
+
+                    setView('home', { replace: true, path: '/' });
+                    return;
+                }
+            }
+
+            if (view !== 'profilo') {
+                userProfileNotice = '';
+            }
+
             const nextPath = options.path || getPathForView(view);
             isMobileMenuOpen = false;
             syncBodyScrollLock();
@@ -2405,6 +2709,9 @@
             }
             render();
             trackPageView(view);
+            if (view === 'register') {
+                trackRegistrationStart(view);
+            }
             window.scrollTo({ top: 0, behavior: 'instant' });
 
             // Re-initialize maps for specific views
@@ -2520,21 +2827,23 @@
         }
 
         async function refreshData() {
-            const btn = document.getElementById('refresh-btn-icon');
-            if (btn) btn.classList.add('animate-spin-once');
+            // RAYAT FIX - anima tutte le icone refresh condivise senza toccare la logica dati
+            const refreshIcons = Array.from(document.querySelectorAll('.rayat-refresh-icon'));
+            refreshIcons.forEach((icon) => icon.classList.add('animate-spin-once'));
 
             await loadSensorData();
             render();
 
-            if (btn) {
+            if (refreshIcons.length) {
                 setTimeout(() => {
-                    btn.classList.remove('animate-spin-once');
+                    refreshIcons.forEach((icon) => icon.classList.remove('animate-spin-once'));
                 }, 800);
             }
         }
 
         function updateSensorData(apiData, fromCache = false) {
             if (!apiData || !Array.isArray(apiData)) return;
+            latestAssignedSensors = buildProfileSensorSnapshot(apiData);
 
             const typeMap = {
                 'energia_consumption': { s: 'energia', val: true },
@@ -2791,9 +3100,26 @@
                 { view: 'contatti', label: t('contactTitle'), tracked: true }
             ];
             const mobileLinks = [...primaryLinks];
+            const canAccessProfile = isAuthenticated() && isCustomerRole(currentRole);
+            const mergedProfile = canAccessProfile ? getMergedUserProfile() : null;
+            const accountLabel = canAccessProfile ? t('profileNav') : t('login');
             const authButton = isLoggedIn || user
                 ? `<button onclick="logout()" class="bg-red-500 hover:bg-red-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('logout')}</button>`
                 : `<button onclick="setViewWithTracking('login')" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('login')}</button>`;
+            const accountButton = `
+                <button onclick="navigateToAccountPage()" class="rayat-account-trigger ${canAccessProfile ? 'rayat-account-trigger--active' : ''}" aria-label="${escapeHtml(accountLabel)}" title="${escapeHtml(accountLabel)}">
+                    ${canAccessProfile ? `
+                        <span class="rayat-account-trigger__initials">${escapeHtml(getUserInitials(mergedProfile?.name || user?.name || 'Rayat'))}</span>
+                    ` : `
+                        <span class="rayat-account-trigger__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21a8 8 0 0 0-16 0"></path>
+                                <circle cx="12" cy="8" r="4"></circle>
+                            </svg>
+                        </span>
+                    `}
+                </button>
+            `;
 
             return `
                 <div id="offline-banner"></div>
@@ -2834,6 +3160,7 @@
                                             </button>`).join('')}
                                     </div>
                                 </div>
+                                ${accountButton}
                                 <div class="rayat-desktop-auth">${authButton}</div>
                                 <button id="mobile-menu-button" type="button" class="rayat-mobile-toggle" aria-label="${t('navMenu')}" aria-expanded="${isMobileMenuOpen}" onclick="toggleMobileMenu()">
                                     ${isMobileMenuOpen ? '✕' : '☰'}
@@ -2859,6 +3186,11 @@
                                     ${link.label}
                                 </button>
                             `).join('')}
+                            ${canAccessProfile ? `
+                                <button onclick="navigateFromMobileMenu('profilo')" class="text-left w-full px-4 py-4 rounded-2xl bg-slate-50 hover:bg-green-50 font-black uppercase tracking-widest text-xs text-slate-800 transition">
+                                    ${t('profileNav')}
+                                </button>
+                            ` : ''}
                         </nav>
                         <div class="mt-6 pt-6 border-t border-slate-200">
                             ${isLoggedIn || user
@@ -2880,12 +3212,13 @@
                     <div class="container mx-auto px-4">
                         <div class="rayat-hero-shell">
                             <div class="rayat-hero-kicker">${t('heroEyebrow')}</div>
+                            <!-- RAYAT FIX - forza il titolo hero su tre righe controllate -->
                             <h1 class="rayat-hero-title rayat-fade-up">
                                 <span class="rayat-hero-title-line rayat-hero-title-line--primary">${t('heroTitleLine1')}</span>
-                                <span class="rayat-hero-title-line rayat-hero-title-line--secondary">${t('heroTitleLine2')} <span class="rayat-hero-accent">${t('heroTitleAccent')}</span></span>
+                                <span class="rayat-hero-title-line rayat-hero-title-line--secondary">${t('heroTitleLine2')}</span>
+                                <span class="rayat-hero-title-line rayat-hero-title-line--accent rayat-hero-accent">${t('heroTitleAccent')}</span>
                             </h1>
                             <p class="rayat-hero-subtitle rayat-fade-in">${t('heroPlatformSub')}</p>
-                            <p class="text-base md:text-lg mb-8 text-green-100 font-semibold">✅ ${t('insurance')}</p>
                             <div class="rayat-mobile-actions flex gap-4 justify-center">
                                 <button onclick="setViewWithTracking('demo')" class="bg-orange-500 hover:bg-orange-600 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-orange-950/20">
                                 ${t('tryDemo')}
@@ -3118,27 +3451,31 @@
                         <div class="p-6 md:p-8 space-y-8">
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-semibold mb-2">${t('regFullName')} *</label>
-                                    <input type="text" id="reg-name" value="${registrationData.name}" class="w-full px-4 py-3 border rounded-xl" placeholder="Es. Ahmed El Mansouri">
+                                    <label class="block text-sm font-semibold mb-2">${t('regFirstName')} *</label>
+                                    <input type="text" id="reg-name" value="${escapeHtml(registrationData.name)}" class="w-full px-4 py-3 border rounded-xl" placeholder="Ahmed">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold mb-2">${t('regLastName')} *</label>
+                                    <input type="text" id="reg-last-name" value="${escapeHtml(registrationData.last_name)}" class="w-full px-4 py-3 border rounded-xl" placeholder="El Mansouri">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-semibold mb-2">${t('regPhone')} *</label>
-                                    <input type="tel" id="reg-phone" value="${registrationData.phone}" class="w-full px-4 py-3 border rounded-xl" placeholder="+212 6XX XXX XXX">
+                                    <input type="tel" id="reg-phone" value="${escapeHtml(registrationData.phone)}" class="w-full px-4 py-3 border rounded-xl" placeholder="+212 6XX XXX XXX">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-semibold mb-2">${t('regEmailOpt')} *</label>
-                                    <input type="email" id="reg-email" value="${registrationData.email}" class="w-full px-4 py-3 border rounded-xl" placeholder="email@esempio.com">
+                                    <input type="email" id="reg-email" value="${escapeHtml(registrationData.email)}" class="w-full px-4 py-3 border rounded-xl" placeholder="email@esempio.com">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-semibold mb-2">${t('regPass')} *</label>
-                                    <input type="password" id="reg-password" value="${registrationData.password}" class="w-full px-4 py-3 border rounded-xl" placeholder="${t('regPassHint')}">
+                                    <input type="password" id="reg-password" value="${escapeHtml(registrationData.password)}" class="w-full px-4 py-3 border rounded-xl" placeholder="${t('regPassHint')}">
                                 </div>
                                 <div class="md:col-span-2">
                                     <label class="block text-sm font-semibold mb-2">${t('regLocationRegion')} *</label>
                                     <input
                                         type="text"
                                         id="reg-location"
-                                        value="${registrationData.location_name}"
+                                        value="${escapeHtml(registrationData.location_name)}"
                                         oninput="registrationData.location_name = this.value"
                                         class="w-full px-4 py-3 border rounded-xl"
                                         placeholder="${t('regLocationRegionHint')}"
@@ -3168,7 +3505,7 @@
                                     <input
                                         type="text"
                                         id="custom-crop"
-                                        value="${customCropValue}"
+                                        value="${escapeHtml(customCropValue)}"
                                         oninput="registrationData.crop_type = this.value"
                                         class="w-full px-4 py-3 border rounded-xl"
                                         placeholder="Zafferano, Erba medica..."
@@ -3205,7 +3542,36 @@
             `;
         }
 
+        // RAYAT FIX - registration/admin
+        function syncRegistrationFormState() {
+            const nameInput = document.getElementById('reg-name');
+            const lastNameInput = document.getElementById('reg-last-name');
+            const phoneInput = document.getElementById('reg-phone');
+            const emailInput = document.getElementById('reg-email');
+            const passwordInput = document.getElementById('reg-password');
+            const locationInput = document.getElementById('reg-location');
+            const customCropInput = document.getElementById('custom-crop');
+
+            if (nameInput) registrationData.name = nameInput.value.trim();
+            if (lastNameInput) registrationData.last_name = lastNameInput.value.trim();
+            if (phoneInput) registrationData.phone = phoneInput.value.trim();
+            if (emailInput) registrationData.email = emailInput.value.trim();
+            if (passwordInput) registrationData.password = passwordInput.value;
+            if (locationInput) registrationData.location_name = locationInput.value.trim();
+
+            if (customCropInput) {
+                const customCrop = customCropInput.value.trim();
+                if (customCrop) {
+                    registrationData.crop_type = customCrop;
+                } else if (!Object.values(CROP_CATEGORIES).flat().includes(registrationData.crop_type)) {
+                    registrationData.crop_type = '';
+                }
+            }
+        }
+
         function selectCrop(crop) {
+            // RAYAT FIX - registration/admin
+            syncRegistrationFormState();
             registrationData.crop_type = crop;
             render();
         }
@@ -3279,14 +3645,11 @@
         }
 
         async function completeRegistration() {
-            registrationData.name = document.getElementById('reg-name')?.value.trim() || '';
-            registrationData.phone = document.getElementById('reg-phone')?.value.trim() || '';
-            registrationData.email = document.getElementById('reg-email')?.value.trim() || '';
-            registrationData.password = document.getElementById('reg-password')?.value || '';
-            registrationData.location_name = document.getElementById('reg-location')?.value.trim() || '';
+            // RAYAT FIX - registration/admin
+            syncRegistrationFormState();
             registrationData.location_address = registrationData.location_address || registrationData.location_name;
 
-            if (!registrationData.name || !registrationData.phone || !registrationData.email || !registrationData.password || !registrationData.location_name) {
+            if (!registrationData.name || !registrationData.last_name || !registrationData.phone || !registrationData.email || !registrationData.password || !registrationData.location_name) {
                 alert(t('regRequiredFields'));
                 return;
             }
@@ -3294,7 +3657,10 @@
             try {
                 const res = await fetch(`${CONFIG.API_BASE_URL}/auth/register-full`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Rayat-Analytics-Id': getAnalyticsAnonymousId()
+                    },
                     body: JSON.stringify(registrationData)
                 });
                 const data = await res.json();
@@ -3304,7 +3670,9 @@
                     localStorage.setItem('rayat_token', authToken);
                     localStorage.setItem('rayat_user', JSON.stringify(user));
                     currentRole = data.user.role || 'client';
+                    syncStoredUserProfileIntoSession();
                     setView('demo');
+                    loadSensorData().catch(() => {});
                     alert('Benvenuto in Rayat! ✅');
                 } else {
                     throw new Error(data.error);
@@ -3564,12 +3932,15 @@
                                 </div>
 
                                 <!-- Founder Section -->
-                                <div class="bg-gradient-to-r from-orange-400 to-orange-500 rounded-3xl p-8 md:p-12 text-white shadow-xl relative overflow-hidden">
-                                     <div class="relative z-10">
+                                <!-- RAYAT FIX - rende il visual mani completamente visibile su mobile e desktop -->
+                                <div class="bg-gradient-to-r from-orange-400 to-orange-500 rounded-3xl p-8 md:p-12 text-white shadow-xl relative overflow-hidden rayat-founder-card">
+                                     <div class="relative z-10 rayat-founder-copy">
                                         <h3 class="text-3xl font-black mb-4 uppercase tracking-tighter">${t('founderSection')}</h3>
                                         <p class="text-xl font-medium opacity-90 max-w-2xl">${t('founderText')}</p>
                                      </div>
-                                     <span class="absolute -right-10 -bottom-10 text-9xl opacity-20 transform rotate-12">🤝</span>
+                                     <div class="rayat-founder-visual" aria-hidden="true">
+                                        <span class="rayat-founder-visual-emoji">🤝</span>
+                                     </div>
                                 </div>
                             </div>
                         </div>
@@ -3704,6 +4075,226 @@
                 // so we keep the zoom 6.
                 scheduleMapInvalidate(map);
             }, 100);
+        }
+
+        // RAYAT FIX - user profile
+        function saveUserProfile(event) {
+            event.preventDefault();
+
+            if (!isAuthenticated() || !isCustomerRole(currentRole)) {
+                navigateToAccountPage();
+                return;
+            }
+
+            const currentProfile = getMergedUserProfile();
+            const nextProfile = {
+                ...currentProfile,
+                name: document.getElementById('profile-name')?.value.trim() || currentProfile.name,
+                email: document.getElementById('profile-email')?.value.trim().toLowerCase() || currentProfile.email,
+                phone: document.getElementById('profile-phone')?.value.trim() || '',
+                description: document.getElementById('profile-description')?.value.trim() || '',
+                photo: currentProfile.photo || ''
+            };
+
+            writeStoredUserProfile(nextProfile);
+            syncStoredUserProfileIntoSession();
+            userProfileNotice = t('profileSaved');
+            render();
+        }
+
+        // RAYAT FIX - user profile
+        function handleUserProfilePhotoChange(event) {
+            if (!isAuthenticated() || !isCustomerRole(currentRole)) return;
+
+            const file = event.target.files && event.target.files[0];
+            if (!file || !file.type.startsWith('image/')) return;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                const nextProfile = {
+                    ...getMergedUserProfile(),
+                    photo: String(reader.result || '')
+                };
+                writeStoredUserProfile(nextProfile);
+                syncStoredUserProfileIntoSession();
+                userProfileNotice = t('profileSaved');
+                render();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // RAYAT FIX - user profile
+        function removeUserProfilePhoto() {
+            if (!isAuthenticated() || !isCustomerRole(currentRole)) return;
+
+            const nextProfile = {
+                ...getMergedUserProfile(),
+                photo: ''
+            };
+            writeStoredUserProfile(nextProfile);
+            syncStoredUserProfileIntoSession();
+            userProfileNotice = t('profileSaved');
+            render();
+        }
+
+        // RAYAT FIX - user profile
+        function renderUserProfilePage() {
+            if (!isAuthenticated()) {
+                setTimeout(() => setView('login', { replace: true, path: '/login' }), 0);
+                return '';
+            }
+
+            if (!isCustomerRole(currentRole)) {
+                setTimeout(() => setView('home', { replace: true, path: '/' }), 0);
+                return '';
+            }
+
+            const profile = getMergedUserProfile();
+            const assignedSensors = getAssignedSensorsForProfile();
+            const roleLabel = t('profileRoleLabel');
+            const avatarMarkup = profile.photo
+                ? `<img src="${escapeHtml(profile.photo)}" alt="${escapeHtml(profile.name || 'Rayat user')}" class="rayat-profile-avatar-image">`
+                : `<div class="rayat-profile-avatar-fallback">${escapeHtml(getUserInitials(profile.name))}</div>`;
+
+            return `
+                ${renderHeader(true)}
+                <section class="py-16 bg-gray-50 min-h-screen">
+                    <div class="container mx-auto px-4 max-w-6xl">
+                        <div class="mb-8 md:mb-10">
+                            <p class="text-[11px] font-black uppercase tracking-[0.28em] text-green-700 mb-3">${t('profileNav')}</p>
+                            <h2 class="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter mb-4">${t('profileTitle')}</h2>
+                            <p class="text-lg text-slate-600 max-w-3xl">${t('profileSubtitle')}</p>
+                        </div>
+
+                        ${userProfileNotice ? `
+                            <div class="mb-6 rounded-3xl border border-green-200 bg-green-50 text-green-800 px-6 py-4 font-bold">
+                                ${escapeHtml(userProfileNotice)}
+                            </div>
+                        ` : ''}
+
+                        <div class="rayat-profile-layout">
+                            <div class="rayat-profile-card">
+                                <div class="rayat-profile-hero">
+                                    <div class="rayat-profile-avatar">
+                                        ${avatarMarkup}
+                                    </div>
+                                    <div class="min-w-0">
+                                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-50 text-green-700 text-[11px] font-black uppercase tracking-[0.18em]">
+                                            <span>•</span>
+                                            <span>${escapeHtml(roleLabel)}: ${escapeHtml(profile.role)}</span>
+                                        </div>
+                                        <h3 class="text-3xl font-black text-slate-900 tracking-tight mt-4 break-words">${escapeHtml(profile.name || user.name || 'Rayat')}</h3>
+                                        <p class="text-slate-500 font-medium break-all mt-2">${escapeHtml(profile.email || user.email || '')}</p>
+                                    </div>
+                                </div>
+
+                                <form onsubmit="saveUserProfile(event)" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                                    <div>
+                                        <label class="block text-xs font-black text-slate-500 uppercase tracking-[0.16em] mb-2">${t('regFullName')}</label>
+                                        <input id="profile-name" type="text" value="${escapeHtml(profile.name)}" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-green-500 focus:bg-white transition">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-black text-slate-500 uppercase tracking-[0.16em] mb-2">${t('formEmail')}</label>
+                                        <input id="profile-email" type="email" value="${escapeHtml(profile.email)}" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-green-500 focus:bg-white transition">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-black text-slate-500 uppercase tracking-[0.16em] mb-2">${t('regPhone')}</label>
+                                        <input id="profile-phone" type="tel" value="${escapeHtml(profile.phone)}" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-green-500 focus:bg-white transition" placeholder="+212 ...">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-black text-slate-500 uppercase tracking-[0.16em] mb-2">${t('profilePhoto')}</label>
+                                        <div class="flex flex-wrap items-center gap-3">
+                                            <label class="inline-flex items-center justify-center px-5 py-3 rounded-2xl bg-slate-900 text-white font-black text-xs uppercase tracking-[0.16em] cursor-pointer hover:bg-slate-800 transition">
+                                                <span>${t('profilePhoto')}</span>
+                                                <input type="file" accept="image/*" class="hidden" onchange="handleUserProfilePhotoChange(event)">
+                                            </label>
+                                            ${profile.photo ? `<button type="button" onclick="removeUserProfilePhoto()" class="inline-flex items-center justify-center px-4 py-3 rounded-2xl bg-white border border-slate-200 text-slate-700 font-black text-xs uppercase tracking-[0.16em] hover:border-red-200 hover:text-red-600 transition">${t('profilePhotoRemove')}</button>` : ''}
+                                        </div>
+                                        <p class="text-sm text-slate-500 mt-3">${t('profilePhotoHint')}</p>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-xs font-black text-slate-500 uppercase tracking-[0.16em] mb-2">${t('profileDescription')}</label>
+                                        <textarea id="profile-description" rows="4" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-green-500 focus:bg-white transition resize-none" placeholder="${escapeHtml(t('profileDescription'))}">${escapeHtml(profile.description)}</textarea>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <button type="submit" class="inline-flex items-center justify-center min-h-[52px] px-8 py-4 rounded-2xl bg-green-700 hover:bg-green-800 text-white font-black uppercase tracking-[0.16em] shadow-xl transition">
+                                            ${t('profileSave')}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <aside class="rayat-profile-card rayat-profile-sidebar">
+                                <div>
+                                    <p class="text-xs font-black text-slate-500 uppercase tracking-[0.16em] mb-3">${t('profilePersonalInfo')}</p>
+                                    <div class="space-y-4">
+                                        <div class="rayat-profile-meta-row">
+                                            <span>${escapeHtml(roleLabel)}</span>
+                                            <strong>${escapeHtml(profile.role)}</strong>
+                                        </div>
+                                        <div class="rayat-profile-meta-row">
+                                            <span>${escapeHtml(t('profileSensorsTitle'))}</span>
+                                            <strong>${assignedSensors.length}</strong>
+                                        </div>
+                                        <div class="rayat-profile-meta-row">
+                                            <span>${escapeHtml(t('profileViewOnly'))}</span>
+                                            <strong>${escapeHtml(t('profileSensorsHint'))}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </aside>
+                        </div>
+
+                        <div class="rayat-profile-card mt-8">
+                            <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
+                                <div>
+                                    <h3 class="text-3xl font-black text-slate-900 tracking-tight">${t('profileSensorsTitle')}</h3>
+                                    <p class="text-slate-500 mt-2">${t('profileSensorsHint')}</p>
+                                </div>
+                                <div class="inline-flex items-center justify-center px-4 py-2 rounded-full bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-[0.16em]">
+                                    ${t('profileViewOnly')}
+                                </div>
+                            </div>
+
+                            ${assignedSensors.length ? `
+                                <div class="rayat-profile-sensors-grid">
+                                    ${assignedSensors.map((sensor) => `
+                                        <div class="rayat-profile-sensor-card">
+                                            <div class="flex items-start justify-between gap-4">
+                                                <div class="min-w-0">
+                                                    <div class="text-3xl mb-4">${sensor.icon}</div>
+                                                    <h4 class="text-xl font-black text-slate-900 tracking-tight break-words">${escapeHtml(sensor.name)}</h4>
+                                                    <p class="text-sm text-slate-500 mt-2">${escapeHtml(sensor.typeLabel)}</p>
+                                                </div>
+                                                <span class="inline-flex items-center justify-center px-3 py-1 rounded-full bg-green-50 text-green-700 font-black text-[11px] uppercase tracking-[0.14em]">${t('profileViewOnly')}</span>
+                                            </div>
+                                            <div class="space-y-3 mt-6">
+                                                <div class="rayat-profile-meta-row">
+                                                    <span>${escapeHtml(t('profileDeviceLabel'))}</span>
+                                                    <strong>${escapeHtml(sensor.deviceName)}</strong>
+                                                </div>
+                                                <div class="rayat-profile-meta-row">
+                                                    <span>${escapeHtml(t('profileLatestReading'))}</span>
+                                                    <strong>${escapeHtml(sensor.value)}</strong>
+                                                </div>
+                                                <div class="rayat-profile-meta-row">
+                                                    <span>${escapeHtml(t('lastRefreshed'))}</span>
+                                                    <strong>${escapeHtml(sensor.timestamp)}</strong>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : `
+                                <div class="rounded-[2rem] border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-slate-500 font-medium">
+                                    ${t('profileNoSensors')}
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                </section>
+                ${renderFooter()}
+            `;
         }
 
         function renderPrivacyPage() {
@@ -3903,6 +4494,18 @@
         function renderDemoPage() {
             const current = sensorData[selectedSensor];
 
+            // RAYAT FIX - blocco ultimo aggiornamento coerente per tutte le sezioni sensori
+            const renderLastUpdateBlock = () => `
+                <div class="rayat-last-update" aria-live="polite">
+                    <div class="rayat-last-update-copy">
+                        <span class="rayat-last-update-label">${String(t('lastRefreshed')).toUpperCase()}:</span>
+                        <span class="rayat-last-update-time">${formatLocalizedTime(lastRefreshed)}</span>
+                    </div>
+                    <button type="button" onclick="refreshData()" class="rayat-last-update-action" aria-label="${t('lastRefreshed')}">
+                        <span class="rayat-refresh-icon">🔄</span>
+                    </button>
+                </div>
+            `;
 
 
             const render7in1 = () => {
@@ -3916,6 +4519,7 @@
                     </div>
                     <p style="font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.25em;margin-top:0;">${t('realTimeMonitoring')}</p>
                 </div>
+                ${renderLastUpdateBlock()}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
@@ -3934,6 +4538,7 @@
                     </div>
                     <p class="text-gray-400 font-bold uppercase tracking-widest text-xs mt-0">${t('realTimeMonitoring')}</p>
                 </div>
+                ${renderLastUpdateBlock()}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
@@ -3960,6 +4565,7 @@
                     </div>
                     <p class="text-gray-400 font-bold uppercase tracking-widest text-xs mt-0">${t('realTimeMonitoring')}</p>
                 </div>
+                ${renderLastUpdateBlock()}
                 <div class="rayat-water-compact mb-12">
                     <div>
                         <label class="block text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">${t('hectaresLabel')}</label>
@@ -4037,6 +4643,7 @@
                         ${/* Demo Mode: Error overlay removed */ ''}
                         <div class="relative z-10">
                             ${selectedSensor === 'acqua' ? renderWater() : (selectedSensor === 'terreno' ? render7in1() : (selectedSensor === 'clima' ? renderClimate() : `
+                                    ${renderLastUpdateBlock()}
                                     <div class="flex flex-col md:flex-row items-center justify-between mb-16">
                                         <div class="flex items-center gap-10">
                                             <div class="text-[10rem] transform -rotate-12 transition-transform hover:rotate-0 duration-700">${current.icon}</div>
@@ -4092,7 +4699,7 @@
                                             <p class="text-[11px] font-bold text-gray-600 leading-tight">${formatLocalizedTime(lastRefreshed)}</p>
                                         </div>
                                         <button onclick="refreshData()" class="p-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition border border-gray-100 group">
-                                            <span class="text-sm block" id="refresh-btn-icon-small">🔄</span>
+                                            <span class="text-sm block rayat-refresh-icon">🔄</span>
                                         </button>
                                     </div>
                             </div>
@@ -4254,7 +4861,8 @@
 
         let registrationStep = 1;
         let registrationData = {
-            name: '', phone: '', email: '', password: '',
+            // RAYAT FIX - registration/admin
+            name: '', last_name: '', phone: '', email: '', password: '',
             crop_type: '', latitude: null, longitude: null, location_name: '', location_address: ''
         };
 
@@ -4274,6 +4882,7 @@
                 'home': renderHomePage,
                 'chi-siamo': renderChiSiamoPage,
                 'login': renderLoginPage,
+                'profilo': renderUserProfilePage,
                 'servizi': renderServiziPage,
                 'demo': renderDemoPage,
                 'register': renderRegisterPage,
@@ -4305,7 +4914,18 @@
         // Initialize
         restorePublicSession();
         currentView = getViewFromPath(window.location.pathname);
+        if (currentView === 'profilo' && !isAuthenticated()) {
+            currentView = 'login';
+            history.replaceState({ view: 'login' }, '', '/login');
+        } else if (currentView === 'profilo' && !isCustomerRole(currentRole)) {
+            currentView = 'home';
+            history.replaceState({ view: 'home' }, '', '/');
+        }
         render();
+        trackPageView(currentView);
+        if (currentView === 'register') {
+            trackRegistrationStart(currentView);
+        }
 
         // Auto-refresh ogni 5 minuti (ottimizzato per sensori BGT)
         if (authToken && isCustomerRole(currentRole)) {

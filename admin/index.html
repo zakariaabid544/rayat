@@ -111,6 +111,15 @@
             transition: transform 0.2s, box-shadow 0.2s;
         }
         .stat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+        .stat-card--interactive {
+            width: 100%;
+            text-align: left;
+            cursor: pointer;
+        }
+        .stat-card--interactive:focus-visible {
+            outline: 3px solid rgba(4, 120, 87, 0.28);
+            outline-offset: 2px;
+        }
 
         .data-table {
             width: 100%;
@@ -257,6 +266,22 @@
             padding: 1rem;
         }
 
+        #sidebar-toggle,
+        #sidebar-backdrop {
+            display: none;
+        }
+
+        .dashboard-preview-table th,
+        .dashboard-preview-table td {
+            white-space: nowrap;
+        }
+
+        .admin-action-row {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
         html[dir="rtl"] body { direction: rtl; }
         html[dir="rtl"] .data-table th,
         html[dir="rtl"] .data-table td,
@@ -269,9 +294,78 @@
         }
 
         @media (max-width: 768px) {
-            #sidebar { transform: translateX(-100%); transition: transform 0.3s; }
+            body { overflow-x: hidden; }
+            #sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s;
+                width: min(86vw, 320px);
+                box-shadow: 0 18px 40px rgba(0,0,0,0.18);
+            }
             #sidebar.open { transform: translateX(0); }
-            #main-content { margin-left: 0; }
+            #sidebar-backdrop {
+                display: block;
+                position: fixed;
+                inset: 0;
+                background: rgba(6, 78, 59, 0.3);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.2s;
+                z-index: 35;
+            }
+            #sidebar-backdrop.open {
+                opacity: 1;
+                pointer-events: auto;
+            }
+            #main-content { margin-left: 0; min-width: 0; }
+            #topbar {
+                padding: 0.8rem 1rem;
+                height: auto;
+                gap: 0.8rem;
+                flex-wrap: wrap;
+            }
+            #topbar > div:first-child {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+            }
+            #topbar > div:last-child {
+                width: 100%;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+            #sidebar-toggle {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 44px;
+                height: 44px;
+                border-radius: 0.85rem;
+                border: 1px solid #d1d5db;
+                background: #ffffff;
+                color: #064e3b;
+                font-size: 1.25rem;
+                font-weight: 800;
+                cursor: pointer;
+            }
+            #page-content { padding: 1rem; }
+            #stats-grid { grid-template-columns: 1fr !important; }
+            .stat-card { padding: 1rem 1rem 1.1rem; }
+            .page-title { font-size: 1.2rem; }
+            .btn,
+            .btn-sm {
+                min-height: 46px;
+                padding: 0.7rem 1rem;
+                font-size: 0.82rem;
+                justify-content: center;
+            }
+            .data-table {
+                min-width: 720px;
+                font-size: 0.84rem;
+            }
+            .data-table th { font-size: 0.71rem; }
+            .data-table td { font-size: 0.84rem; }
             .detail-grid { grid-template-columns: 1fr; }
         }
     </style>
@@ -323,6 +417,7 @@
 
 <!-- ═══════════════════════════════ APP ═════════════════════════════════════ -->
 <div id="app-screen" class="hidden">
+    <div id="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
 
     <!-- Sidebar -->
     <nav id="sidebar">
@@ -351,6 +446,12 @@
             <a class="nav-item" data-tab="sensors" onclick="showTab('sensors')">
                 <span class="nav-icon">📡</span> <span id="nav-sensors-label">Sensori IoT</span>
             </a>
+            <a class="nav-item" data-tab="devices" onclick="showTab('devices')">
+                <span class="nav-icon">📱</span> <span id="nav-devices-label">Dispositivi</span>
+            </a>
+            <a class="nav-item super-admin-only hidden" data-tab="analytics" onclick="showTab('analytics')">
+                <span class="nav-icon">📈</span> <span id="nav-analytics-label">Analytics</span>
+            </a>
             <a class="nav-item super-admin-only hidden" data-tab="users" onclick="showTab('users')">
                 <span class="nav-icon">🔑</span> <span id="nav-users-label">Utenti Admin</span>
             </a>
@@ -376,6 +477,7 @@
         <!-- Topbar -->
         <div id="topbar">
             <div>
+                <button id="sidebar-toggle" type="button" onclick="toggleSidebar()" aria-label="Apri menu">☰</button>
                 <span class="font-black text-gray-800 text-lg" id="topbar-title">Dashboard</span>
             </div>
             <div class="flex items-center gap-3">
@@ -401,26 +503,26 @@
 
                 <!-- Stat cards -->
                 <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6" id="stats-grid">
-                    <div class="stat-card">
+                    <button type="button" class="stat-card stat-card--interactive" onclick="showTab('clients')">
                         <div class="text-2xl mb-1">👤</div>
                         <div class="text-2xl font-black text-gray-800" id="stat-clients">—</div>
                         <div class="text-xs text-gray-400 font-bold uppercase tracking-wide mt-1">Clienti attivi</div>
-                    </div>
-                    <div class="stat-card">
+                    </button>
+                    <button type="button" class="stat-card stat-card--interactive" onclick="showTab('devices')">
                         <div class="text-2xl mb-1">📱</div>
                         <div class="text-2xl font-black text-gray-800" id="stat-devices">—</div>
                         <div class="text-xs text-gray-400 font-bold uppercase tracking-wide mt-1">Dispositivi totali</div>
-                    </div>
+                    </button>
                     <div class="stat-card">
                         <div class="text-2xl mb-1">🟢</div>
                         <div class="text-2xl font-black text-green-700" id="stat-online">—</div>
                         <div class="text-xs text-gray-400 font-bold uppercase tracking-wide mt-1">Online (≤10 min)</div>
                     </div>
-                    <div class="stat-card">
+                    <button type="button" class="stat-card stat-card--interactive" onclick="showTab('sensors')">
                         <div class="text-2xl mb-1">📡</div>
                         <div class="text-2xl font-black text-gray-800" id="stat-sensors">—</div>
                         <div class="text-xs text-gray-400 font-bold uppercase tracking-wide mt-1">Sensori attivi</div>
-                    </div>
+                    </button>
                     <div class="stat-card">
                         <div class="text-2xl mb-1">🔑</div>
                         <div class="text-2xl font-black text-gray-800" id="stat-admins">—</div>
@@ -441,18 +543,18 @@
                 <!-- Quick sensor preview -->
                 <div class="section-card">
                     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                        <span class="font-black text-gray-700">Sensori Recenti</span>
-                        <button onclick="showTab('sensors')" class="btn btn-outline btn-sm">Vedi tutti →</button>
+                        <span class="font-black text-gray-700" id="dash-sensors-title">Sensori Recenti</span>
+                        <button id="dash-sensors-link" onclick="showTab('sensors')" class="btn btn-outline btn-sm">Vedi tutti →</button>
                     </div>
                     <div id="dash-sensors-preview" class="p-4 text-sm text-gray-400">Caricamento…</div>
                 </div>
 
-                <div class="section-card mt-6">
+                <div class="section-card mt-6 super-admin-only hidden">
                     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                        <span class="font-black text-gray-700">Nuovi Clienti</span>
-                        <button onclick="showTab('registrations')" class="btn btn-outline btn-sm">Apri sezione →</button>
+                        <span class="font-black text-gray-700" id="dash-clients-title">Clienti Recenti</span>
+                        <button id="dash-clients-link" onclick="showTab('clients')" class="btn btn-outline btn-sm">Apri clienti →</button>
                     </div>
-                    <div id="dash-registrations-preview" class="p-4 text-sm text-gray-400">Caricamento…</div>
+                    <div id="dash-clients-preview" class="p-4 text-sm text-gray-400">Caricamento…</div>
                 </div>
             </div>
 
@@ -475,18 +577,19 @@
                     <table class="data-table" id="clients-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Cliente</th>
-                                <th>Contatto</th>
-                                <th>Coltura</th>
-                                <th>Zona</th>
-                                <th>Kit</th>
-                                <th>Stato</th>
-                                <th>Azioni</th>
+                                <th id="clients-th-id">ID</th>
+                                <th id="clients-th-first-name">Nome</th>
+                                <th id="clients-th-last-name">Cognome</th>
+                                <th id="clients-th-contact">Contatto</th>
+                                <th id="clients-th-crop">Coltura</th>
+                                <th id="clients-th-date">Data</th>
+                                <th id="clients-th-kit">Kit</th>
+                                <th id="clients-th-status">Stato</th>
+                                <th id="clients-th-actions">Azioni</th>
                             </tr>
                         </thead>
                         <tbody id="clients-body">
-                            <tr><td colspan="8" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                            <tr><td colspan="9" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -549,6 +652,44 @@
                 </div>
             </div>
 
+            <!-- ── DEVICES ─────────────────────────────────────────────── -->
+            <div id="tab-devices" class="hidden fade-in">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                    <div>
+                        <div class="page-title mb-0" id="devices-page-title">Dispositivi</div>
+                        <p class="text-sm text-gray-400" id="devices-page-subtitle">Panoramica dei dispositivi assegnati ai clienti</p>
+                    </div>
+                    <button onclick="loadDeviceRegistry(1)" class="btn btn-outline" id="devices-refresh-btn">↻ Aggiorna</button>
+                </div>
+
+                <div class="section-card overflow-x-auto">
+                    <table class="data-table" id="devices-table">
+                        <thead>
+                            <tr>
+                                <th id="devices-th-serial">N° Seriale</th>
+                                <th id="devices-th-client">Cliente</th>
+                                <th id="devices-th-type">Tipo</th>
+                                <th id="devices-th-sensors">Sensori</th>
+                                <th id="devices-th-last-seen">Ultima attività</th>
+                                <th id="devices-th-created">Creato il</th>
+                                <th id="devices-th-actions">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="devices-body">
+                            <tr><td colspan="7" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex items-center justify-between gap-3 mt-4 flex-wrap">
+                    <div class="text-xs text-gray-400" id="devices-summary">—</div>
+                    <div class="flex items-center gap-2">
+                        <button id="devices-prev" onclick="changeDeviceRegistryPage(-1)" class="btn btn-outline btn-sm">← Precedente</button>
+                        <span class="text-xs text-gray-500 font-semibold" id="devices-page-info">Pagina 1 / 1</span>
+                        <button id="devices-next" onclick="changeDeviceRegistryPage(1)" class="btn btn-outline btn-sm">Successiva →</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- ── SENSORS ─────────────────────────────────────────────── -->
             <div id="tab-sensors" class="hidden fade-in">
                 <!-- Header -->
@@ -590,6 +731,142 @@
                         <button id="sensors-prev" onclick="changeDevicePage(-1)" class="btn btn-outline btn-sm">← Precedente</button>
                         <span class="text-xs text-gray-500 font-semibold" id="sensors-page-info">Pagina 1 / 1</span>
                         <button id="sensors-next" onclick="changeDevicePage(1)" class="btn btn-outline btn-sm">Successiva →</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── ANALYTICS (super_admin only) ─────────────────────── -->
+            <div id="tab-analytics" class="hidden fade-in super-admin-only">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                    <div>
+                        <div class="page-title mb-0" id="analytics-page-title">Analytics</div>
+                        <p class="text-sm text-gray-400" id="analytics-page-subtitle">Metriche leggere e privacy-safe, visibili solo al Super Admin</p>
+                    </div>
+                    <button onclick="loadAnalytics()" class="btn btn-outline" id="analytics-refresh-btn">↻ Aggiorna</button>
+                </div>
+
+                <div class="grid grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+                    <div class="stat-card">
+                        <div class="text-2xl mb-1">📅</div>
+                        <div class="text-2xl font-black text-gray-800" id="analytics-stat-today">—</div>
+                        <div class="text-xs text-gray-400 font-bold uppercase tracking-wide mt-1" id="analytics-stat-today-label">Visite oggi</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-2xl mb-1">🗓️</div>
+                        <div class="text-2xl font-black text-gray-800" id="analytics-stat-7d">—</div>
+                        <div class="text-xs text-gray-400 font-bold uppercase tracking-wide mt-1" id="analytics-stat-7d-label">Visite 7 giorni</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-2xl mb-1">📆</div>
+                        <div class="text-2xl font-black text-gray-800" id="analytics-stat-30d">—</div>
+                        <div class="text-xs text-gray-400 font-bold uppercase tracking-wide mt-1" id="analytics-stat-30d-label">Visite 30 giorni</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-2xl mb-1">👥</div>
+                        <div class="text-2xl font-black text-gray-800" id="analytics-stat-unique">—</div>
+                        <div class="text-xs text-gray-400 font-bold uppercase tracking-wide mt-1" id="analytics-stat-unique-label">Visitatori unici 30 giorni</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-2xl mb-1">🧾</div>
+                        <div class="text-2xl font-black text-green-700" id="analytics-stat-starts">—</div>
+                        <div class="text-xs text-gray-400 font-bold uppercase tracking-wide mt-1" id="analytics-stat-starts-label">Avvii registrazione</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-2xl mb-1">✅</div>
+                        <div class="text-2xl font-black text-green-700" id="analytics-stat-completed">—</div>
+                        <div class="text-xs text-gray-400 font-bold uppercase tracking-wide mt-1" id="analytics-stat-completed-label">Registrazioni completate</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-2xl mb-1">🎯</div>
+                        <div class="text-2xl font-black text-orange-600" id="analytics-stat-conversion">—</div>
+                        <div class="text-xs text-gray-400 font-bold uppercase tracking-wide mt-1" id="analytics-stat-conversion-label">Conversione visita → registrazione</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <div class="section-card overflow-x-auto">
+                        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                            <span class="font-black text-gray-700" id="analytics-top-pages-title">Pagine più visitate</span>
+                        </div>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th id="analytics-pages-th-page">Pagina</th>
+                                    <th id="analytics-pages-th-visits">Visite</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analytics-pages-body">
+                                <tr><td colspan="2" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="section-card overflow-x-auto">
+                        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                            <span class="font-black text-gray-700" id="analytics-sources-title">Sorgenti traffico</span>
+                        </div>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th id="analytics-sources-th-source">Sorgente</th>
+                                    <th id="analytics-sources-th-visits">Visite</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analytics-sources-body">
+                                <tr><td colspan="2" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="section-card overflow-x-auto">
+                        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                            <span class="font-black text-gray-700" id="analytics-locations-title">Paesi / città principali</span>
+                        </div>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th id="analytics-locations-th-location">Località</th>
+                                    <th id="analytics-locations-th-visits">Visite</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analytics-locations-body">
+                                <tr><td colspan="2" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="section-card overflow-x-auto">
+                        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                            <span class="font-black text-gray-700" id="analytics-devices-title">Traffico mobile vs desktop</span>
+                        </div>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th id="analytics-devices-th-device">Dispositivo</th>
+                                    <th id="analytics-devices-th-visits">Visite</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analytics-devices-body">
+                                <tr><td colspan="2" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="section-card overflow-x-auto xl:col-span-2">
+                        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                            <span class="font-black text-gray-700" id="analytics-buttons-title">Click pulsanti principali</span>
+                        </div>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th id="analytics-buttons-th-button">Pulsante</th>
+                                    <th id="analytics-buttons-th-clicks">Click</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analytics-buttons-body">
+                                <tr><td colspan="2" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -979,6 +1256,7 @@
     const clientListState = { page: 1, pageSize: 25, total: 0, totalPages: 1, query: '' };
     const registrationListState = { page: 1, pageSize: 20, total: 0, totalPages: 1, query: '', status: '' };
     const deviceListState = { page: 1, pageSize: 50, total: 0, totalPages: 1, query: '', clientId: '', type: '' };
+    const deviceRegistryState = { page: 1, pageSize: 25, total: 0, totalPages: 1 };
     const locationPickers = {
         client: {
             map: null,
@@ -1024,14 +1302,19 @@
             navClients: 'Clienti',
             navRegistrations: 'Registrazioni Recenti',
             navSensors: 'Sensori IoT',
+            navDevices: 'Dispositivi',
+            navAnalytics: 'Analytics',
             navUsers: 'Utenti Admin',
             logout: 'Esci',
             dashboard: 'Dashboard',
             clients: 'Clienti',
             recentRegistrations: 'Registrazioni Recenti',
             sensorsTitleNav: 'Sensori IoT',
+            devicesTitleNav: 'Dispositivi',
+            analytics: 'Analytics',
             adminUsers: 'Utenti Admin',
             dashboardSubtitle: 'Panoramica in tempo reale del sistema Rayat',
+            analyticsSubtitle: 'Metriche leggere e privacy-safe, visibili solo al Super Admin',
             activeClients: 'Clienti attivi',
             totalDevices: 'Dispositivi totali',
             onlineShort: 'Online (≤10 min)',
@@ -1044,18 +1327,23 @@
             recentSensors: 'Sensori Recenti',
             viewAll: 'Vedi tutti →',
             newClients: 'Nuovi Clienti',
+            recentClients: 'Clienti Recenti',
             openSection: 'Apri sezione →',
+            openClients: 'Apri clienti →',
             clientsSubtitle: 'Gestione completa degli account clienti',
             addClient: '+ Aggiungi Cliente',
             searchClientsPlaceholder: '🔍  Cerca per nome, email, telefono…',
             id: 'ID',
             client: 'Cliente',
+            firstName: 'Nome',
+            lastName: 'Cognome',
             contact: 'Contatto',
             crop: 'Coltura',
             zone: 'Zona',
             kit: 'Kit',
             status: 'Stato',
             actions: 'Azioni',
+            registeredAt: 'Data',
             previous: '← Precedente',
             next: 'Successiva →',
             pageInfo: 'Pagina {page} / {totalPages}',
@@ -1129,6 +1417,8 @@
             close: 'Chiudi',
             sensorsTitle: '📡 Gestione Sensori IoT',
             sensorsSubtitle: 'Aggiungi, modifica e monitora i sensori collegati ai clienti',
+            devicesPageTitle: 'Dispositivi',
+            devicesSubtitle: 'Panoramica dei dispositivi assegnati ai clienti',
             addSensor: '+ Aggiungi Sensore',
             searchSerialPlaceholder: '🔍 Cerca seriale o tipo...',
             searchClientCodePlaceholder: '🔍 #0001...',
@@ -1147,6 +1437,8 @@
             collapse: '▲ Chiudi',
             serialNumber: 'N° Seriale',
             sensorType: 'Tipo Sensore',
+            linkedSensors: 'Sensori collegati',
+            lastSeen: 'Ultima attività',
             lastSensorReading: 'Ultima Lettura',
             addedAt: 'Aggiunto il',
             editSensorTitle: '✏️ Modifica Sensore',
@@ -1195,7 +1487,32 @@
             registrationRef: 'Registrazione #{id}',
             saveSensorChanges: '💾 Salva modifiche',
             saveAllLabel: '💾 Salva tutti i sensori',
-            noData: 'n/d'
+            noData: 'n/d',
+            analyticsVisitsToday: 'Visite oggi',
+            analyticsVisits7d: 'Visite 7 giorni',
+            analyticsVisits30d: 'Visite 30 giorni',
+            analyticsUniqueVisitors: 'Visitatori unici 30 giorni',
+            analyticsRegStarts: 'Avvii registrazione',
+            analyticsRegCompleted: 'Registrazioni completate',
+            analyticsConversion: 'Conversione visita → registrazione',
+            analyticsTopPages: 'Pagine più visitate',
+            analyticsTrafficSources: 'Sorgenti traffico',
+            analyticsLocations: 'Paesi / città principali',
+            analyticsDevices: 'Traffico mobile vs desktop',
+            analyticsButtons: 'Click pulsanti principali',
+            analyticsPage: 'Pagina',
+            analyticsSource: 'Sorgente',
+            analyticsLocation: 'Località',
+            analyticsDevice: 'Dispositivo',
+            analyticsButton: 'Pulsante',
+            analyticsVisits: 'Visite',
+            analyticsClicks: 'Click',
+            analyticsNoData: 'Nessun dato disponibile.',
+            analyticsDeviceMobile: 'Mobile',
+            analyticsDeviceDesktop: 'Desktop',
+            analyticsDeviceTablet: 'Tablet',
+            analyticsDeviceUnknown: 'Sconosciuto',
+            analyticsDirect: 'Diretto'
         },
         en: {
             adminPanel: 'Admin Panel',
@@ -1212,14 +1529,19 @@
             navClients: 'Clients',
             navRegistrations: 'Recent Registrations',
             navSensors: 'IoT Sensors',
+            navDevices: 'Devices',
+            navAnalytics: 'Analytics',
             navUsers: 'Admin Users',
             logout: 'Logout',
             dashboard: 'Dashboard',
             clients: 'Clients',
             recentRegistrations: 'Recent Registrations',
             sensorsTitleNav: 'IoT Sensors',
+            devicesTitleNav: 'Devices',
+            analytics: 'Analytics',
             adminUsers: 'Admin Users',
             dashboardSubtitle: 'Real-time overview of the Rayat system',
+            analyticsSubtitle: 'Lightweight privacy-safe metrics, visible only to Super Admin',
             activeClients: 'Active clients',
             totalDevices: 'Total devices',
             onlineShort: 'Online (≤10 min)',
@@ -1232,18 +1554,23 @@
             recentSensors: 'Recent Sensors',
             viewAll: 'View all →',
             newClients: 'New Clients',
+            recentClients: 'Recent Clients',
             openSection: 'Open section →',
+            openClients: 'Open clients →',
             clientsSubtitle: 'Complete management of client accounts',
             addClient: '+ Add Client',
             searchClientsPlaceholder: '🔍 Search by name, email, phone…',
             id: 'ID',
             client: 'Client',
+            firstName: 'First Name',
+            lastName: 'Last Name',
             contact: 'Contact',
             crop: 'Crop',
             zone: 'Area',
             kit: 'Kit',
             status: 'Status',
             actions: 'Actions',
+            registeredAt: 'Date',
             previous: '← Previous',
             next: 'Next →',
             pageInfo: 'Page {page} / {totalPages}',
@@ -1317,6 +1644,8 @@
             close: 'Close',
             sensorsTitle: '📡 IoT Sensor Management',
             sensorsSubtitle: 'Add, edit and monitor sensors assigned to clients',
+            devicesPageTitle: 'Devices',
+            devicesSubtitle: 'Overview of devices assigned to clients',
             addSensor: '+ Add Sensor',
             searchSerialPlaceholder: '🔍 Search serial or type...',
             searchClientCodePlaceholder: '🔍 #0001...',
@@ -1335,6 +1664,8 @@
             collapse: '▲ Close',
             serialNumber: 'Serial No.',
             sensorType: 'Sensor Type',
+            linkedSensors: 'Linked Sensors',
+            lastSeen: 'Last activity',
             lastSensorReading: 'Latest Reading',
             addedAt: 'Added on',
             editSensorTitle: '✏️ Edit Sensor',
@@ -1383,7 +1714,32 @@
             registrationRef: 'Registration #{id}',
             saveSensorChanges: '💾 Save changes',
             saveAllLabel: '💾 Save all sensors',
-            noData: 'n/a'
+            noData: 'n/a',
+            analyticsVisitsToday: 'Visits today',
+            analyticsVisits7d: 'Visits last 7 days',
+            analyticsVisits30d: 'Visits last 30 days',
+            analyticsUniqueVisitors: 'Unique visitors 30 days',
+            analyticsRegStarts: 'Registration starts',
+            analyticsRegCompleted: 'Completed registrations',
+            analyticsConversion: 'Visit → registration conversion',
+            analyticsTopPages: 'Most visited pages',
+            analyticsTrafficSources: 'Traffic sources',
+            analyticsLocations: 'Top countries / cities',
+            analyticsDevices: 'Mobile vs desktop traffic',
+            analyticsButtons: 'Main button clicks',
+            analyticsPage: 'Page',
+            analyticsSource: 'Source',
+            analyticsLocation: 'Location',
+            analyticsDevice: 'Device',
+            analyticsButton: 'Button',
+            analyticsVisits: 'Visits',
+            analyticsClicks: 'Clicks',
+            analyticsNoData: 'No data available.',
+            analyticsDeviceMobile: 'Mobile',
+            analyticsDeviceDesktop: 'Desktop',
+            analyticsDeviceTablet: 'Tablet',
+            analyticsDeviceUnknown: 'Unknown',
+            analyticsDirect: 'Direct'
         },
         fr: {
             adminPanel: 'Panneau Admin',
@@ -1400,14 +1756,19 @@
             navClients: 'Clients',
             navRegistrations: 'Inscriptions Récentes',
             navSensors: 'Capteurs IoT',
+            navDevices: 'Appareils',
+            navAnalytics: 'Analytics',
             navUsers: 'Utilisateurs Admin',
             logout: 'Déconnexion',
             dashboard: 'Tableau de bord',
             clients: 'Clients',
             recentRegistrations: 'Inscriptions Récentes',
             sensorsTitleNav: 'Capteurs IoT',
+            devicesTitleNav: 'Appareils',
+            analytics: 'Analytics',
             adminUsers: 'Utilisateurs Admin',
             dashboardSubtitle: 'Vue en temps réel du système Rayat',
+            analyticsSubtitle: 'Mesures légères et respectueuses de la vie privée, visibles uniquement par le Super Admin',
             activeClients: 'Clients actifs',
             totalDevices: 'Appareils totaux',
             onlineShort: 'En ligne (≤10 min)',
@@ -1420,18 +1781,23 @@
             recentSensors: 'Capteurs Récents',
             viewAll: 'Voir tout →',
             newClients: 'Nouveaux Clients',
+            recentClients: 'Clients Récents',
             openSection: 'Ouvrir la section →',
+            openClients: 'Ouvrir les clients →',
             clientsSubtitle: 'Gestion complète des comptes clients',
             addClient: '+ Ajouter Client',
             searchClientsPlaceholder: '🔍 Rechercher par nom, email, téléphone…',
             id: 'ID',
             client: 'Client',
+            firstName: 'Prénom',
+            lastName: 'Nom',
             contact: 'Contact',
             crop: 'Culture',
             zone: 'Zone',
             kit: 'Kit',
             status: 'Statut',
             actions: 'Actions',
+            registeredAt: 'Date',
             previous: '← Précédent',
             next: 'Suivant →',
             pageInfo: 'Page {page} / {totalPages}',
@@ -1505,6 +1871,8 @@
             close: 'Fermer',
             sensorsTitle: '📡 Gestion des Capteurs IoT',
             sensorsSubtitle: 'Ajouter, modifier et surveiller les capteurs liés aux clients',
+            devicesPageTitle: 'Appareils',
+            devicesSubtitle: 'Vue d’ensemble des appareils attribués aux clients',
             addSensor: '+ Ajouter Capteur',
             searchSerialPlaceholder: '🔍 Rechercher série ou type...',
             searchClientCodePlaceholder: '🔍 #0001...',
@@ -1523,6 +1891,8 @@
             collapse: '▲ Fermer',
             serialNumber: 'N° Série',
             sensorType: 'Type de capteur',
+            linkedSensors: 'Capteurs liés',
+            lastSeen: 'Dernière activité',
             lastSensorReading: 'Dernière lecture',
             addedAt: 'Ajouté le',
             editSensorTitle: '✏️ Modifier Capteur',
@@ -1571,7 +1941,32 @@
             registrationRef: 'Inscription #{id}',
             saveSensorChanges: '💾 Enregistrer les modifications',
             saveAllLabel: '💾 Enregistrer tous les capteurs',
-            noData: 'n/d'
+            noData: 'n/d',
+            analyticsVisitsToday: 'Visites aujourd’hui',
+            analyticsVisits7d: 'Visites sur 7 jours',
+            analyticsVisits30d: 'Visites sur 30 jours',
+            analyticsUniqueVisitors: 'Visiteurs uniques 30 jours',
+            analyticsRegStarts: 'Débuts d’inscription',
+            analyticsRegCompleted: 'Inscriptions complétées',
+            analyticsConversion: 'Conversion visite → inscription',
+            analyticsTopPages: 'Pages les plus visitées',
+            analyticsTrafficSources: 'Sources de trafic',
+            analyticsLocations: 'Principaux pays / villes',
+            analyticsDevices: 'Trafic mobile vs desktop',
+            analyticsButtons: 'Clics sur les boutons principaux',
+            analyticsPage: 'Page',
+            analyticsSource: 'Source',
+            analyticsLocation: 'Localisation',
+            analyticsDevice: 'Appareil',
+            analyticsButton: 'Bouton',
+            analyticsVisits: 'Visites',
+            analyticsClicks: 'Clics',
+            analyticsNoData: 'Aucune donnée disponible.',
+            analyticsDeviceMobile: 'Mobile',
+            analyticsDeviceDesktop: 'Desktop',
+            analyticsDeviceTablet: 'Tablette',
+            analyticsDeviceUnknown: 'Inconnu',
+            analyticsDirect: 'Direct'
         },
         ar: {
             adminPanel: 'لوحة الإدارة',
@@ -1588,14 +1983,19 @@
             navClients: 'العملاء',
             navRegistrations: 'التسجيلات الحديثة',
             navSensors: 'حساسات إنترنت الأشياء',
+            navDevices: 'الأجهزة',
+            navAnalytics: 'التحليلات',
             navUsers: 'مستخدمو الإدارة',
             logout: 'تسجيل الخروج',
             dashboard: 'لوحة التحكم',
             clients: 'العملاء',
             recentRegistrations: 'التسجيلات الحديثة',
             sensorsTitleNav: 'حساسات إنترنت الأشياء',
+            devicesTitleNav: 'الأجهزة',
+            analytics: 'التحليلات',
             adminUsers: 'مستخدمو الإدارة',
             dashboardSubtitle: 'نظرة مباشرة على نظام رايات',
+            analyticsSubtitle: 'إحصاءات خفيفة وآمنة للخصوصية، تظهر فقط للمشرف العام',
             activeClients: 'العملاء النشطون',
             totalDevices: 'إجمالي الأجهزة',
             onlineShort: 'متصل (≤10 دقائق)',
@@ -1608,18 +2008,23 @@
             recentSensors: 'الحساسات الحديثة',
             viewAll: 'عرض الكل ←',
             newClients: 'عملاء جدد',
+            recentClients: 'أحدث العملاء',
             openSection: 'فتح القسم ←',
+            openClients: 'فتح العملاء ←',
             clientsSubtitle: 'إدارة كاملة لحسابات العملاء',
             addClient: '+ إضافة عميل',
             searchClientsPlaceholder: '🔍 ابحث بالاسم أو البريد أو الهاتف…',
             id: 'المعرف',
             client: 'العميل',
+            firstName: 'الاسم',
+            lastName: 'النسب',
             contact: 'التواصل',
             crop: 'المحصول',
             zone: 'المنطقة',
             kit: 'الطقم',
             status: 'الحالة',
             actions: 'الإجراءات',
+            registeredAt: 'التاريخ',
             previous: 'السابق ←',
             next: 'التالي →',
             pageInfo: 'الصفحة {page} / {totalPages}',
@@ -1693,6 +2098,8 @@
             close: 'إغلاق',
             sensorsTitle: '📡 إدارة حساسات إنترنت الأشياء',
             sensorsSubtitle: 'إضافة وتعديل ومتابعة الحساسات المرتبطة بالعملاء',
+            devicesPageTitle: 'الأجهزة',
+            devicesSubtitle: 'نظرة عامة على الأجهزة المرتبطة بالعملاء',
             addSensor: '+ إضافة حساس',
             searchSerialPlaceholder: '🔍 ابحث بالرقم التسلسلي أو النوع...',
             searchClientCodePlaceholder: '🔍 #0001...',
@@ -1711,6 +2118,8 @@
             collapse: '▲ إغلاق',
             serialNumber: 'الرقم التسلسلي',
             sensorType: 'نوع الحساس',
+            linkedSensors: 'الحساسات المرتبطة',
+            lastSeen: 'آخر نشاط',
             lastSensorReading: 'آخر قراءة',
             addedAt: 'تاريخ الإضافة',
             editSensorTitle: '✏️ تعديل الحساس',
@@ -1759,7 +2168,32 @@
             registrationRef: 'التسجيل #{id}',
             saveSensorChanges: '💾 حفظ التعديلات',
             saveAllLabel: '💾 حفظ كل الحساسات',
-            noData: 'لا يوجد'
+            noData: 'لا يوجد',
+            analyticsVisitsToday: 'زيارات اليوم',
+            analyticsVisits7d: 'زيارات آخر 7 أيام',
+            analyticsVisits30d: 'زيارات آخر 30 يومًا',
+            analyticsUniqueVisitors: 'الزوار الفريدون خلال 30 يومًا',
+            analyticsRegStarts: 'بدء التسجيل',
+            analyticsRegCompleted: 'التسجيلات المكتملة',
+            analyticsConversion: 'تحويل الزيارة إلى تسجيل',
+            analyticsTopPages: 'الصفحات الأكثر زيارة',
+            analyticsTrafficSources: 'مصادر الزيارات',
+            analyticsLocations: 'أهم الدول / المدن',
+            analyticsDevices: 'حركة المرور حسب الجهاز',
+            analyticsButtons: 'نقرات الأزرار الرئيسية',
+            analyticsPage: 'الصفحة',
+            analyticsSource: 'المصدر',
+            analyticsLocation: 'الموقع',
+            analyticsDevice: 'الجهاز',
+            analyticsButton: 'الزر',
+            analyticsVisits: 'الزيارات',
+            analyticsClicks: 'النقرات',
+            analyticsNoData: 'لا توجد بيانات متاحة.',
+            analyticsDeviceMobile: 'موبايل',
+            analyticsDeviceDesktop: 'سطح المكتب',
+            analyticsDeviceTablet: 'جهاز لوحي',
+            analyticsDeviceUnknown: 'غير معروف',
+            analyticsDirect: 'مباشر'
         }
     };
 
@@ -1776,6 +2210,8 @@
         ['#nav-clients-label', 'navClients'],
         ['#nav-registrations-label', 'navRegistrations'],
         ['#nav-sensors-label', 'navSensors'],
+        ['#nav-devices-label', 'navDevices'],
+        ['#nav-analytics-label', 'navAnalytics'],
         ['#nav-users-label', 'navUsers'],
         ['#logout-label', 'logout'],
         ['#lang-label', 'language'],
@@ -1788,21 +2224,22 @@
         ['#stats-grid .stat-card:nth-child(5) .text-xs', 'totalAdmins'],
         ['#stats-grid .stat-card:nth-child(6) .text-xs', 'newRegistrations'],
         ['#stats-grid .stat-card:nth-child(7) .text-xs', 'lastReading'],
-        ['#tab-dashboard .section-card:nth-of-type(1) .font-black', 'recentSensors'],
-        ['#tab-dashboard .section-card:nth-of-type(1) button', 'viewAll'],
-        ['#tab-dashboard .section-card:nth-of-type(2) .font-black', 'newClients'],
-        ['#tab-dashboard .section-card:nth-of-type(2) button', 'openSection'],
+        ['#dash-sensors-title', 'recentSensors'],
+        ['#dash-sensors-link', 'viewAll'],
+        ['#dash-clients-title', 'recentClients'],
+        ['#dash-clients-link', 'openClients'],
         ['#tab-clients .page-title', 'clients'],
         ['#tab-clients p', 'clientsSubtitle'],
         ['#tab-clients .btn-primary', 'addClient'],
-        ['#clients-table th:nth-child(1)', 'id'],
-        ['#clients-table th:nth-child(2)', 'client'],
-        ['#clients-table th:nth-child(3)', 'contact'],
-        ['#clients-table th:nth-child(4)', 'crop'],
-        ['#clients-table th:nth-child(5)', 'zone'],
-        ['#clients-table th:nth-child(6)', 'kit'],
-        ['#clients-table th:nth-child(7)', 'status'],
-        ['#clients-table th:nth-child(8)', 'actions'],
+        ['#clients-th-id', 'id'],
+        ['#clients-th-first-name', 'firstName'],
+        ['#clients-th-last-name', 'lastName'],
+        ['#clients-th-contact', 'contact'],
+        ['#clients-th-crop', 'crop'],
+        ['#clients-th-date', 'registeredAt'],
+        ['#clients-th-kit', 'kit'],
+        ['#clients-th-status', 'status'],
+        ['#clients-th-actions', 'actions'],
         ['#clients-prev', 'previous'],
         ['#clients-next', 'next'],
         ['#tab-registrations .page-title', 'recentRegistrations'],
@@ -1816,12 +2253,49 @@
         ['#registrations-table th:nth-child(6)', 'actions'],
         ['#registrations-prev', 'previous'],
         ['#registrations-next', 'next'],
+        ['#devices-page-title', 'devicesPageTitle'],
+        ['#devices-page-subtitle', 'devicesSubtitle'],
+        ['#devices-refresh-btn', 'refresh'],
+        ['#devices-th-serial', 'serialNumber'],
+        ['#devices-th-client', 'client'],
+        ['#devices-th-type', 'sensorType'],
+        ['#devices-th-sensors', 'linkedSensors'],
+        ['#devices-th-last-seen', 'lastSeen'],
+        ['#devices-th-created', 'createdOn'],
+        ['#devices-th-actions', 'actions'],
+        ['#devices-prev', 'previous'],
+        ['#devices-next', 'next'],
         ['#tab-sensors .page-title', 'sensorsTitle'],
         ['#tab-sensors > div:nth-child(1) p', 'sensorsSubtitle'],
         ['#tab-sensors > div:nth-child(1) .btn-primary', 'addSensor'],
         ['#tab-sensors .section-card .btn-outline', 'refresh'],
         ['#sensors-prev', 'previous'],
         ['#sensors-next', 'next'],
+        ['#analytics-page-title', 'analytics'],
+        ['#analytics-page-subtitle', 'analyticsSubtitle'],
+        ['#analytics-refresh-btn', 'refresh'],
+        ['#analytics-stat-today-label', 'analyticsVisitsToday'],
+        ['#analytics-stat-7d-label', 'analyticsVisits7d'],
+        ['#analytics-stat-30d-label', 'analyticsVisits30d'],
+        ['#analytics-stat-unique-label', 'analyticsUniqueVisitors'],
+        ['#analytics-stat-starts-label', 'analyticsRegStarts'],
+        ['#analytics-stat-completed-label', 'analyticsRegCompleted'],
+        ['#analytics-stat-conversion-label', 'analyticsConversion'],
+        ['#analytics-top-pages-title', 'analyticsTopPages'],
+        ['#analytics-pages-th-page', 'analyticsPage'],
+        ['#analytics-pages-th-visits', 'analyticsVisits'],
+        ['#analytics-sources-title', 'analyticsTrafficSources'],
+        ['#analytics-sources-th-source', 'analyticsSource'],
+        ['#analytics-sources-th-visits', 'analyticsVisits'],
+        ['#analytics-locations-title', 'analyticsLocations'],
+        ['#analytics-locations-th-location', 'analyticsLocation'],
+        ['#analytics-locations-th-visits', 'analyticsVisits'],
+        ['#analytics-devices-title', 'analyticsDevices'],
+        ['#analytics-devices-th-device', 'analyticsDevice'],
+        ['#analytics-devices-th-visits', 'analyticsVisits'],
+        ['#analytics-buttons-title', 'analyticsButtons'],
+        ['#analytics-buttons-th-button', 'analyticsButton'],
+        ['#analytics-buttons-th-clicks', 'analyticsClicks'],
         ['#tab-users .page-title', 'adminUsers'],
         ['#tab-users p', 'usersSubtitle'],
         ['#tab-users .btn-primary', 'newUser'],
@@ -2027,7 +2501,7 @@
 
         const loadingBlocks = [
             ['#dash-sensors-preview', 'loading'],
-            ['#dash-registrations-preview', 'loading']
+            ['#dash-clients-preview', 'loading']
         ];
         loadingBlocks.forEach(([selector, key]) => {
             const el = document.querySelector(selector);
@@ -2079,11 +2553,42 @@
     }
 
     function resolveTabFromPath() {
-        return window.location.pathname.includes('/admin/recent-clients') ? 'registrations' : 'dashboard';
+        const path = window.location.pathname;
+        if (path.includes('/admin/clients')) return 'clients';
+        if (path.includes('/admin/recent-clients')) return 'registrations';
+        if (path.includes('/admin/sensors')) return 'sensors';
+        if (path.includes('/admin/devices')) return 'devices';
+        if (path.includes('/admin/analytics')) return 'analytics';
+        return 'dashboard';
     }
 
     function pathForTab(tab) {
-        return tab === 'registrations' ? '/admin/recent-clients' : '/admin/';
+        const paths = {
+            dashboard: '/admin/',
+            clients: '/admin/clients',
+            registrations: '/admin/recent-clients',
+            sensors: '/admin/sensors',
+            devices: '/admin/devices',
+            analytics: '/admin/analytics',
+            users: '/admin/'
+        };
+        return paths[tab] || '/admin/';
+    }
+
+    // RAYAT FIX - registration/admin
+    function toggleSidebar(forceState) {
+        const sidebar = document.getElementById('sidebar');
+        const backdrop = document.getElementById('sidebar-backdrop');
+        if (!sidebar || !backdrop || window.innerWidth > 768) {
+            return;
+        }
+
+        const shouldOpen = typeof forceState === 'boolean'
+            ? forceState
+            : !sidebar.classList.contains('open');
+
+        sidebar.classList.toggle('open', shouldOpen);
+        backdrop.classList.toggle('open', shouldOpen);
     }
 
     function syncPathForTab(tab, replace = false) {
@@ -2267,6 +2772,35 @@
         return new Date(d).toLocaleString(getCurrentLocale(), { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
     }
 
+    // RAYAT FIX - registration/admin
+    function getClientNameParts(record = {}) {
+        const rawName = String(record.name || '').trim();
+        const rawLastName = String(record.last_name || '').trim();
+
+        if (!rawLastName) {
+            return {
+                firstName: rawName || '—',
+                lastName: '—',
+                fullName: rawName || '—'
+            };
+        }
+
+        if (rawName && rawName.toLowerCase().endsWith(rawLastName.toLowerCase())) {
+            const primaryName = rawName.slice(0, rawName.length - rawLastName.length).trim();
+            return {
+                firstName: primaryName || rawName,
+                lastName: rawLastName,
+                fullName: rawName
+            };
+        }
+
+        return {
+            firstName: rawName || '—',
+            lastName: rawLastName,
+            fullName: [rawName, rawLastName].filter(Boolean).join(' ') || '—'
+        };
+    }
+
     function showError(id, msg) {
         const el = document.getElementById(id);
         el.textContent = msg;
@@ -2340,6 +2874,7 @@
     function startApp() {
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('app-screen').classList.remove('hidden');
+        toggleSidebar(false);
 
         // Set user info in sidebar
         document.getElementById('sidebar-name').textContent = currentAdmin.name || currentAdmin.email;
@@ -2367,13 +2902,19 @@
 
     // ── Tab routing ───────────────────────────────────────────────────────
     function showTab(tab, options = {}) {
-        ['dashboard', 'clients', 'registrations', 'sensors', 'users'].forEach(t => {
+        if ((tab === 'analytics' || tab === 'users') && currentAdmin?.role !== 'super_admin') {
+            tab = 'dashboard';
+            window.history.replaceState({ tab }, '', pathForTab('dashboard'));
+        }
+
+        ['dashboard', 'clients', 'registrations', 'devices', 'sensors', 'analytics', 'users'].forEach(t => {
             document.getElementById('tab-' + t).classList.add('hidden');
         });
         document.querySelectorAll('.nav-item').forEach(el => {
             el.classList.toggle('active', el.dataset.tab === tab);
         });
         document.getElementById('tab-' + tab).classList.remove('hidden');
+        toggleSidebar(false);
 
         if (!options.skipHistory) {
             syncPathForTab(tab, false);
@@ -2388,7 +2929,9 @@
             dashboard: t('dashboard'),
             clients: t('clients'),
             registrations: t('recentRegistrations'),
+            devices: t('devicesTitleNav'),
             sensors: t('sensorsTitleNav'),
+            analytics: t('analytics'),
             users: t('adminUsers')
         };
         document.getElementById('topbar-title').textContent = titles[tab] || tab;
@@ -2396,7 +2939,9 @@
         if (tab === 'dashboard') loadDashboard();
         else if (tab === 'clients') loadClients();
         else if (tab === 'registrations') loadRegistrations();
+        else if (tab === 'devices') loadDeviceRegistry();
         else if (tab === 'sensors') loadAllDevices();
+        else if (tab === 'analytics') loadAnalytics();
         else if (tab === 'users') loadAdminUsers();
     }
 
@@ -2434,25 +2979,47 @@
                 </table>
                 </div>` : `<div class="text-gray-400 text-sm py-4 text-center">${t('noSensorFoundShort')}</div>`;
 
-            const rd = await api('/registrations?page=1&pageSize=5&status=new');
-            if (!rd) return;
-            const registrations = rd.data || [];
-            document.getElementById('dash-registrations-preview').innerHTML = registrations.length ? `
-                <div class="space-y-3">
-                    ${registrations.map(r => `
-                        <button onclick="openRegistrationModal(${r.id})" class="w-full text-left border border-gray-100 rounded-2xl p-4 hover:border-green-200 hover:bg-green-50/60 transition">
-                            <div class="flex items-center justify-between gap-3">
-                                <div>
-                                    <div class="font-black text-gray-800">${esc(r.name)}</div>
-                                    <div class="text-xs text-gray-500 mt-1">${esc(r.email || '—')} · ${esc(r.phone || '—')}</div>
-                                </div>
-                                <span class="badge badge-new">NEW</span>
-                            </div>
-                            <div class="text-xs text-gray-400 mt-3">${esc(r.location_name || '—')} · ${fmtDate(r.created_at)}</div>
-                        </button>
-                    `).join('')}
+            const recentClientsEl = document.getElementById('dash-clients-preview');
+            if (!recentClientsEl) return;
+            if (currentAdmin.role !== 'super_admin') {
+                recentClientsEl.innerHTML = '';
+                return;
+            }
+
+            const clientFeed = await api('/clients?page=1&pageSize=5');
+            if (!clientFeed) return;
+            const recentClients = clientFeed.data || [];
+            recentClientsEl.innerHTML = recentClients.length ? `
+                <div class="overflow-x-auto">
+                    <table class="data-table dashboard-preview-table">
+                        <thead>
+                            <tr>
+                                <th>${t('firstName')}</th>
+                                <th>${t('lastName')}</th>
+                                <th>${t('phone')}</th>
+                                <th>${t('email')}</th>
+                                <th>${t('crop')}</th>
+                                <th>${t('registeredAt')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${recentClients.map((client) => {
+                                const nameParts = getClientNameParts(client);
+                                return `
+                                    <tr onclick="openEditClientModal(${client.id})" style="cursor:pointer">
+                                        <td class="font-bold text-gray-800">${esc(nameParts.firstName)}</td>
+                                        <td>${esc(nameParts.lastName)}</td>
+                                        <td>${esc(client.phone || '—')}</td>
+                                        <td>${esc(client.email || '—')}</td>
+                                        <td>${client.crop_type ? `<span class="badge badge-green">${esc(client.crop_type)}</span>` : '<span class="text-gray-300">—</span>'}</td>
+                                        <td class="text-xs text-gray-500">${fmtDate(client.created_at)}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
                 </div>
-            ` : `<div class="text-gray-400 text-sm py-4 text-center">${t('noPendingApprovals')}</div>`;
+            ` : `<div class="text-gray-400 text-sm py-4 text-center">${t('noClientsFound')}</div>`;
         } catch (err) {
             console.error('Dashboard load error:', err);
         }
@@ -2460,7 +3027,7 @@
 
     // ── Clients ───────────────────────────────────────────────────────────
     async function loadClients(page = clientListState.page) {
-        document.getElementById('clients-body').innerHTML = `<tr><td colspan="8" class="text-center text-gray-400 py-8">${t('loading')}</td></tr>`;
+        document.getElementById('clients-body').innerHTML = `<tr><td colspan="9" class="text-center text-gray-400 py-8">${t('loading')}</td></tr>`;
         try {
             const params = new URLSearchParams({
                 page: String(page),
@@ -2484,7 +3051,7 @@
             renderClientsTable(allClients);
             renderClientsPagination();
         } catch (err) {
-            document.getElementById('clients-body').innerHTML = `<tr><td colspan="8" class="text-center text-red-400 py-8">${err.message}</td></tr>`;
+            document.getElementById('clients-body').innerHTML = `<tr><td colspan="9" class="text-center text-red-400 py-8">${err.message}</td></tr>`;
             document.getElementById('clients-summary').textContent = t('loadClientsError');
         }
     }
@@ -2494,28 +3061,23 @@
         document.getElementById('clients-body').innerHTML = clients.length ? clients.map(c => `
             <tr>
                 <td><span class="badge badge-green font-mono text-xs px-2 py-1">#${c.client_code || '----'}</span></td>
-                <td>
-                    <div class="font-bold text-gray-800">${esc(c.name)}</div>
-                    <div class="text-xs text-gray-400">${t('uniqueId', { id: c.id })}</div>
-                </td>
+                <td><div class="font-bold text-gray-800">${esc(getClientNameParts(c).firstName)}</div><div class="text-xs text-gray-400">${t('uniqueId', { id: c.id })}</div></td>
+                <td><div class="font-semibold text-gray-700">${esc(getClientNameParts(c).lastName)}</div></td>
                 <td>
                     <div class="text-sm">${c.email ? esc(c.email) : ''}</div>
                     <div class="text-xs text-gray-400">${c.phone ? esc(c.phone) : ''}</div>
                 </td>
                 <td>${c.crop_type ? `<span class="badge badge-green">${esc(c.crop_type)}</span>` : '<span class="text-gray-300">—</span>'}</td>
-                <td class="text-sm text-gray-500">
-                    <div>${c.location_name ? esc(c.location_name) : '—'}</div>
-                    ${c.location_address && c.location_address !== c.location_name ? `<div class="text-xs text-gray-400 mt-1">${esc(c.location_address)}</div>` : ''}
-                </td>
+                <td class="text-xs text-gray-500">${fmtDate(c.created_at)}</td>
                 <td><span class="badge badge-silver">${t('kitCount', { count: c.device_count })}</span></td>
                 <td>${c.active ? `<span class="badge badge-green">${t('active')}</span>` : `<span class="badge badge-gray">${t('inactive')}</span>`}</td>
                 <td>
-                    <div class="flex gap-2">
+                    <div class="admin-action-row">
                         <button onclick="openEditClientModal(${c.id})" class="btn btn-outline btn-sm">✏️ ${t('edit')}</button>
-                        ${isSA ? `<button onclick="confirmDelete('client', ${c.id}, '${esc(c.name)}')" class="btn btn-danger btn-sm">🗑</button>` : ''}
+                        ${isSA ? `<button onclick="confirmDelete('client', ${c.id}, '${esc(getClientNameParts(c).fullName)}')" class="btn btn-danger btn-sm">🗑</button>` : ''}
                     </div>
                 </td>
-            </tr>`).join('') : `<tr><td colspan="8" class="text-center text-gray-400 py-8">${t('noClientsFound')}</td></tr>`;
+            </tr>`).join('') : `<tr><td colspan="9" class="text-center text-gray-400 py-8">${t('noClientsFound')}</td></tr>`;
     }
 
     function renderClientsPagination() {
@@ -2632,7 +3194,7 @@
             client = response.data;
         }
         if (client) {
-            document.getElementById('cf-name').value = client.name || '';
+            document.getElementById('cf-name').value = getClientNameParts(client).fullName || '';
             document.getElementById('cf-email').value = client.email || '';
             document.getElementById('cf-phone').value = client.phone || '';
             document.getElementById('cf-crop').value = client.crop_type || '';
@@ -2795,8 +3357,9 @@
             <tr class="${item.registration_status === 'new' ? 'table-row-new' : ''}">
                 <td>
                     <button onclick="openRegistrationModal(${item.id})" class="text-left bg-transparent border-0 p-0 cursor-pointer">
-                        <div class="font-bold text-gray-800">${esc(item.name)}</div>
+                        <div class="font-bold text-gray-800">${esc(getClientNameParts(item).fullName)}</div>
                         <div class="text-xs text-gray-400">${item.client_code ? '#' + esc(item.client_code) : t('newLeadPrivate')}</div>
+                        ${item.crop_type ? `<div class="mt-2"><span class="badge badge-green">${esc(item.crop_type)}</span></div>` : ''}
                     </button>
                 </td>
                 <td>
@@ -2815,10 +3378,10 @@
                     </div>
                 </td>
                 <td>
-                    <div class="flex gap-2 flex-wrap">
+                    <div class="admin-action-row">
                         <button onclick="openRegistrationModal(${item.id})" class="btn btn-outline btn-sm">${t('details')}</button>
                         ${item.registration_status === 'new' ? `<button onclick="approveRegistration(${item.id})" class="btn btn-outline btn-sm">${t('approve')}</button>` : ''}
-                        ${isSA ? `<button onclick="confirmDelete('registration', ${item.id}, '${esc(item.name)}')" class="btn btn-danger btn-sm">🗑</button>` : ''}
+                        ${isSA ? `<button onclick="confirmDelete('registration', ${item.id}, '${esc(getClientNameParts(item).fullName)}')" class="btn btn-danger btn-sm">🗑</button>` : ''}
                     </div>
                 </td>
             </tr>
@@ -2858,7 +3421,7 @@
             const data = response.data;
 
             document.getElementById('rf-id').value = data.id;
-            document.getElementById('rf-name').value = data.name || '';
+            document.getElementById('rf-name').value = getClientNameParts(data).fullName || '';
             document.getElementById('rf-email').value = data.email || '';
             document.getElementById('rf-phone').value = data.phone || '';
             document.getElementById('rf-location').value = data.location_name || '';
@@ -2938,6 +3501,86 @@
         confirmDelete('registration', id, name);
     }
 
+    // RAYAT FIX - registration/admin
+    async function loadDeviceRegistry(page = deviceRegistryState.page) {
+        document.getElementById('devices-body').innerHTML = `<tr><td colspan="7" class="text-center text-gray-400 py-8">${t('loading')}</td></tr>`;
+        try {
+            const params = new URLSearchParams({
+                page: String(page),
+                pageSize: String(deviceRegistryState.pageSize)
+            });
+            const data = await api('/devices?' + params.toString());
+            if (!data) return;
+
+            const devices = data.data || data.devices || [];
+            const pagination = data.pagination || {};
+            if (pagination.totalPages && page > pagination.totalPages && pagination.total > 0) {
+                return loadDeviceRegistry(pagination.totalPages);
+            }
+
+            allDevices = devices;
+            deviceRegistryState.page = pagination.page || page;
+            deviceRegistryState.total = pagination.total || devices.length;
+            deviceRegistryState.totalPages = pagination.totalPages || 1;
+
+            renderDeviceRegistryTable(devices);
+            renderDeviceRegistryPagination();
+        } catch (err) {
+            document.getElementById('devices-body').innerHTML = `<tr><td colspan="7" class="text-center text-red-400 py-8">${err.message}</td></tr>`;
+            document.getElementById('devices-summary').textContent = t('loadSensorsError');
+        }
+    }
+
+    function renderDeviceRegistryTable(devices) {
+        document.getElementById('devices-body').innerHTML = devices.length ? devices.map((device) => `
+            <tr>
+                <td>
+                    <div class="font-semibold text-gray-800">${esc(device.serial_number || device.device_id || '—')}</div>
+                </td>
+                <td>
+                    <div class="font-semibold text-gray-800">${device.client_name ? esc(device.client_name) : '—'}</div>
+                    <div class="text-xs text-gray-400">${device.client_code ? '#' + esc(device.client_code) : t('unassigned')}</div>
+                </td>
+                <td><span class="badge badge-silver">${sensorTypeLabel(device.type)}</span></td>
+                <td><span class="badge badge-blue">${t('sensorsCount', { count: device.sensor_count || 0 })}</span></td>
+                <td class="text-xs text-gray-500">${fmtDate(device.last_seen || device.last_reading)}</td>
+                <td class="text-xs text-gray-500">${fmtDate(device.created_at)}</td>
+                <td>
+                    <div class="admin-action-row">
+                        <button onclick="openEditDevice(${device.id})" class="btn btn-outline btn-sm">✏️ ${t('edit')}</button>
+                        <button onclick="deleteDevice(${device.id})" class="btn btn-danger btn-sm">🗑</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('') : `<tr><td colspan="7" class="text-center text-gray-400 py-8">${t('noDevices')}</td></tr>`;
+    }
+
+    function renderDeviceRegistryPagination() {
+        const total = deviceRegistryState.total;
+        const start = total ? ((deviceRegistryState.page - 1) * deviceRegistryState.pageSize) + 1 : 0;
+        const end = Math.min(total, deviceRegistryState.page * deviceRegistryState.pageSize);
+
+        document.getElementById('devices-summary').textContent = total
+            ? t('devicesRange', { start, end, total })
+            : t('noDevices');
+        document.getElementById('devices-page-info').textContent = t('pageInfo', { page: deviceRegistryState.page, totalPages: deviceRegistryState.totalPages });
+        document.getElementById('devices-prev').disabled = deviceRegistryState.page <= 1;
+        document.getElementById('devices-next').disabled = deviceRegistryState.page >= deviceRegistryState.totalPages;
+    }
+
+    function changeDeviceRegistryPage(delta) {
+        const nextPage = deviceRegistryState.page + delta;
+        if (nextPage < 1 || nextPage > deviceRegistryState.totalPages) return;
+        loadDeviceRegistry(nextPage);
+    }
+
+    function refreshDeviceViews() {
+        loadAllDevices(deviceListState.page);
+        if (document.getElementById('tab-devices') && !document.getElementById('tab-devices').classList.contains('hidden')) {
+            loadDeviceRegistry(deviceRegistryState.page);
+        }
+    }
+
     // ── Sensors ───────────────────────────────────────────────────────────
     async function loadSensors() {
         document.getElementById('sensors-body').innerHTML = '<tr><td colspan="7" class="text-center text-gray-400 py-8">Caricamento…</td></tr>';
@@ -2995,7 +3638,7 @@
         const select = document.getElementById('sensor-client-filter');
         select.innerHTML = `<option value="">${t('allClients')}</option>`;
         clients.forEach(c => {
-            select.innerHTML += `<option value="${c.id}">${c.client_code ? '#' + c.client_code + ' — ' : ''}${esc(c.name)}</option>`;
+            select.innerHTML += `<option value="${c.id}">${c.client_code ? '#' + c.client_code + ' — ' : ''}${esc(getClientNameParts(c).fullName)}</option>`;
         });
         select.value = preserveValue || '';
     }
@@ -3039,7 +3682,7 @@
 
             // Build a client name lookup (code + name)
             const clientMap = {};
-            clients.forEach(c => clientMap[c.id] = (c.client_code ? '#' + c.client_code + ' ' : '') + c.name);
+            clients.forEach(c => clientMap[c.id] = (c.client_code ? '#' + c.client_code + ' ' : '') + getClientNameParts(c).fullName);
 
             renderSensorsTable(allDevices, clientMap);
             renderDevicePagination();
@@ -3110,7 +3753,7 @@
                                         <td class="text-xs text-gray-500">${fmtDate(d.last_reading || d.last_seen)}</td>
                                         <td class="text-xs text-gray-400">${fmtDate(d.created_at)}</td>
                                         <td>
-                                            <div class="flex gap-2">
+                                            <div class="admin-action-row">
                                                 <button onclick="openEditDevice(${d.id})" class="btn btn-outline btn-sm font-normal py-1 px-2" title="${t('edit')}">✏️ ${t('edit')}</button>
                                                 <button onclick="deleteDevice(${d.id})" class="btn btn-danger btn-sm font-normal py-1 px-2" title="${t('delete')}">🗑 ${t('delete')}</button>
                                             </div>
@@ -3207,7 +3850,7 @@
         try {
             await api('/devices/' + id, { method: 'PUT', body: JSON.stringify(body) });
             closeModal('edit-sensor-modal');
-            loadAllDevices(deviceListState.page);
+            refreshDeviceViews();
         } catch (err) {
             showError('edit-sensor-error', err.message);
         } finally {
@@ -3291,7 +3934,7 @@
             const clients = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
             if (sel) {
                 sel.innerHTML = `<option value="">${t('noClient')}</option>` +
-                    clients.map(c => `<option value="${c.id}">#${c.client_code || '----'} — ${esc(c.name)}</option>`).join('');
+                    clients.map(c => `<option value="${c.id}">#${c.client_code || '----'} — ${esc(getClientNameParts(c).fullName)}</option>`).join('');
             }
         } catch (e) {
             console.error('Error loading clients in modal:', e);
@@ -3362,7 +4005,7 @@
                     : null)
                 .filter(Boolean);
             closeModal('sensor-modal');
-            setTimeout(() => loadAllDevices(deviceListState.page), 300);
+            setTimeout(() => refreshDeviceViews(), 300);
             if (saved > 0) {
                 const preview = createdKeys.slice(0, 5).join('\n');
                 const suffix = createdKeys.length > 5 ? '\n...' : '';
@@ -3383,7 +4026,7 @@
         if (!confirm(t('deleteSensorConfirm'))) return;
         try {
             await api('/devices/' + id, { method: 'DELETE' });
-            loadAllDevices(deviceListState.page);
+            refreshDeviceViews();
         } catch (err) {
             alert(err.message);
         }
@@ -3394,6 +4037,100 @@
         if (status === 'online') return `<span class="badge badge-green">${t('online')}</span>`;
         if (status === 'offline') return `<span class="badge badge-gray">${t('offline')}</span>`;
         return `<span class="badge badge-orange">${t('never')}</span>`;
+    }
+
+    function formatAnalyticsCount(value) {
+        return Number(value || 0).toLocaleString(getCurrentLocale());
+    }
+
+    // RAYAT FIX - email + analytics
+    function getAnalyticsDeviceLabel(deviceType) {
+        if (deviceType === 'mobile') return t('analyticsDeviceMobile');
+        if (deviceType === 'desktop') return t('analyticsDeviceDesktop');
+        if (deviceType === 'tablet') return t('analyticsDeviceTablet');
+        return t('analyticsDeviceUnknown');
+    }
+
+    // RAYAT FIX - email + analytics
+    function renderAnalyticsRows(targetId, rows, renderer, emptyKey = 'analyticsNoData') {
+        const target = document.getElementById(targetId);
+        if (!target) return;
+
+        target.innerHTML = rows.length
+            ? rows.map(renderer).join('')
+            : `<tr><td colspan="2" class="text-center text-gray-400 py-8">${t(emptyKey)}</td></tr>`;
+    }
+
+    // RAYAT FIX - email + analytics
+    async function loadAnalytics() {
+        if (!currentAdmin || currentAdmin.role !== 'super_admin') {
+            return;
+        }
+
+        ['analytics-pages-body', 'analytics-sources-body', 'analytics-locations-body', 'analytics-devices-body', 'analytics-buttons-body'].forEach((id) => {
+            const target = document.getElementById(id);
+            if (target) {
+                target.innerHTML = `<tr><td colspan="2" class="text-center text-gray-400 py-8">${t('loading')}</td></tr>`;
+            }
+        });
+
+        try {
+            const response = await api('/analytics/summary');
+            const data = response.data || {};
+
+            document.getElementById('analytics-stat-today').textContent = formatAnalyticsCount(data.visitsToday);
+            document.getElementById('analytics-stat-7d').textContent = formatAnalyticsCount(data.visits7d);
+            document.getElementById('analytics-stat-30d').textContent = formatAnalyticsCount(data.visits30d);
+            document.getElementById('analytics-stat-unique').textContent = formatAnalyticsCount(data.uniqueVisitors30d);
+            document.getElementById('analytics-stat-starts').textContent = formatAnalyticsCount(data.registrationStarts30d);
+            document.getElementById('analytics-stat-completed').textContent = formatAnalyticsCount(data.registrationCompleted30d);
+            document.getElementById('analytics-stat-conversion').textContent = `${Number(data.conversionRate || 0).toFixed(1)}%`;
+
+            renderAnalyticsRows('analytics-pages-body', data.topPages || [], (row) => `
+                <tr>
+                    <td class="font-semibold text-gray-700">${esc(row.page_path || '/')}</td>
+                    <td class="text-xs text-gray-500">${formatAnalyticsCount(row.visits)}</td>
+                </tr>
+            `);
+
+            renderAnalyticsRows('analytics-sources-body', data.trafficSources || [], (row) => `
+                <tr>
+                    <td class="font-semibold text-gray-700">${esc(row.source || t('analyticsDirect'))}</td>
+                    <td class="text-xs text-gray-500">${formatAnalyticsCount(row.visits)}</td>
+                </tr>
+            `);
+
+            renderAnalyticsRows('analytics-locations-body', data.locations || [], (row) => {
+                const location = [row.country_code || '', row.city_name || ''].filter(Boolean).join(' • ') || '—';
+                return `
+                    <tr>
+                        <td class="font-semibold text-gray-700">${esc(location)}</td>
+                        <td class="text-xs text-gray-500">${formatAnalyticsCount(row.visits)}</td>
+                    </tr>
+                `;
+            });
+
+            renderAnalyticsRows('analytics-devices-body', data.devices || [], (row) => `
+                <tr>
+                    <td class="font-semibold text-gray-700">${esc(getAnalyticsDeviceLabel(row.device_type))}</td>
+                    <td class="text-xs text-gray-500">${formatAnalyticsCount(row.visits)}</td>
+                </tr>
+            `);
+
+            renderAnalyticsRows('analytics-buttons-body', data.buttonClicks || [], (row) => `
+                <tr>
+                    <td class="font-semibold text-gray-700">${esc(row.button_name || '—')}</td>
+                    <td class="text-xs text-gray-500">${formatAnalyticsCount(row.clicks)}</td>
+                </tr>
+            `);
+        } catch (err) {
+            ['analytics-pages-body', 'analytics-sources-body', 'analytics-locations-body', 'analytics-devices-body', 'analytics-buttons-body'].forEach((id) => {
+                const target = document.getElementById(id);
+                if (target) {
+                    target.innerHTML = `<tr><td colspan="2" class="text-center text-red-400 py-8">${esc(err.message)}</td></tr>`;
+                }
+            });
+        }
     }
 
     // ── Admin Users ───────────────────────────────────────────────────────

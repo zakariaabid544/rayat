@@ -246,6 +246,51 @@
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
         }
 
+        .rayat-account-trigger {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(6, 95, 70, 0.9);
+            color: white;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
+            transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .rayat-account-trigger:hover {
+            transform: translateY(-1px);
+            background: rgba(4, 120, 87, 0.95);
+            box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
+        }
+
+        .rayat-account-trigger--active {
+            background: rgba(249, 115, 22, 0.96);
+            border-color: rgba(255, 255, 255, 0.28);
+        }
+
+        .rayat-account-trigger__icon {
+            width: 20px;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .rayat-account-trigger__icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .rayat-account-trigger__initials {
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
         .rayat-mobile-overlay {
             position: fixed;
             inset: 0;
@@ -363,7 +408,7 @@
             align-items: center;
             gap: 0.2em;
             margin: 0 auto 1.5rem;
-            max-width: min(100%, 16ch);
+            max-width: min(100%, 24ch);
             font-size: 72px;
             font-weight: 800;
             line-height: 1.02;
@@ -371,17 +416,22 @@
         }
 
         .rayat-hero-title-line {
-            display: block;
-            width: 100%;
+            display: inline-block;
+            width: auto;
+            max-width: 100%;
             text-wrap: balance;
         }
 
         .rayat-hero-title-line--primary {
-            max-width: 13ch;
+            max-width: 24ch;
         }
 
         .rayat-hero-title-line--secondary {
-            max-width: 15ch;
+            max-width: 18ch;
+        }
+
+        .rayat-hero-title-line--accent {
+            max-width: 18ch;
         }
 
         .rayat-hero-accent {
@@ -599,6 +649,70 @@
             text-transform: uppercase;
         }
 
+        /* RAYAT FIX - uniforma il blocco ultimo aggiornamento nelle sezioni demo */
+        .rayat-last-update {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin: 0 0 2rem;
+            padding: 0.95rem 1.15rem;
+            border-radius: 1.5rem;
+            background: #f8fafc;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+        }
+
+        .rayat-last-update-copy {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+
+        .rayat-last-update-label {
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        .rayat-last-update-time {
+            font-size: 1rem;
+            font-weight: 900;
+            color: #0f172a;
+            letter-spacing: -0.02em;
+        }
+
+        .rayat-last-update-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            min-width: 48px;
+            height: 48px;
+            border-radius: 1rem;
+            background: white;
+            border: 1px solid rgba(203, 213, 225, 0.9);
+            color: #0f172a;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+
+        .rayat-last-update-action:hover {
+            background: #f8fafc;
+            transform: translateY(-1px);
+            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+        }
+
+        .rayat-refresh-icon {
+            display: block;
+            font-size: 1.1rem;
+            line-height: 1;
+        }
+
         .rayat-range-track {
             position: relative;
             height: 14px;
@@ -684,6 +798,36 @@
             z-index: 1;
         }
 
+        /* RAYAT FIX - mantiene il visual mani interamente visibile nella sezione contatti */
+        .rayat-founder-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+        }
+
+        .rayat-founder-copy {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .rayat-founder-visual {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 clamp(120px, 18vw, 180px);
+            min-height: 120px;
+            pointer-events: none;
+        }
+
+        .rayat-founder-visual-emoji {
+            display: block;
+            font-size: clamp(5rem, 8vw, 8rem);
+            line-height: 1;
+            opacity: 0.22;
+            transform: rotate(12deg);
+        }
+
         .rayat-whatsapp-panel {
             padding: 2.5rem 2rem;
             border-radius: 2rem;
@@ -736,6 +880,96 @@
 
         .rayat-footer-primary-link:hover {
             color: #f97316;
+        }
+
+        .rayat-profile-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.72fr);
+            gap: 2rem;
+            align-items: start;
+        }
+
+        .rayat-profile-card {
+            background: #fff;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            border-radius: 2rem;
+            padding: 2rem;
+            box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+        }
+
+        .rayat-profile-hero {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        .rayat-profile-avatar {
+            width: 96px;
+            min-width: 96px;
+            height: 96px;
+            border-radius: 28px;
+            overflow: hidden;
+            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+        }
+
+        .rayat-profile-avatar-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+            display: block;
+        }
+
+        .rayat-profile-avatar-fallback {
+            font-size: 2rem;
+            font-weight: 900;
+            color: #166534;
+            letter-spacing: 0.06em;
+        }
+
+        .rayat-profile-sidebar {
+            position: sticky;
+            top: calc(var(--safe-top) + 96px);
+        }
+
+        .rayat-profile-meta-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.9rem 0;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+            font-size: 0.96rem;
+            color: #475569;
+        }
+
+        .rayat-profile-meta-row:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .rayat-profile-meta-row strong {
+            color: #0f172a;
+            font-weight: 900;
+            text-align: right;
+        }
+
+        .rayat-profile-sensors-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1.25rem;
+        }
+
+        .rayat-profile-sensor-card {
+            border-radius: 1.75rem;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            padding: 1.4rem;
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.05);
         }
 
         .rayat-footer-divider {
@@ -901,13 +1135,14 @@
 
             .rayat-hero-title {
                 max-width: 100%;
-                font-size: clamp(2.4rem, 9vw, 2.85rem);
-                line-height: 1.04;
+                font-size: clamp(1.7rem, 7.1vw, 2.45rem);
+                line-height: 1.08;
                 gap: 0.28rem;
             }
 
             .rayat-hero-title-line--primary,
-            .rayat-hero-title-line--secondary {
+            .rayat-hero-title-line--secondary,
+            .rayat-hero-title-line--accent {
                 max-width: 100%;
             }
 
@@ -919,6 +1154,40 @@
 
             .rayat-water-compact {
                 grid-template-columns: 1fr;
+            }
+
+            .rayat-last-update {
+                padding: 0.9rem 1rem;
+                border-radius: 1.25rem;
+                margin-bottom: 1.5rem;
+            }
+
+            .rayat-last-update-copy {
+                gap: 0.35rem;
+            }
+
+            .rayat-last-update-label {
+                font-size: 10px;
+                letter-spacing: 0.14em;
+            }
+
+            .rayat-last-update-time {
+                font-size: 0.95rem;
+            }
+
+            .rayat-founder-card {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .rayat-founder-visual {
+                width: 100%;
+                justify-content: flex-end;
+                min-height: 96px;
+            }
+
+            .rayat-founder-visual-emoji {
+                font-size: clamp(4.25rem, 18vw, 6rem);
             }
 
             .rayat-home-map-layout {
@@ -1020,6 +1289,29 @@
                 letter-spacing: 0.12em;
             }
 
+            .rayat-profile-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .rayat-profile-card {
+                padding: 1.5rem;
+                border-radius: 1.75rem;
+            }
+
+            .rayat-profile-hero {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .rayat-profile-sidebar {
+                position: static;
+                top: auto;
+            }
+
+            .rayat-profile-sensors-grid {
+                grid-template-columns: 1fr;
+            }
+
             #map,
             #home-map,
             #contact-map,
@@ -1069,6 +1361,16 @@
             .text-\[10rem\],
             .md\:text-\[12rem\] {
                 font-size: 5.75rem !important;
+            }
+
+            .rayat-profile-meta-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.35rem;
+            }
+
+            .rayat-profile-meta-row strong {
+                text-align: left;
             }
 
             .rayat-mobile-actions > *,
