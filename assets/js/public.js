@@ -4996,17 +4996,23 @@
             const renderDemoSectionHeading = (title) => `
                 <div class="rayat-demo-section-heading">
                     <div class="rayat-demo-section-heading__row">
-                        <div class="rayat-demo-section-heading__group">
-                            <h4 class="rayat-demo-section-heading__title">${title}</h4>
+                        <div class="rayat-demo-section-heading__controls rayat-demo-section-heading__controls--balance" aria-hidden="true">
+                            <span class="rayat-demo-section-heading__status ${demoStatusState === 'online' ? 'is-online' : 'is-offline'}"></span>
                             ${renderMonitoringRefreshControl('section')}
+                        </div>
+                        <div class="rayat-demo-section-heading__copy">
+                            <h4 class="rayat-demo-section-heading__title">${title}</h4>
+                            <p class="rayat-demo-section-heading__subtitle">${t('realTimeMonitoring')}</p>
+                        </div>
+                        <div class="rayat-demo-section-heading__controls">
                             <span
                                 class="rayat-demo-section-heading__status ${demoStatusState === 'online' ? 'is-online' : 'is-offline'}"
                                 aria-label="${escapeHtml(demoStatusState === 'online' ? t('monitoringOnline') : t('monitoringOffline'))}"
                                 title="${escapeHtml(demoStatusState === 'online' ? t('monitoringOnline') : t('monitoringOffline'))}"
                             ></span>
+                            ${renderMonitoringRefreshControl('section')}
                         </div>
                     </div>
-                    <p class="rayat-demo-section-heading__subtitle">${t('realTimeMonitoring')}</p>
                 </div>
             `;
 
