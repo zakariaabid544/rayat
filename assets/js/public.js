@@ -15,9 +15,13 @@
         const AUTH_TOKEN_STORAGE_KEY = 'rayat_token';
         const AUTH_USER_STORAGE_KEY = 'rayat_user';
         const AUTH_STORAGE_MODE_KEY = 'rayat_auth_storage_mode';
+        const ADMIN_AUTH_TOKEN_STORAGE_KEY = 'rayat_admin_token';
+        const ADMIN_AUTH_USER_STORAGE_KEY = 'rayat_admin_user';
 
         let authToken = null;
         let currentRole = 'guest';
+        let adminSessionUser = null;
+        let activeAdminSessionRestorePromise = null;
 
         let currentView = 'home';
         let selectedSensor = 'energia';
@@ -31,6 +35,7 @@
         let dataError = false; // Track API availability
         const CUSTOMER_ROLES = new Set(['client', 'farmer']);
         const ADMIN_ROLES = new Set(['admin', 'super_admin', 'operator', 'operator_admin']);
+        const PRIVILEGED_ADMIN_ROLES = new Set(['super_admin', 'operator_admin']);
         const VIEW_PATHS = {
             home: '/',
             login: '/login',
@@ -767,6 +772,118 @@
             return ADMIN_ROLES.has(role);
         }
 
+        function isPrivilegedAdminRole(role = '') {
+            return PRIVILEGED_ADMIN_ROLES.has(role);
+        }
+
+        function readStoredAdminSessionUser() {
+            const raw = sessionStorage.getItem(ADMIN_AUTH_USER_STORAGE_KEY);
+            if (!raw) {
+                return null;
+            }
+
+            try {
+                const parsed = JSON.parse(raw);
+                return isPrivilegedAdminRole(parsed?.role) ? parsed : null;
+            } catch (error) {
+                sessionStorage.removeItem(ADMIN_AUTH_USER_STORAGE_KEY);
+                return null;
+            }
+        }
+
+        function syncStoredAdminSessionIntoState() {
+            adminSessionUser = readStoredAdminSessionUser();
+
+            if (!adminSessionUser && isPrivilegedAdminRole(currentRole) && user) {
+                adminSessionUser = user;
+            }
+        }
+
+        function getPrivilegedAdminSessionUser() {
+            if (isPrivilegedAdminRole(currentRole) && user) {
+                return user;
+            }
+
+            return isPrivilegedAdminRole(adminSessionUser?.role) ? adminSessionUser : null;
+        }
+
+        function hasPrivilegedAdminShortcut() {
+            return Boolean(getPrivilegedAdminSessionUser());
+        }
+
+        function getAdminSessionTokenCandidate() {
+            return sessionStorage.getItem(ADMIN_AUTH_TOKEN_STORAGE_KEY)
+                || (isPrivilegedAdminRole(currentRole) ? authToken : null)
+                || null;
+        }
+
+        function shouldAttemptAdminSessionRestore() {
+            const adminReferrer = `${API_ORIGIN}/admin`;
+            return Boolean(
+                sessionStorage.getItem(ADMIN_AUTH_TOKEN_STORAGE_KEY)
+                || sessionStorage.getItem(ADMIN_AUTH_USER_STORAGE_KEY)
+                || isPrivilegedAdminRole(currentRole)
+                || document.referrer.startsWith(adminReferrer)
+            );
+        }
+
+        async function ensurePrivilegedAdminSession() {
+            if (!shouldAttemptAdminSessionRestore()) {
+                syncStoredAdminSessionIntoState();
+                return adminSessionUser;
+            }
+
+            if (activeAdminSessionRestorePromise) {
+                return activeAdminSessionRestorePromise;
+            }
+
+            const headers = {};
+            const candidateToken = getAdminSessionTokenCandidate();
+            if (candidateToken) {
+                headers.Authorization = `Bearer ${candidateToken}`;
+            }
+
+            activeAdminSessionRestorePromise = fetch(`${API_ORIGIN}/api/admin/session`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers
+            }).then(async (response) => {
+                if (!response.ok) {
+                    sessionStorage.removeItem(ADMIN_AUTH_TOKEN_STORAGE_KEY);
+                    sessionStorage.removeItem(ADMIN_AUTH_USER_STORAGE_KEY);
+                    adminSessionUser = isPrivilegedAdminRole(currentRole) && user ? user : null;
+                    return adminSessionUser;
+                }
+
+                const data = await response.json();
+                if (data?.token) {
+                    sessionStorage.setItem(ADMIN_AUTH_TOKEN_STORAGE_KEY, data.token);
+                }
+
+                if (isPrivilegedAdminRole(data?.user?.role)) {
+                    sessionStorage.setItem(ADMIN_AUTH_USER_STORAGE_KEY, JSON.stringify(data.user));
+                    adminSessionUser = data.user;
+                    return adminSessionUser;
+                }
+
+                adminSessionUser = null;
+                return null;
+            }).catch(() => {
+                syncStoredAdminSessionIntoState();
+                return adminSessionUser;
+            }).finally(() => {
+                activeAdminSessionRestorePromise = null;
+            });
+
+            return activeAdminSessionRestorePromise;
+        }
+
+        function goToAdminArea() {
+            closeProfileMenu();
+            toggleMobileMenu(false);
+            window.location.href = `${API_ORIGIN}/admin/`;
+        }
+
         function getPathForView(view) {
             return VIEW_PATHS[view] || '/';
         }
@@ -783,6 +900,7 @@
             if (!authToken) {
                 user = null;
                 currentRole = 'guest';
+                syncStoredAdminSessionIntoState();
                 syncSubscriptionUiState();
                 return;
             }
@@ -793,6 +911,7 @@
                     user = JSON.parse(storedUser);
                     currentRole = user?.role || 'guest';
                     syncStoredUserProfileIntoSession();
+                    syncStoredAdminSessionIntoState();
                     syncSubscriptionUiState();
                     return;
                 } catch (error) {
@@ -812,6 +931,7 @@
                 currentRole = decoded.role;
                 syncStoredUserProfileIntoSession();
                 getActiveAuthStorage().setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
+                syncStoredAdminSessionIntoState();
                 syncSubscriptionUiState();
                 return;
             }
@@ -827,12 +947,14 @@
             latestAssignedSensors = [];
             userProfileNotice = '';
             isProfileMenuOpen = false;
+            adminSessionUser = null;
+            activeAdminSessionRestorePromise = null;
             localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
             localStorage.removeItem(AUTH_USER_STORAGE_KEY);
             sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
             sessionStorage.removeItem(AUTH_USER_STORAGE_KEY);
-            sessionStorage.removeItem('rayat_admin_token');
-            sessionStorage.removeItem('rayat_admin_user');
+            sessionStorage.removeItem(ADMIN_AUTH_TOKEN_STORAGE_KEY);
+            sessionStorage.removeItem(ADMIN_AUTH_USER_STORAGE_KEY);
             syncSubscriptionUiState();
             hideSubscriptionExpiredModal();
 
@@ -1801,12 +1923,22 @@
         function navigateToAccountPage() {
             closeProfileMenu();
 
-            if (!isAuthenticated() || !isCustomerRole(currentRole)) {
+            if (isAuthenticated() && isCustomerRole(currentRole)) {
+                setView('profilo');
+                return;
+            }
+
+            if (hasPrivilegedAdminShortcut()) {
+                goToAdminArea();
+                return;
+            }
+
+            if (!isAuthenticated()) {
                 setViewWithTracking('login', { path: '/login' });
                 return;
             }
 
-            setView('profilo');
+            setViewWithTracking('login', { path: '/login' });
         }
 
         function formatTemplate(template, tokens = {}) {
@@ -2003,7 +2135,7 @@
             document.body.dataset.view = currentView;
             document.body.classList.toggle('rayat-standalone-mode', isStandaloneDisplayMode());
             document.body.classList.toggle('rayat-authenticated', isAuthenticated());
-            document.body.classList.toggle('rayat-public-admin-link', isPrivilegedRole(currentRole));
+            document.body.classList.toggle('rayat-public-admin-link', hasPrivilegedAdminShortcut());
         }
 
         function renderCropSelector(options = {}) {
@@ -2852,8 +2984,9 @@
 
                     if (user.role === 'super_admin' || user.role === 'operator_admin' || user.role === 'operator' || user.role === 'admin') {
                         // Store token in sessionStorage under admin panel keys → no second login needed
-                        sessionStorage.setItem('rayat_admin_token', data.token);
-                        sessionStorage.setItem('rayat_admin_user', JSON.stringify(data.user));
+                        sessionStorage.setItem(ADMIN_AUTH_TOKEN_STORAGE_KEY, data.token);
+                        sessionStorage.setItem(ADMIN_AUTH_USER_STORAGE_KEY, JSON.stringify(data.user));
+                        syncStoredAdminSessionIntoState();
                         window.location.href = `${API_ORIGIN}/admin/`;
                     } else {
                         setView('demo');
@@ -2998,7 +3131,12 @@
             closeProfileMenu();
 
             if (view === 'profilo') {
-                if (!isAuthenticated() || !isCustomerRole(currentRole)) {
+                if (isAuthenticated() && isCustomerRole(currentRole)) {
+                    // allow through
+                } else if (hasPrivilegedAdminShortcut()) {
+                    goToAdminArea();
+                    return;
+                } else {
                     setView('login', { replace: true, path: '/login' });
                     return;
                 }
@@ -3449,13 +3587,22 @@
             ];
             const mobileLinks = [...primaryLinks];
             const canAccessProfile = isAuthenticated() && isCustomerRole(currentRole);
+            const adminShortcutUser = getPrivilegedAdminSessionUser();
+            const hasAdminAccessShortcut = Boolean(adminShortcutUser);
             const mergedProfile = canAccessProfile ? getMergedUserProfile() : null;
             const profileDisplayName = mergedProfile?.name || user?.name || 'Rayat';
             const profileDisplayEmail = mergedProfile?.email || user?.email || '';
-            const accountLabel = canAccessProfile ? t('profileNav') : t('login');
-            const authButton = !isAuthenticated()
-                ? `<button onclick="setViewWithTracking('login')" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('login')}</button>`
-                : '';
+            const adminDisplayName = adminShortcutUser?.name || adminShortcutUser?.email || 'Rayat';
+            const accountLabel = canAccessProfile
+                ? t('profileNav')
+                : hasAdminAccessShortcut
+                    ? t('adminArea')
+                    : t('login');
+            const authButton = hasAdminAccessShortcut && !canAccessProfile
+                ? `<button onclick="goToAdminArea()" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('adminArea')}</button>`
+                : !isAuthenticated()
+                    ? `<button onclick="setViewWithTracking('login')" class="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl transition text-xs font-black uppercase tracking-widest shadow-lg">${t('login')}</button>`
+                    : '';
             const accountButton = canAccessProfile
                 ? `
                     <div id="rayat-profile-menu-shell" class="rayat-profile-menu-shell ${isProfileMenuOpen ? 'is-open' : ''}">
@@ -3484,6 +3631,12 @@
                         </div>
                     </div>
                 `
+                : hasAdminAccessShortcut
+                    ? `
+                        <button onclick="goToAdminArea()" class="rayat-account-trigger rayat-account-trigger--menu rayat-account-trigger--active" aria-label="${escapeHtml(accountLabel)}" title="${escapeHtml(accountLabel)}">
+                            <span class="rayat-account-trigger__initials">${escapeHtml(getUserInitials(adminDisplayName))}</span>
+                        </button>
+                    `
                 : `
                     <button onclick="navigateToAccountPage()" class="rayat-account-trigger" aria-label="${escapeHtml(accountLabel)}" title="${escapeHtml(accountLabel)}">
                         <span class="rayat-account-trigger__icon" aria-hidden="true">
@@ -3581,7 +3734,11 @@
                                 </div>
                             </div>
                         ` : ''}
-                        ${!isAuthenticated() ? `
+                        ${hasAdminAccessShortcut && !canAccessProfile ? `
+                            <div class="mt-6 pt-6 border-t border-slate-200">
+                                <button onclick="goToAdminArea()" class="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs">${t('adminArea')}</button>
+                            </div>
+                        ` : !isAuthenticated() ? `
                             <div class="mt-6 pt-6 border-t border-slate-200">
                                 <button onclick="navigateFromMobileMenu('login')" class="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs">${t('login')}</button>
                             </div>
@@ -4903,7 +5060,6 @@
 
         function renderDemoPage() {
             const current = sensorData[selectedSensor];
-            const isLiveMonitoring = isAuthenticated() && isCustomerRole(currentRole);
             const hasMetricValue = (value) => Number.isFinite(parseNumericValue(value));
             const demoStatusState = (() => {
                 if (dataError || !current || !globalHistory.length) {
@@ -4946,24 +5102,7 @@
             `;
 
             // RAYAT FIX - demo section refresh cleanup and repositioning
-            const renderMonitoringHeaderBlock = () => isLiveMonitoring ? `
-                <div class="rayat-monitoring-toolbar">
-                    <div class="rayat-monitoring-toolbar__copy">
-                        <h2 class="rayat-monitoring-toolbar__title">${user ? t('dashboardBtn') : t('demoDashboard')}</h2>
-                        <p class="rayat-monitoring-toolbar__subtitle">${t('demoDesc')}</p>
-                    </div>
-                    <div class="rayat-monitoring-toolbar__controls">
-                        <div class="rayat-monitoring-status-pill ${dataError ? 'is-offline' : 'is-online'}">
-                            <span class="rayat-monitoring-status-pill__dot" aria-hidden="true"></span>
-                            <div class="rayat-monitoring-status-pill__copy">
-                                <strong>${dataError ? t('monitoringOffline') : t('monitoringOnline')}</strong>
-                                <span>${t('lastRefreshed')}: ${formatLocalizedTime(lastRefreshed)}</span>
-                            </div>
-                        </div>
-                        ${renderMonitoringRefreshControl()}
-                    </div>
-                </div>
-            ` : `
+            const renderMonitoringHeaderBlock = () => `
                 <div class="rayat-monitoring-toolbar rayat-monitoring-toolbar--demo-only">
                     <div class="rayat-monitoring-toolbar__copy">
                         <h2 class="rayat-monitoring-toolbar__title">${user ? t('dashboardBtn') : t('demoDashboard')}</h2>
@@ -5011,16 +5150,8 @@
                 const rows = sensorData.terreno.details.map((metric) => renderMetricCard('soil', metric)).join('');
 
                 return `
-                ${isLiveMonitoring ? `
-                    <div style="margin-bottom:2.5rem;text-align:center;">
-                        <div style="display:inline-flex;align-items:center;gap:15px;justify-content:center;margin-bottom:0.3rem;">
-                            <h4 style="font-size:2rem;font-weight:900;color:#1e293b;text-transform:uppercase;letter-spacing:-0.03em;margin:0;">${t('sensorSoName')}</h4>
-                            <div class="w-4 h-4 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,1)]'} animate-pulse"></div>
-                        </div>
-                        <p style="font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.25em;margin-top:0;">${t('realTimeMonitoring')}</p>
-                    </div>
-                ` : renderDemoSectionHeading(t('sensorSoName'))}
-                ${isLiveMonitoring ? renderLastUpdateBlock() : ''}
+                ${renderDemoSectionHeading(t('sensorSoName'))}
+                ${renderLastUpdateBlock()}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
@@ -5032,16 +5163,8 @@
                 const rows = sensorData.clima.details.map((metric) => renderMetricCard('climate', metric)).join('');
 
                 return `
-                ${isLiveMonitoring ? `
-                    <div class="mb-10 text-center">
-                        <div class="flex items-center justify-center gap-4 mb-2">
-                            <h4 class="text-4xl font-black text-gray-800 uppercase tracking-tight m-0">${t('sensorClName')}</h4>
-                            <div class="w-4 h-4 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,1)]'} animate-pulse"></div>
-                        </div>
-                        <p class="text-gray-400 font-bold uppercase tracking-widest text-xs mt-0">${t('realTimeMonitoring')}</p>
-                    </div>
-                ` : renderDemoSectionHeading(t('sensorClName'))}
-                ${isLiveMonitoring ? renderLastUpdateBlock() : ''}
+                ${renderDemoSectionHeading(t('sensorClName'))}
+                ${renderLastUpdateBlock()}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
@@ -5061,16 +5184,8 @@
                 const isShortage = avail < req;
 
                 return `
-                ${isLiveMonitoring ? `
-                    <div class="mb-10 text-center">
-                        <div class="flex items-center justify-center gap-4 mb-2">
-                            <h4 class="text-4xl font-black text-gray-800 uppercase tracking-tight m-0">${t('sensorWaName')}</h4>
-                            <div class="w-4 h-4 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,1)]'} animate-pulse"></div>
-                        </div>
-                        <p class="text-gray-400 font-bold uppercase tracking-widest text-xs mt-0">${t('realTimeMonitoring')}</p>
-                    </div>
-                ` : renderDemoSectionHeading(t('sensorWaName'))}
-                ${isLiveMonitoring ? renderLastUpdateBlock() : ''}
+                ${renderDemoSectionHeading(t('sensorWaName'))}
+                ${renderLastUpdateBlock()}
                 <div class="rayat-water-compact mb-12">
                     <div>
                         <label class="block text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">${t('hectaresLabel')}</label>
@@ -5145,24 +5260,11 @@
                         ${/* Demo Mode: Error overlay removed */ ''}
                         <div class="relative z-10">
                             ${selectedSensor === 'acqua' ? renderWater() : (selectedSensor === 'terreno' ? render7in1() : (selectedSensor === 'clima' ? renderClimate() : `
-                                    ${isLiveMonitoring ? renderLastUpdateBlock() : ''}
-                                    ${!isLiveMonitoring ? renderDemoSectionHeading(t(current.nome)) : ''}
+                                    ${renderDemoSectionHeading(t(current.nome))}
+                                    ${renderLastUpdateBlock()}
                                     <div class="flex flex-col md:flex-row items-center justify-between mb-16">
-                                        <div class="flex items-center ${isLiveMonitoring ? 'gap-10' : ''}">
+                                        <div class="flex items-center justify-center">
                                             <div class="text-[10rem] transform -rotate-12 transition-transform hover:rotate-0 duration-700">${current.icon}</div>
-                                            ${isLiveMonitoring ? `
-                                                <div>
-                                                    <div class="flex items-center gap-4">
-                                                        <h3 class="text-7xl font-black text-slate-900 tracking-tighter uppercase leading-none m-0">${t(current.nome)}</h3>
-                                                    </div>
-                                                    <div class="flex items-center gap-4 mt-8">
-                                                        <div class="px-6 py-2 ${getStatusBadge(getMetricState(parseNumericValue(current.valore), { min: 12.2, max: 13.8, unit: current.unita || 'V' }).level).className} rounded-2xl font-black text-sm uppercase tracking-widest border border-current flex items-center gap-3">
-                                                            ${getStatusBadge(getMetricState(parseNumericValue(current.valore), { min: 12.2, max: 13.8, unit: current.unita || 'V' }).level).label}
-                                                            <div class="w-2.5 h-2.5 rounded-full ${!dataError ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,1)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,1)]'} animate-pulse"></div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ` : ''}
                                         </div>
                                         <div class="text-center md:text-right mt-12 md:mt-0">
                                             <div class="text-[10rem] md:text-[12rem] font-black text-slate-900 tracking-tighter leading-none">${current.valore}<span class="text-4xl text-slate-300 ml-4 uppercase font-black">${current.unita}</span></div>
@@ -5416,13 +5518,27 @@
 
         // Initialize
         restorePublicSession();
+        const hadAdminShortcutOnLoad = hasPrivilegedAdminShortcut();
+        ensurePrivilegedAdminSession().then(() => {
+            if (hadAdminShortcutOnLoad !== hasPrivilegedAdminShortcut() && currentView !== 'profilo') {
+                render();
+            }
+        }).catch(() => {});
         currentView = getViewFromPath(window.location.pathname);
         if (currentView === 'profilo' && !isAuthenticated()) {
-            currentView = 'login';
-            history.replaceState({ view: 'login' }, '', '/login');
+            if (hasPrivilegedAdminShortcut()) {
+                goToAdminArea();
+            } else {
+                currentView = 'login';
+                history.replaceState({ view: 'login' }, '', '/login');
+            }
         } else if (currentView === 'profilo' && !isCustomerRole(currentRole)) {
-            currentView = 'login';
-            history.replaceState({ view: 'login' }, '', '/login');
+            if (hasPrivilegedAdminShortcut()) {
+                goToAdminArea();
+            } else {
+                currentView = 'login';
+                history.replaceState({ view: 'login' }, '', '/login');
+            }
         }
         render();
         trackPageView(currentView);
