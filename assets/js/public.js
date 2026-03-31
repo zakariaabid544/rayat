@@ -9,6 +9,8 @@
         };
 
         let lastRefreshed = new Date();
+        let isRefreshingData = false;
+        let activeRefreshPromise = null;
 
         const AUTH_TOKEN_STORAGE_KEY = 'rayat_token';
         const AUTH_USER_STORAGE_KEY = 'rayat_user';
@@ -918,6 +920,7 @@
                 footerRights: '© 2026 Rayat Smart Monitoring. Tutti i diritti riservati.',
                 banane: 'Banane', agrumi: 'Agrumi', pomodori: 'Pomodori', mais: 'Mais', fragole: 'Fragole', olive: 'Olive', citrus: 'Agrumi', tomatoes: 'Pomodori', banana: 'Banane', strawberry: 'Fragole',
                 lastUpdate: 'Ultimo Update', lastRefreshed: 'Ultimo Aggiornamento', export: 'Scarica CSV', search: 'Cerca', time: 'Data/Ora', status: 'Stato',
+                refreshDataAction: 'Aggiorna dati', refreshingDataAction: 'Aggiornamento in corso', monitoringOnline: 'Sensori online', monitoringOffline: 'Connessione instabile',
                 appSubtitle: 'Rayat Smart Monitoring Professionale',
                 welcome: 'Benvenuto', protected: 'Il Tuo Campo è Protetto 24/7', controlActive: 'Controllo continuo - La tua assicurazione agricola sempre attiva',
                 loginTitle: 'Accedi', loginError: 'Email o password non corretti!', emailLabel: 'Email', passwordLabel: 'Password', loginBtn: 'ACCEDI', demoAccount: 'Account Demo:',
@@ -1055,6 +1058,7 @@
                 footerRights: '© 2026 Rayat Smart Monitoring. All rights reserved.',
                 banane: 'Bananas', agrumi: 'Citrus (Oranges/Lemons)', pomodori: 'Tomatoes', mais: 'Corn', fragole: 'Strawberries', olive: 'Olives', citrus: 'Citrus', tomatoes: 'Tomatoes', banana: 'Bananas', strawberry: 'Strawberries',
                 lastUpdate: 'Last Update', lastRefreshed: 'Last Refreshed', export: 'Download Report (CSV)', search: 'Search', time: 'Time', status: 'Status',
+                refreshDataAction: 'Refresh data', refreshingDataAction: 'Refreshing data', monitoringOnline: 'Sensors online', monitoringOffline: 'Connection unstable',
                 appSubtitle: 'Rayat Smart Monitoring',
                 welcome: 'Welcome', protected: 'Your Field is Protected 24/7', controlActive: 'Continuous monitoring - Your agricultural insurance always active',
                 loginTitle: 'Login', loginError: 'Incorrect email or password!', emailLabel: 'Email', passwordLabel: 'Password', loginBtn: 'LOGIN', demoAccount: 'Demo Account:',
@@ -1190,6 +1194,7 @@
                 footerRights: '© 2026 Rayat Smart Monitoring. Tous droits réservés.',
                 banane: 'Bananes', agrumi: 'Agrumes', pomodori: 'Tomates', mais: 'Maïs', fragole: 'Fraises', olive: 'Olives', citrus: 'Agrumes', tomatoes: 'Tomates', banana: 'Bananes', strawberry: 'Fraises',
                 lastUpdate: 'Mise à jour', lastRefreshed: 'Dernière mise à jour', export: 'Exporter CSV', search: 'Chercher', time: 'Date/Heure', status: 'Statut',
+                refreshDataAction: 'Actualiser les donnees', refreshingDataAction: 'Actualisation en cours', monitoringOnline: 'Capteurs en ligne', monitoringOffline: 'Connexion instable',
                 appSubtitle: 'Rayat Smart Monitoring Professionnel',
                 welcome: 'Bienvenue', protected: 'Votre Champ est Protégé 24h/24', controlActive: 'Surveillance continue - Votre assurance agricole toujours active',
                 loginTitle: 'Connexion', loginError: 'Email ou mot de passe incorrect!', emailLabel: 'Email', passwordLabel: 'Mot de passe', loginBtn: 'CONNEXION', demoAccount: 'Compte Démo:',
@@ -1325,6 +1330,7 @@
                 footerRights: '© 2026 Rayat Smart Monitoring. جميع الحقوق محفوظة.',
                 banane: 'موز', agrumi: 'حمضيات', pomodori: 'طماطم', mais: 'ذرة', fragole: 'فراولة', olive: 'زيتون', citrus: 'حمضيات', tomatoes: 'طماطم', banana: 'موز', strawberry: 'فراولة',
                 lastUpdate: 'آخر تحديث', lastRefreshed: 'تم التحديث في', export: 'تصدير CSV', search: 'بحث', time: 'الوقت', status: 'الحالة',
+                refreshDataAction: 'تحديث البيانات', refreshingDataAction: 'جار تحديث البيانات', monitoringOnline: 'المستشعرات متصلة', monitoringOffline: 'الاتصال غير مستقر',
                 appSubtitle: 'رايات للمراقبة الذكية المحترفة',
                 welcome: 'مرحبا', protected: 'حقلك محمي 24/7', controlActive: 'مراقبة مستمرة - تأمينك الزراعي نشط دائمًا',
                 loginTitle: 'تسجيل الدخول', loginError: 'البريد الإلكتروني أو كلمة المرور غير صحيحة!', emailLabel: 'البريد الإلكتروني', passwordLabel: 'كلمة المرور', loginBtn: 'دخول', demoAccount: 'حساب تجريبي:',
@@ -2351,6 +2357,53 @@
             sensorData.terreno.details[6].value = last.potassium.toFixed(0);
         }
 
+        // RAYAT FIX - refresh header button shared across demo/live monitoring
+        function buildCurrentHistorySnapshot(date = new Date()) {
+            const energy = parseNumericValue(sensorData.energia?.valore) ?? 0;
+            const water = parseNumericValue(sensorData.acqua?.valore) ?? 0;
+            const climateTemp = parseNumericValue(sensorData.clima?.details?.[0]?.value ?? sensorData.clima?.valore) ?? 0;
+            const humidity = parseNumericValue(sensorData.clima?.details?.[1]?.value) ?? 0;
+            const co2 = parseNumericValue(sensorData.clima?.details?.[2]?.value) ?? 0;
+            const windSpeed = parseNumericValue(sensorData.clima?.details?.[3]?.value) ?? 0;
+            const soilTemp = parseNumericValue(sensorData.terreno?.details?.[1]?.value) ?? 0;
+            const soilMoisture = parseNumericValue(sensorData.terreno?.details?.[0]?.value ?? sensorData.terreno?.valore) ?? 0;
+            const ec = parseNumericValue(sensorData.terreno?.details?.[2]?.value) ?? 0;
+            const pH = parseNumericValue(sensorData.terreno?.details?.[3]?.value) ?? 0;
+            const nitrogen = parseNumericValue(sensorData.terreno?.details?.[4]?.value) ?? 0;
+            const phosphorus = parseNumericValue(sensorData.terreno?.details?.[5]?.value) ?? 0;
+            const potassium = parseNumericValue(sensorData.terreno?.details?.[6]?.value) ?? 0;
+
+            return {
+                date,
+                energia: energy,
+                acqua: water,
+                climaTemp: climateTemp,
+                humidity,
+                co2,
+                windSpeed,
+                temperature: soilTemp,
+                terreno: soilMoisture,
+                ec: ec * 1000,
+                pH,
+                nitrogen,
+                phosphorus,
+                potassium,
+                status: 'statusNormal'
+            };
+        }
+
+        // RAYAT FIX - refresh header button shared across demo/live monitoring
+        function syncCurrentSensorSnapshotToHistory(date = new Date()) {
+            const snapshot = buildCurrentHistorySnapshot(date);
+
+            if (!globalHistory.length) {
+                globalHistory = [snapshot];
+                return;
+            }
+
+            globalHistory[globalHistory.length - 1] = snapshot;
+        }
+
         generateSimulationData();
 
         // --- Soil Sensor Thresholds (7-in-1 Configuration) ---
@@ -3110,19 +3163,36 @@
             render(); 
         }
 
+        // RAYAT FIX - refresh header button shared across demo/live monitoring
         async function refreshData() {
-            // RAYAT FIX - anima tutte le icone refresh condivise senza toccare la logica dati
-            const refreshIcons = Array.from(document.querySelectorAll('.rayat-refresh-icon'));
-            refreshIcons.forEach((icon) => icon.classList.add('animate-spin-once'));
+            if (activeRefreshPromise) {
+                return activeRefreshPromise;
+            }
 
-            await loadSensorData();
+            isRefreshingData = true;
             render();
 
-            if (refreshIcons.length) {
-                setTimeout(() => {
-                    refreshIcons.forEach((icon) => icon.classList.remove('animate-spin-once'));
-                }, 800);
-            }
+            activeRefreshPromise = (async () => {
+                try {
+                    if (!isAuthenticated() || !isCustomerRole(currentRole)) {
+                        generateSimulationData();
+                        lastRefreshed = new Date();
+                        dataError = false;
+                        render();
+                        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                        return;
+                    }
+
+                    await loadSensorData();
+                    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                } finally {
+                    isRefreshingData = false;
+                    activeRefreshPromise = null;
+                    render();
+                }
+            })();
+
+            return activeRefreshPromise;
         }
 
         function updateSensorData(apiData, fromCache = false) {
@@ -3168,7 +3238,10 @@
                     if (d) { d.value = val; updated = true; }
                 }
             });
-            if (updated) render();
+            if (updated) {
+                syncCurrentSensorSnapshotToHistory(new Date());
+                render();
+            }
         }
 
         /* --- Predictive Intelligence Logic --- */
@@ -4850,16 +4923,53 @@
         function renderDemoPage() {
             const current = sensorData[selectedSensor];
 
-            // RAYAT FIX - blocco ultimo aggiornamento coerente per tutte le sezioni sensori
+            // RAYAT FIX - global header refresh button for demo/live monitoring
+            const renderMonitoringRefreshControl = () => `
+                <button
+                    type="button"
+                    onclick="refreshData()"
+                    class="rayat-header-refresh-button ${isRefreshingData ? 'is-loading' : ''}"
+                    aria-label="${escapeHtml(isRefreshingData ? t('refreshingDataAction') : t('refreshDataAction'))}"
+                    title="${escapeHtml(isRefreshingData ? t('refreshingDataAction') : t('refreshDataAction'))}"
+                    aria-busy="${isRefreshingData}"
+                    ${isRefreshingData ? 'disabled' : ''}
+                >
+                    <span class="rayat-header-refresh-button__icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+                            <path d="M21 3v6h-6"></path>
+                        </svg>
+                    </span>
+                </button>
+            `;
+
+            // RAYAT FIX - global header refresh button for demo/live monitoring
+            const renderMonitoringHeaderBlock = () => `
+                <div class="rayat-monitoring-toolbar">
+                    <div class="rayat-monitoring-toolbar__copy">
+                        <h2 class="rayat-monitoring-toolbar__title">${user ? t('dashboardBtn') : t('demoDashboard')}</h2>
+                        <p class="rayat-monitoring-toolbar__subtitle">${t('demoDesc')}</p>
+                    </div>
+                    <div class="rayat-monitoring-toolbar__controls">
+                        <div class="rayat-monitoring-status-pill ${dataError ? 'is-offline' : 'is-online'}">
+                            <span class="rayat-monitoring-status-pill__dot" aria-hidden="true"></span>
+                            <div class="rayat-monitoring-status-pill__copy">
+                                <strong>${dataError ? t('monitoringOffline') : t('monitoringOnline')}</strong>
+                                <span>${t('lastRefreshed')}: ${formatLocalizedTime(lastRefreshed)}</span>
+                            </div>
+                        </div>
+                        ${renderMonitoringRefreshControl()}
+                    </div>
+                </div>
+            `;
+
+            // RAYAT FIX - remove duplicated section refresh actions in demo/live monitoring
             const renderLastUpdateBlock = () => `
                 <div class="rayat-last-update" aria-live="polite">
                     <div class="rayat-last-update-copy">
                         <span class="rayat-last-update-label">${String(t('lastRefreshed')).toUpperCase()}:</span>
                         <span class="rayat-last-update-time">${formatLocalizedTime(lastRefreshed)}</span>
                     </div>
-                    <button type="button" onclick="refreshData()" class="rayat-last-update-action" aria-label="${t('lastRefreshed')}">
-                        <span class="rayat-refresh-icon">🔄</span>
-                    </button>
                 </div>
             `;
 
@@ -4981,10 +5091,7 @@
             <section class="rayat-demo-page py-24 bg-gray-50 min-h-screen">
                 <div class="rayat-demo-shell container mx-auto px-4 max-w-[1300px]">
                     ${renderSubscriptionWarningBanner()}
-                    <div class="text-center mb-20">
-                        <h2 class="text-7xl font-black text-green-800 tracking-tighter uppercase mb-4">${user ? t('dashboardBtn') : t('demoDashboard')}</h2>
-                        <p class="text-2xl font-bold text-gray-400 uppercase tracking-widest">${t('demoDesc')}</p>
-                    </div>
+                    ${renderMonitoringHeaderBlock()}
                     <div class="rayat-demo-nav-grid grid grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
                         ${Object.keys(sensorData).map(key => {
                 const isSel = selectedSensor === key;
@@ -5054,9 +5161,6 @@
                                             <p class="text-[9px] font-bold text-gray-400 uppercase tracking-tight leading-none">${t('lastRefreshed')}:</p>
                                             <p class="text-[11px] font-bold text-gray-600 leading-tight">${formatLocalizedTime(lastRefreshed)}</p>
                                         </div>
-                                        <button onclick="refreshData()" class="p-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition border border-gray-100 group">
-                                            <span class="text-sm block rayat-refresh-icon">🔄</span>
-                                        </button>
                                     </div>
                             </div>
 
