@@ -76,6 +76,10 @@ function normalizeSql(rawSql) {
     (_match, offsetIndex, limitIndex) => `LIMIT $${limitIndex} OFFSET $${offsetIndex}`
   );
   sql = sql.replace(
+    /LIMIT\s+(\d+)\s*,\s*(\d+)/gi,
+    (_match, offset, limit) => `LIMIT ${limit} OFFSET ${offset}`
+  );
+  sql = sql.replace(
     /DATE_SUB\(NOW\(\),\s*INTERVAL\s+\$(\d+)\s+(DAY|MINUTE|HOUR|MONTH|YEAR)\)/gi,
     (_match, valueIndex, unit) => `NOW() - ($${valueIndex} * INTERVAL '1 ${String(unit).toLowerCase()}')`
   );

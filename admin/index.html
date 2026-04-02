@@ -2818,6 +2818,15 @@
 
     // ── Helpers ───────────────────────────────────────────────────────────
     function api(path, opts = {}) {
+        const isRegistrationsRequest = path.startsWith('/registrations');
+        if (isRegistrationsRequest) {
+            console.info('[admin-ui] registrations fetch request', {
+                path,
+                method: opts.method || 'GET',
+                body: opts.body || null
+            });
+        }
+
         return fetch(API + path, {
             ...opts,
             credentials: 'same-origin',
@@ -2828,6 +2837,14 @@
             }
         }).then(async r => {
             const data = await r.json().catch(() => null);
+            if (isRegistrationsRequest) {
+                console.info('[admin-ui] registrations fetch response', {
+                    path,
+                    status: r.status,
+                    ok: r.ok,
+                    data
+                });
+            }
             if (r.status === 401 || r.status === 403) {
                 handleAdminSessionFailure(data || {}, {
                     showError: Boolean(data?.errorCode || data?.error)
@@ -3643,6 +3660,14 @@
         document.getElementById('registrations-body').innerHTML = `<tr><td colspan="6" class="text-center text-gray-400 py-8">${t('loading')}</td></tr>`;
         document.getElementById('registrations-live-info').textContent = t('lastCheck', { time: new Date().toLocaleTimeString(getCurrentLocale()) });
 
+        console.info('[admin-ui] loadRegistrations start', {
+            page,
+            force,
+            query: registrationListState.query,
+            status: registrationListState.status,
+            currentPath: window.location.pathname
+        });
+
         try {
             const params = new URLSearchParams({
                 page: String(page),
@@ -3651,7 +3676,9 @@
             if (registrationListState.query) params.set('q', registrationListState.query);
             if (registrationListState.status) params.set('status', registrationListState.status);
 
-            const data = await api('/registrations?' + params.toString());
+            const requestPath = '/registrations?' + params.toString();
+            console.info('[admin-ui] loadRegistrations fetch', { requestPath });
+            const data = await api(requestPath);
             if (!data) return;
 
             const pagination = data.pagination || {};
@@ -3665,6 +3692,11 @@
 
             renderRegistrationsTable(data.data || []);
             renderRegistrationsPagination();
+            console.info('[admin-ui] loadRegistrations render complete', {
+                rowCount: (data.data || []).length,
+                total: registrationListState.total,
+                page: registrationListState.page
+            });
 
             if (force && document.getElementById('tab-dashboard') && !document.getElementById('tab-dashboard').classList.contains('hidden')) {
                 loadDashboard();
@@ -3678,6 +3710,7 @@
                 }, 15000);
             }
         } catch (err) {
+            console.error('[admin-ui] loadRegistrations error', err);
             document.getElementById('registrations-body').innerHTML = `<tr><td colspan="6" class="text-center text-red-400 py-8">${err.message}</td></tr>`;
             document.getElementById('registrations-summary').textContent = t('loadRegistrationsError');
         }

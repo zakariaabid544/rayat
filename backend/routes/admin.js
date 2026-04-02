@@ -194,11 +194,13 @@ function optionalUserSelect(flags, fieldName) {
 }
 
 function resolvedClientCodeExpr(flags, alias = 'u') {
+    const paddedIdExpr = `LPAD(CAST(${alias}.id AS TEXT), 4, '0')`;
+
     if (!flags.hasClientCode) {
-        return `LPAD(${alias}.id, 4, '0')`;
+        return paddedIdExpr;
     }
 
-    return `COALESCE(NULLIF(${alias}.client_code, ''), LPAD(${alias}.id, 4, '0'))`;
+    return `COALESCE(NULLIF(${alias}.client_code, ''), ${paddedIdExpr})`;
 }
 
 function normalizeCoordinate(value) {
@@ -1224,16 +1226,10 @@ router.get('/registrations', isAdminRole, async (req, res) => {
         const flags = await getUserColumnFlags();
         const { page, pageSize, offset } = parsePagination(req, 20);
         const { whereSql, params } = buildRegistrationWhereClause(req, flags);
-
-        const [countRow] = await query(
-            `SELECT COUNT(*) AS total
+        const countSql = `SELECT COUNT(*) AS total
              FROM users u
-             WHERE ${whereSql}`,
-            params
-        );
-
-        const registrations = await query(
-            `SELECT
+             WHERE ${whereSql}`;
+        const registrationsSql = `SELECT
                 u.id,
                 u.name,
                 ${optionalUserSelect(flags, 'last_name')},
@@ -1261,9 +1257,39 @@ router.get('/registrations', isAdminRole, async (req, res) => {
              ) dc ON dc.user_id = u.id
              WHERE ${whereSql}
              ORDER BY u.created_at DESC, u.id DESC
-             LIMIT ${offset}, ${pageSize}`,
+             LIMIT ${offset}, ${pageSize}`;
+
+        console.info('[admin] registrations request', {
+            adminId: req.adminUser?.id || null,
+            adminRole: req.adminUser?.role || null,
+            query: req.query,
+            columns: {
+                registration_status: flags.hasRegistrationStatus,
+                registration_source: flags.hasRegistrationSource,
+                approved_at: flags.hasApprovedAt,
+                client_code: flags.hasClientCode
+            }
+        });
+        console.info('[admin] registrations count query', {
+            sqlBeforeNormalization: countSql.replace(/\s+/g, ' ').trim(),
             params
-        );
+        });
+
+        const [countRow] = await query(countSql, params);
+
+        console.info('[admin] registrations data query', {
+            sqlBeforeNormalization: registrationsSql.replace(/\s+/g, ' ').trim(),
+            params
+        });
+
+        const registrations = await query(registrationsSql, params);
+
+        console.info('[admin] registrations result', {
+            total: Number(countRow?.total || 0),
+            rowCount: registrations.length,
+            page,
+            pageSize
+        });
 
         res.json({
             success: true,
@@ -1271,7 +1297,13 @@ router.get('/registrations', isAdminRole, async (req, res) => {
             pagination: buildPaginationMeta(countRow.total, page, pageSize)
         });
     } catch (error) {
-        console.error('Get registrations error:', error);
+        console.error('[admin] Get registrations error', {
+            message: error.message,
+            stack: error.stack,
+            adminId: req.adminUser?.id || null,
+            adminRole: req.adminUser?.role || null,
+            query: req.query
+        });
         res.status(500).json({ error: 'Errore nel recupero delle registrazioni recenti' });
     }
 });

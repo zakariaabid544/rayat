@@ -285,9 +285,20 @@ async function createRegisteredClient(payload, options = {}) {
 // RAYAT FIX - full critical admin flow
 async function finalizeClientRegistration(req, createdUser) {
     try {
-        await sendNewClientRegistrationEmail(createdUser);
+        const emailSent = await sendNewClientRegistrationEmail(createdUser);
+        if (!emailSent) {
+            console.warn('[auth] public registration saved but admin notification email was skipped.', {
+                userId: createdUser?.id || null,
+                email: createdUser?.email || null,
+                reason: 'missing_or_invalid_mail_configuration'
+            });
+        }
     } catch (error) {
-        console.warn('Nuova registrazione salvata ma email non inviata:', error.message);
+        console.warn('[auth] public registration saved but admin notification email failed.', {
+            userId: createdUser?.id || null,
+            email: createdUser?.email || null,
+            error: error.message
+        });
     }
 
     try {
