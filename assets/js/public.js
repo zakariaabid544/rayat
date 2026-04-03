@@ -55,6 +55,11 @@
         const BRAND_LOGO_WHITE = '/assets/logo/logo-white.svg';
         let latestAssignedSensors = [];
         let userProfileNotice = '';
+        const PROFILE_SECTION_IDS = {
+            overview: 'profile-overview-section',
+            settings: 'profile-settings-section'
+        };
+        const PROFILE_SECTION_SCROLL_OFFSET = 112;
 
         // Professional Water Management Config
         const CROP_OPTIONS = [
@@ -1048,7 +1053,7 @@
 
         const translations = {
             it: {
-                home: 'Home', services: 'Servizi', aboutUs: 'Chi Siamo', demo: 'Demo', login: 'Accedi', logout: 'Logout',
+                home: 'Home', services: 'Servizi', aboutUs: 'Chi Siamo', demo: 'Demo', myFieldNav: 'Il mio campo', login: 'Accedi', logout: 'Logout',
                 profileNav: 'Profilo',
                 profileTitle: 'Il tuo profilo Rayat',
                 profileSubtitle: 'Gestisci i tuoi dati personali e consulta i sensori assegnati in sola lettura.',
@@ -1066,8 +1071,8 @@
                 profileRoleLabel: 'Ruolo',
                 profileDeviceLabel: 'Dispositivo',
                 profileLatestReading: 'Ultima lettura',
-                profileMenuInfo: 'Informazioni cliente',
-                profileMenuEdit: 'Modifica dati',
+                profileMenuInfo: 'Profilo',
+                profileMenuEdit: 'Impostazioni',
                 profileMenuLogout: 'Logout',
                 hero: 'Terreno Sano = Raccolto Ricco', heroSub: 'Monitoraggio 24/7 con sensori intelligenti Rayat',
                 heroEyebrow: 'Rayat Smart Monitoring',
@@ -1186,7 +1191,7 @@
                 cropOptionBle: 'Grano', cropOptionOrge: 'Orzo', cropOptionMais: 'Mais', cropOptionLuzerne: 'Erba medica', cropOptionAutre: 'Altro'
             },
             en: {
-                home: 'Home', services: 'Services', aboutUs: 'About Us', demo: 'Demo', login: 'Login', logout: 'Logout',
+                home: 'Home', services: 'Services', aboutUs: 'About Us', demo: 'Demo', myFieldNav: 'My Field', login: 'Login', logout: 'Logout',
                 profileNav: 'Profile',
                 profileTitle: 'Your Rayat profile',
                 profileSubtitle: 'Manage your personal details and review assigned sensors in read-only mode.',
@@ -1204,8 +1209,8 @@
                 profileRoleLabel: 'Role',
                 profileDeviceLabel: 'Device',
                 profileLatestReading: 'Latest reading',
-                profileMenuInfo: 'Customer info',
-                profileMenuEdit: 'Edit details',
+                profileMenuInfo: 'Profile',
+                profileMenuEdit: 'Settings',
                 profileMenuLogout: 'Logout',
                 hero: 'Healthy Soil = Rich Harvest', heroSub: 'Monitor your field 24/7 with smart sensors',
                 heroEyebrow: 'Rayat Smart Monitoring',
@@ -1322,7 +1327,7 @@
                 cropOptionBle: 'Wheat', cropOptionOrge: 'Barley', cropOptionMais: 'Corn', cropOptionLuzerne: 'Alfalfa', cropOptionAutre: 'Other'
             },
             fr: {
-                home: 'Accueil', services: 'Services', aboutUs: 'Qui Sommes-Nous', demo: 'Démo', login: 'Connexion', logout: 'Déconnexion',
+                home: 'Accueil', services: 'Services', aboutUs: 'Qui Sommes-Nous', demo: 'Démo', myFieldNav: 'Mon exploitation', login: 'Connexion', logout: 'Déconnexion',
                 profileNav: 'Profil',
                 profileTitle: 'Votre profil Rayat',
                 profileSubtitle: 'Gerez vos informations personnelles et consultez les capteurs attribues en lecture seule.',
@@ -1340,8 +1345,8 @@
                 profileRoleLabel: 'Role',
                 profileDeviceLabel: 'Appareil',
                 profileLatestReading: 'Derniere mesure',
-                profileMenuInfo: 'Infos client',
-                profileMenuEdit: 'Modifier les donnees',
+                profileMenuInfo: 'Profil',
+                profileMenuEdit: 'Paramètres',
                 profileMenuLogout: 'Deconnexion',
                 hero: 'Sol Sain = Récolte Riche', heroSub: 'Surveillance 24h/24 avec capteurs intelligents Rayat',
                 heroEyebrow: 'Rayat Smart Monitoring',
@@ -1458,7 +1463,7 @@
                 cropOptionBle: 'Ble', cropOptionOrge: 'Orge', cropOptionMais: 'Mais', cropOptionLuzerne: 'Luzerne', cropOptionAutre: 'Autre'
             },
             ar: {
-                home: 'الرئيسية', services: 'الخدمات', aboutUs: 'من نحن', demo: 'تجريبي', login: 'دخول', logout: 'خروج',
+                home: 'الرئيسية', services: 'الخدمات', aboutUs: 'من نحن', demo: 'تجريبي', myFieldNav: 'مزرعتي', login: 'دخول', logout: 'خروج',
                 profileNav: 'الملف الشخصي',
                 profileTitle: 'ملفك الشخصي في رايات',
                 profileSubtitle: 'قم بإدارة بياناتك الشخصية وراجع الحساسات المخصصة لك في وضع العرض فقط.',
@@ -1476,8 +1481,8 @@
                 profileRoleLabel: 'الدور',
                 profileDeviceLabel: 'الجهاز',
                 profileLatestReading: 'آخر قراءة',
-                profileMenuInfo: 'معلومات العميل',
-                profileMenuEdit: 'تعديل البيانات',
+                profileMenuInfo: 'الملف الشخصي',
+                profileMenuEdit: 'الإعدادات',
                 profileMenuLogout: 'تسجيل الخروج',
                 hero: 'تربة صحية = حصاد غني', heroSub: 'مراقبة 24/7 بأجهزة استشعار رايات الذكية',
                 heroEyebrow: 'Rayat Smart Monitoring',
@@ -1597,6 +1602,7 @@
                 services: 'ⵉⵎⴰⵣⵣⴰⵍⵏ',
                 aboutUs: 'ⴰⵡⴰⵍ ⴼⵍⵍⴰⵏⵖ',
                 demo: 'ⴷⵉⵎⵓ',
+                myFieldNav: 'Mon exploitation',
                 login: 'ⴰⴽⵛⵓⵎ',
                 logout: 'ⴼⴼⵓⵖ',
                 hero: 'ⴰⴽⴰⵍ ⵉⵖⵓⴷⴰⵏ = ⴰⵎⴳⵔ ⵉⵖⵓⴷⴰⵏ',
@@ -1632,8 +1638,8 @@
                 hidePassword: 'ⴼⴼⵔ ⵜⴰⴳⵓⵔⵉ',
                 loginNoAccount: 'ⵓⵔ ⵖⵓⵔⴽ ⴰⴽⴰⵡⵏⵜ?',
                 loginRegisterNow: 'ⵙⴽⵔ ⴰⴽⴰⵡⵏⵜ ⵜⵓⵔⴰ 🌾',
-                profileMenuInfo: 'ⵉⵙⴼⴽⴰ ⵏ ⵓⵎⵙⴰⵡⴰⴹ',
-                profileMenuEdit: 'ⵙⵏⴼⵍ ⵉⵙⴼⴽⴰ',
+                profileMenuInfo: 'Profil',
+                profileMenuEdit: 'Paramètres',
                 profileMenuLogout: 'ⴼⴼⵓⵖ',
                 demoAccount: 'ⴰⴽⴰⵡⵏⵜ ⴷⵉⵎⵓ:',
                 ourReality: 'ⵜⵉⵍⴰⵡⵜ ⵏⵏⵖ',
@@ -2004,6 +2010,66 @@
             setViewWithTracking('login', { path: '/login' });
         }
 
+        function openPrimaryFieldExperienceFromNavigation() {
+            closeProfileMenu();
+            toggleMobileMenu(false);
+
+            if (isAuthenticated() && isCustomerRole(currentRole)) {
+                setViewWithTracking('demo');
+                return;
+            }
+
+            if (hasPrivilegedAdminShortcut()) {
+                goToAdminArea();
+                return;
+            }
+
+            setViewWithTracking('demo');
+        }
+
+        function scrollToProfileSection(sectionId, options = {}) {
+            const target = document.getElementById(sectionId);
+            if (!target) {
+                return;
+            }
+
+            const nextUrl = VIEW_PATHS.profilo + '#' + sectionId;
+            history.replaceState({ view: 'profilo' }, '', nextUrl);
+
+            const nextTop = Math.max(target.getBoundingClientRect().top + window.scrollY - PROFILE_SECTION_SCROLL_OFFSET, 0);
+            window.scrollTo({ top: nextTop, behavior: 'smooth' });
+
+            if (options.focusId) {
+                const focusTarget = document.getElementById(options.focusId);
+                if (focusTarget) {
+                    requestAnimationFrame(() => focusTarget.focus({ preventScroll: true }));
+                }
+            }
+        }
+
+        function openCustomerProfileSection(event, section) {
+            event?.stopPropagation();
+            closeProfileMenu();
+            toggleMobileMenu(false);
+
+            if (!isAuthenticated() || !isCustomerRole(currentRole)) {
+                navigateToAccountPage();
+                return;
+            }
+
+            const sectionId = section === 'settings' ? PROFILE_SECTION_IDS.settings : PROFILE_SECTION_IDS.overview;
+            const options = section === 'settings' ? { focusId: 'profile-name' } : {};
+            const revealSection = () => requestAnimationFrame(() => requestAnimationFrame(() => scrollToProfileSection(sectionId, options)));
+
+            if (currentView !== 'profilo') {
+                setView('profilo');
+                revealSection();
+                return;
+            }
+
+            revealSection();
+        }
+
         /* PATCH-01 — start */
         function openLoginFromNavigation() {
             closeProfileMenu();
@@ -2159,24 +2225,12 @@
 
         // RAYAT FIX - login/profile/final UX cleanup
         function openCustomerProfileOverview(event) {
-            event?.stopPropagation();
-            closeProfileMenu();
-            toggleMobileMenu(false);
-            setView('profilo');
+            openCustomerProfileSection(event, 'overview');
         }
 
         // RAYAT FIX - login/profile/final UX cleanup
         function openCustomerProfileEditor(event) {
-            event?.stopPropagation();
-            closeProfileMenu();
-            toggleMobileMenu(false);
-            setView('profilo');
-
-            requestAnimationFrame(() => {
-                const editorField = document.getElementById('profile-name');
-                editorField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                editorField?.focus({ preventScroll: true });
-            });
+            openCustomerProfileSection(event, 'settings');
         }
 
         // RAYAT FIX - login/profile/final UX cleanup
@@ -3647,17 +3701,20 @@
             const moroccoFlag = `<svg class="${flagBase}" viewBox="0 0 3 2" width="24" height="16"><rect width="3" height="2" fill="#c1272d"/><path d="M1.5 0.6L1.8 1.4L1.1 0.9H1.9L1.2 1.4z" fill="none" stroke="#006233" stroke-width="0.1" transform="scale(0.8) translate(0.4, 0.4)"/></svg>`;
             const ukFlag = `<svg class="${flagBase}" viewBox="0 0 60 40" width="24" height="16"><clipPath id="s"><path d="M0,0 v40 h60 v-40 z"/></clipPath><path d="M0,0 v40 h60 v-40 z" fill="#012169"/><path d="M0,0 L60,40 M60,0 L0,40" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" stroke-width="4"/><path d="M30,0 v40 M0,20 h60" stroke="#fff" stroke-width="10"/><path d="M30,0 v40 M0,20 h60" stroke="#C8102E" stroke-width="6"/></svg>`;
             const amazighFlag = `<svg class="${flagBase}" viewBox="0 0 90 60" width="24" height="16" xmlns="http://www.w3.org/2000/svg"><rect width="90" height="20" y="0" fill="#0099CC"/><rect width="90" height="20" y="20" fill="#99CC33"/><rect width="90" height="20" y="40" fill="#FFCC00"/><text x="45" y="48" font-size="40" fill="#CC3333" text-anchor="middle" font-family="sans-serif">ⵣ</text></svg>`;
-            const primaryLinks = [
-                { id: 'home', view: 'home', label: t('home') },
-                { id: 'chi-siamo', view: 'chi-siamo', label: t('aboutUs') },
-                { id: 'servizi', view: 'servizi', label: t('services') },
-                { id: 'demo', view: 'demo', label: t('demo'), tracked: true },
-                { id: 'contatti', view: 'contatti', label: t('contactTitle'), tracked: true }
-            ];
             const canAccessProfile = isAuthenticated() && isCustomerRole(currentRole);
             const adminShortcutUser = getPrivilegedAdminSessionUser();
             const hasAdminAccessShortcut = Boolean(adminShortcutUser);
             const hasVisibleAccountState = canAccessProfile || hasAdminAccessShortcut;
+            const fieldNavigationLink = hasVisibleAccountState
+                ? { id: 'my-field', label: t('myFieldNav'), action: 'openPrimaryFieldExperienceFromNavigation()' }
+                : { id: 'demo', view: 'demo', label: t('demo'), tracked: true };
+            const primaryLinks = [
+                { id: 'home', view: 'home', label: t('home') },
+                { id: 'chi-siamo', view: 'chi-siamo', label: t('aboutUs') },
+                { id: 'servizi', view: 'servizi', label: t('services') },
+                fieldNavigationLink,
+                { id: 'contatti', view: 'contatti', label: t('contactTitle'), tracked: true }
+            ];
             /* PATCH-01 — start */
             const loginNavigationLink = !hasVisibleAccountState
                 ? { id: 'login', label: t('login'), action: 'openLoginFromNavigation()', kind: 'login' }
@@ -4822,7 +4879,7 @@
                             </div>
                         ` : ''}
 
-                        <div class="rayat-profile-layout">
+                        <div id="${PROFILE_SECTION_IDS.overview}" class="rayat-profile-layout">
                             <div class="rayat-profile-card">
                                 <div class="rayat-profile-hero">
                                     <div class="rayat-profile-avatar">
@@ -4838,7 +4895,12 @@
                                     </div>
                                 </div>
 
-                                <form onsubmit="saveUserProfile(event)" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                                <div id="${PROFILE_SECTION_IDS.settings}" class="mt-8 pt-8 border-t border-slate-200">
+                                    <div class="mb-6">
+                                        <p class="text-[11px] font-black uppercase tracking-[0.28em] text-slate-500 mb-2">${t('settings')}</p>
+                                        <h4 class="text-2xl font-black text-slate-900 tracking-tight">${t('settings')}</h4>
+                                    </div>
+                                    <form onsubmit="saveUserProfile(event)" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
                                         <label class="block text-xs font-black text-slate-500 uppercase tracking-[0.16em] mb-2">${t('regFullName')}</label>
                                         <input id="profile-name" type="text" value="${escapeHtml(profile.name)}" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-green-500 focus:bg-white transition">
@@ -4871,7 +4933,8 @@
                                             ${t('profileSave')}
                                         </button>
                                     </div>
-                                </form>
+                                    </form>
+                                </div>
                             </div>
 
                             <aside class="rayat-profile-card rayat-profile-sidebar">
