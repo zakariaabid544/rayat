@@ -1,3 +1,10 @@
+// Profile form field mapping:
+// - profile-name -> users.name (canonical identity, read-only via profile API)
+// - profile-email -> users.email (canonical identity, read-only via profile API)
+// - profile-phone -> users.profile_phone
+// - photo upload input handled by handleUserProfilePhotoChange() / saveUserProfile() -> users.profile_photo
+// - profile-description -> users.profile_description
+// - profile_updated_at stores the last successful profile persistence timestamp
 const {
   query,
   getTableColumns,
@@ -74,6 +81,10 @@ async function ensureCoreTables(changes) {
          longitude NUMERIC(10, 7),
          location_name TEXT,
          location_address TEXT,
+         profile_phone VARCHAR(50),
+         profile_description VARCHAR(2000),
+         profile_photo VARCHAR(1048576),
+         profile_updated_at TIMESTAMPTZ NULL,
          verification_code VARCHAR(10),
          is_verified BOOLEAN DEFAULT FALSE,
          role VARCHAR(32) NOT NULL DEFAULT 'client',
@@ -307,6 +318,18 @@ async function ensurePlatformSchema() {
   }
   if (await ensureColumn('users', 'location_address', 'TEXT')) {
     changes.push('users.location_address');
+  }
+  if (await ensureColumn('users', 'profile_phone', 'VARCHAR(50)')) {
+    changes.push('users.profile_phone');
+  }
+  if (await ensureColumn('users', 'profile_description', 'VARCHAR(2000)')) {
+    changes.push('users.profile_description');
+  }
+  if (await ensureColumn('users', 'profile_photo', 'VARCHAR(1048576)')) {
+    changes.push('users.profile_photo');
+  }
+  if (await ensureColumn('users', 'profile_updated_at', 'TIMESTAMPTZ')) {
+    changes.push('users.profile_updated_at');
   }
 
   await query(

@@ -1,3 +1,10 @@
+        // Profile form field mapping:
+        // - profile-name -> users.name (canonical identity, read-only via profile API)
+        // - profile-email -> users.email (canonical identity, read-only via profile API)
+        // - profile-phone -> users.profile_phone
+        // - photo upload input handled by handleUserProfilePhotoChange() / saveUserProfile() -> users.profile_photo
+        // - profile-description -> users.profile_description
+        // - profile_updated_at stores the last successful profile persistence timestamp
         const API_ORIGIN = window.location.origin && window.location.origin !== 'null'
             ? window.location.origin
             : 'http://localhost:3000';
@@ -25,7 +32,7 @@
         let currentView = 'home';
         let selectedSensor = 'energia';
         let user = null;
-        let currentLang = localStorage.getItem('rayat_lang') || 'it';
+        let currentLang = localStorage.getItem('rayat_lang') || sessionStorage.getItem('rayat_lang') || 'fr';
         let showSettings = false;
         let showNotifications = false;
         let isMobileMenuOpen = false;
@@ -953,6 +960,48 @@
         function restorePublicSession() {
             authToken = getStoredAuthValue(AUTH_TOKEN_STORAGE_KEY);
 
+            const hydratePersistedProfile = () => {
+                if (!authToken || !user?.id) {
+                    return;
+                }
+
+                fetch(`${CONFIG.API_BASE_URL}/auth/me`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                }).then(async (response) => {
+                    if (!response.ok) {
+                        throw new Error('profile_hydration_failed');
+                    }
+
+                    const data = await response.json().catch(() => null);
+                    if (!data || data.success === false || !user || user.id !== data.id) {
+                        return;
+                    }
+
+                    user = {
+                        ...user,
+                        profile_phone: data.profile_phone ?? null,
+                        profile_description: data.profile_description ?? null,
+                        profile_photo: data.profile_photo ?? null,
+                        profile_updated_at: data.profile_updated_at ?? null
+                    };
+
+                    writeStoredUserProfile({
+                        ...readStoredUserProfile(user.id),
+                        name: user.name || '',
+                        email: user.email || '',
+                        phone: data.profile_phone || '',
+                        description: data.profile_description || '',
+                        photo: data.profile_photo || ''
+                    }, user.id);
+                    syncStoredUserProfileIntoSession();
+
+                    if (currentView === 'profilo') {
+                        render();
+                    }
+                }).catch(() => {});
+            };
+
             if (!authToken) {
                 user = null;
                 currentRole = 'guest';
@@ -969,6 +1018,7 @@
                     syncStoredUserProfileIntoSession();
                     syncStoredAdminSessionIntoState();
                     syncSubscriptionUiState();
+                    hydratePersistedProfile();
                     return;
                 } catch (error) {
                     localStorage.removeItem(AUTH_USER_STORAGE_KEY);
@@ -989,6 +1039,7 @@
                 getActiveAuthStorage().setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
                 syncStoredAdminSessionIntoState();
                 syncSubscriptionUiState();
+                hydratePersistedProfile();
                 return;
             }
 
@@ -1912,11 +1963,11 @@
             const baseUser = userData || {};
             const storedProfile = readStoredUserProfile(baseUser.id);
             return {
-                name: storedProfile.name || baseUser.name || '',
-                email: storedProfile.email || baseUser.email || '',
-                phone: storedProfile.phone || '',
-                description: storedProfile.description || '',
-                photo: storedProfile.photo || '',
+                name: baseUser.name || storedProfile.name || '',
+                email: baseUser.email || storedProfile.email || '',
+                phone: storedProfile.phone ?? baseUser.profile_phone ?? baseUser.phone ?? '',
+                description: storedProfile.description ?? baseUser.profile_description ?? baseUser.description ?? '',
+                photo: storedProfile.photo ?? baseUser.profile_photo ?? baseUser.photo ?? '',
                 role: baseUser.role || currentRole || 'guest'
             };
         }
@@ -4785,7 +4836,7 @@
         }
 
         // RAYAT FIX - user profile
-        function saveUserProfile(event) {
+        async function saveUserProfile(event) {
             event.preventDefault();
 
             if (!isAuthenticated() || !isCustomerRole(currentRole)) {
@@ -4794,19 +4845,56 @@
             }
 
             const currentProfile = getMergedUserProfile();
-            const nextProfile = {
-                ...currentProfile,
-                name: document.getElementById('profile-name')?.value.trim() || currentProfile.name,
-                email: document.getElementById('profile-email')?.value.trim().toLowerCase() || currentProfile.email,
-                phone: document.getElementById('profile-phone')?.value.trim() || '',
-                description: document.getElementById('profile-description')?.value.trim() || '',
-                photo: currentProfile.photo || ''
-            };
+            const nextName = document.getElementById('profile-name')?.value.trim() || currentProfile.name;
+            const nextEmail = document.getElementById('profile-email')?.value.trim().toLowerCase() || currentProfile.email;
+            const nextPhone = document.getElementById('profile-phone')?.value.trim() || '';
+            const nextDescription = document.getElementById('profile-description')?.value.trim() || '';
+            const nextPhoto = currentProfile.photo || '';
 
-            writeStoredUserProfile(nextProfile);
-            syncStoredUserProfileIntoSession();
-            userProfileNotice = t('profileSaved');
-            render();
+            try {
+                const response = await fetch(`${CONFIG.API_BASE_URL}/auth/profile`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        profile_phone: nextPhone,
+                        profile_description: nextDescription,
+                        profile_photo: nextPhoto
+                    })
+                });
+                const data = await response.json().catch(() => null);
+
+                if (!response.ok || data?.success === false) {
+                    throw new Error(data?.error || 'Errore durante il salvataggio del profilo');
+                }
+
+                const persistedProfile = data?.profile || {};
+                user = {
+                    ...user,
+                    profile_phone: persistedProfile.profile_phone ?? null,
+                    profile_description: persistedProfile.profile_description ?? null,
+                    profile_photo: persistedProfile.profile_photo ?? null,
+                    profile_updated_at: persistedProfile.profile_updated_at ?? null
+                };
+
+                writeStoredUserProfile({
+                    ...currentProfile,
+                    name: user?.name || nextName || currentProfile.name,
+                    email: user?.email || nextEmail || currentProfile.email,
+                    phone: persistedProfile.profile_phone || '',
+                    description: persistedProfile.profile_description || '',
+                    photo: persistedProfile.profile_photo || ''
+                });
+                syncStoredUserProfileIntoSession();
+                userProfileNotice = t('profileSaved');
+                render();
+            } catch (error) {
+                console.error('Save profile error:', error);
+                userProfileNotice = error.message || 'Errore durante il salvataggio del profilo';
+                render();
+            }
         }
 
         // RAYAT FIX - user profile

@@ -1,3 +1,10 @@
+// Profile form field mapping:
+// - profile-name -> users.name (canonical identity, read-only via profile API)
+// - profile-email -> users.email (canonical identity, read-only via profile API)
+// - profile-phone -> users.profile_phone
+// - photo upload input handled by handleUserProfilePhotoChange() / saveUserProfile() -> users.profile_photo
+// - profile-description -> users.profile_description
+// - profile_updated_at stores the last successful profile persistence timestamp
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -10,6 +17,21 @@ const { sendNewClientRegistrationEmail } = require('../utils/registration-email'
 const { recordAnalyticsEvent } = require('../utils/analytics');
 
 const router = express.Router();
+
+const PROFILE_FIELD_RULES = {
+    profile_phone: {
+        maxLength: 50,
+        label: 'telefono'
+    },
+    profile_description: {
+        maxLength: 2000,
+        label: 'descrizione'
+    },
+    profile_photo: {
+        maxLength: 1048576,
+        label: 'foto profilo'
+    }
+};
 
 attachPasswordResetRoutes(router, {
     resetPath: '/reset-password'
@@ -39,8 +61,88 @@ async function getUserColumnFlags() {
         hasSubscriptionExpiry: columns.has('subscription_expiry'),
         hasRegistrationStatus: columns.has('registration_status'),
         hasRegistrationSource: columns.has('registration_source'),
-        hasApprovedAt: columns.has('approved_at')
+        hasApprovedAt: columns.has('approved_at'),
+        hasProfilePhone: columns.has('profile_phone'),
+        hasProfileDescription: columns.has('profile_description'),
+        hasProfilePhoto: columns.has('profile_photo'),
+        hasProfileUpdatedAt: columns.has('profile_updated_at')
     };
+}
+
+function optionalUserColumn(enabled, columnName) {
+    return enabled ? columnName : `NULL AS ${columnName}`;
+}
+
+function buildPersistedProfilePayload(user = {}) {
+    return {
+        profile_phone: user.profile_phone ?? null,
+        profile_description: user.profile_description ?? null,
+        profile_photo: user.profile_photo ?? null,
+        profile_updated_at: user.profile_updated_at ?? null
+    };
+}
+
+function normalizeOptionalProfileValue(value, rule) {
+    if (value === undefined) {
+        return {
+            provided: false,
+            value: undefined
+        };
+    }
+
+    if (value === null) {
+        return {
+            provided: true,
+            value: null
+        };
+    }
+
+    const normalized = String(value).trim();
+    if (!normalized) {
+        return {
+            provided: true,
+            value: null
+        };
+    }
+
+    if (normalized.length > rule.maxLength) {
+        const error = new Error(`Il campo ${rule.label} supera la lunghezza massima consentita`);
+        error.statusCode = 400;
+        throw error;
+    }
+
+    return {
+        provided: true,
+        value: normalized
+    };
+}
+
+async function fetchCurrentUserProfile(userId, flags) {
+    const rows = await query(
+        `SELECT
+            id,
+            email,
+            name,
+            ${optionalUserColumn(flags.hasLastName, 'last_name')},
+            ${optionalUserColumn(flags.hasLanguage, 'language')},
+            role,
+            active,
+            ${optionalUserColumn(flags.hasPaymentStatus, 'payment_status')},
+            ${optionalUserColumn(flags.hasSubscriptionExpiry, 'subscription_expiry')},
+            ${optionalUserColumn(flags.hasRegistrationStatus, 'registration_status')},
+            ${optionalUserColumn(flags.hasApprovedAt, 'approved_at')},
+            ${optionalUserColumn(flags.hasClientCode, 'client_code')},
+            ${optionalUserColumn(flags.hasProfilePhone, 'profile_phone')},
+            ${optionalUserColumn(flags.hasProfileDescription, 'profile_description')},
+            ${optionalUserColumn(flags.hasProfilePhoto, 'profile_photo')},
+            ${optionalUserColumn(flags.hasProfileUpdatedAt, 'profile_updated_at')}
+         FROM users
+         WHERE id = ?
+         LIMIT 1`,
+        [userId]
+    );
+
+    return rows[0] || null;
 }
 
 function normalizeCoordinate(value) {
@@ -364,6 +466,112 @@ router.post('/login', async (req, res) => {
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ error: 'Errore interno del server' });
+    }
+});
+
+router.get('/me', authenticateToken, async (req, res) => {
+    try {
+        const flags = await getUserColumnFlags();
+        const currentUser = await fetchCurrentUserProfile(req.user.id, flags);
+
+        if (!currentUser) {
+            return res.status(404).json({
+                success: false,
+                error: 'Utente non trovato'
+            });
+        }
+
+        res.json({
+            success: true,
+            id: currentUser.id,
+            email: currentUser.email,
+            name: currentUser.name,
+            last_name: currentUser.last_name || null,
+            language: currentUser.language || null,
+            role: normalizeAdminRole(currentUser.role),
+            active: currentUser.active,
+            payment_status: currentUser.payment_status || null,
+            subscription_expiry: currentUser.subscription_expiry || null,
+            registration_status: currentUser.registration_status || null,
+            approved_at: currentUser.approved_at || null,
+            client_code: currentUser.client_code || null,
+            ...buildPersistedProfilePayload(currentUser)
+        });
+    } catch (error) {
+        console.error('Auth me error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Errore nel recupero del profilo'
+        });
+    }
+});
+
+router.put('/profile', authenticateToken, async (req, res) => {
+    try {
+        const flags = await getUserColumnFlags();
+        const payload = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+            ? req.body
+            : {};
+        const editableProfileFields = [
+            ['profile_phone', flags.hasProfilePhone],
+            ['profile_description', flags.hasProfileDescription],
+            ['profile_photo', flags.hasProfilePhoto]
+        ].filter(([, enabled]) => enabled).map(([fieldName]) => fieldName);
+
+        const invalidFields = Object.keys(payload).filter((fieldName) => !editableProfileFields.includes(fieldName));
+        if (invalidFields.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Sono consentiti solo i campi profilo aggiornabili'
+            });
+        }
+
+        const updates = [];
+        const params = [];
+
+        editableProfileFields.forEach((fieldName) => {
+            const normalizedField = normalizeOptionalProfileValue(payload[fieldName], PROFILE_FIELD_RULES[fieldName]);
+            if (!normalizedField.provided) {
+                return;
+            }
+
+            updates.push(`${fieldName} = ?`);
+            params.push(normalizedField.value);
+        });
+
+        if (updates.length > 0) {
+            updates.push('updated_at = CURRENT_TIMESTAMP');
+            if (flags.hasProfileUpdatedAt) {
+                updates.push('profile_updated_at = CURRENT_TIMESTAMP');
+            }
+
+            params.push(req.user.id);
+            await query(
+                `UPDATE users
+                 SET ${updates.join(', ')}
+                 WHERE id = ?`,
+                params
+            );
+        }
+
+        const currentUser = await fetchCurrentUserProfile(req.user.id, flags);
+        if (!currentUser) {
+            return res.status(404).json({
+                success: false,
+                error: 'Utente non trovato'
+            });
+        }
+
+        res.json({
+            success: true,
+            profile: buildPersistedProfilePayload(currentUser)
+        });
+    } catch (error) {
+        console.error('Update profile error:', error);
+        res.status(error.statusCode || 500).json({
+            success: false,
+            error: error.message || 'Errore durante il salvataggio del profilo'
+        });
     }
 });
 
