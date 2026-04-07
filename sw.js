@@ -2,7 +2,8 @@
 // RAYAT Service Worker - Offline Cache
 // =============================================
 // RAYAT FIX - mobile app ready optimization
-const CACHE_NAME = 'rayat-v1.4-demo-public-live';
+const CACHE_VERSION = '1.1.0';
+const CACHE_NAME = `rayat-${CACHE_VERSION}`;
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -11,8 +12,8 @@ const ASSETS_TO_CACHE = [
     './favicon.png',
     './favicon-32.png',
     './favicon.ico',
-    './assets/css/public.css?v=20260407-demo-public-live',
-    './assets/js/public.js?v=20260407-demo-public-live',
+    './assets/css/public.css?v=1.1.0',
+    './assets/js/public.js?v=1.1.0',
     './assets/logo/logo-black.svg',
     './assets/logo/logo-green.svg',
     './assets/logo/logo-white.svg',
@@ -64,6 +65,10 @@ function isLocalStaticAsset(url) {
     );
 }
 
+function isPublicSensorLatestRequest(url) {
+    return url.origin === self.location.origin && url.pathname === '/api/sensors/public/latest';
+}
+
 // Fetch: prefer fresh network for pages and local code assets
 self.addEventListener('fetch', event => {
     // Skip non-GET and chrome-extension requests
@@ -72,11 +77,14 @@ self.addEventListener('fetch', event => {
 
     // For API calls: network first, fallback to cache
     if (event.request.url.includes('/api/')) {
+        const livePublicRequest = isPublicSensorLatestRequest(requestUrl);
         event.respondWith(
-            fetch(event.request)
+            fetch(event.request, livePublicRequest ? { cache: 'no-store' } : undefined)
                 .then(response => {
-                    const clone = response.clone();
-                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+                    if (!livePublicRequest) {
+                        const clone = response.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+                    }
                     return response;
                 })
                 .catch(() => caches.match(event.request))

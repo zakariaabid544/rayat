@@ -15,6 +15,8 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
+        const FRONTEND_ASSET_VERSION = '1.1.0';
+        const PUBLIC_SENSOR_POLL_INTERVAL_MS = 10000;
 
         let isRefreshingData = false;
         let activeRefreshPromise = null;
@@ -2583,6 +2585,23 @@
             }
         };
 
+        function resetLiveSensorDisplayData() {
+            sensorData.energia.valore = null;
+            sensorData.energia.percentuale = 0;
+            sensorData.acqua.valore = null;
+            sensorData.acqua.percentuale = 0;
+            sensorData.terreno.valore = null;
+            sensorData.terreno.percentuale = 0;
+            sensorData.terreno.details.forEach((metric) => {
+                metric.value = null;
+            });
+            sensorData.clima.valore = null;
+            sensorData.clima.percentuale = 0;
+            sensorData.clima.details.forEach((metric) => {
+                metric.value = null;
+            });
+        }
+
 
         // --- Data Simulation for Presentation ---
         let globalHistory = [];
@@ -2705,6 +2724,7 @@
         }
 
         generateSimulationData();
+        resetLiveSensorDisplayData();
 
         // --- Soil Sensor Thresholds (7-in-1 Configuration) ---
         // These thresholds can be easily modified for different crops
@@ -3342,6 +3362,9 @@
             if (view === 'register') {
                 trackRegistrationStart(view);
             }
+            if (view === 'demo') {
+                loadSensorData().catch(() => {});
+            }
             window.scrollTo({ top: 0, behavior: 'instant' });
 
             // Re-initialize maps for specific views
@@ -3381,17 +3404,22 @@
             // Always ensure we have some data to show (Demo Mode)
             if (globalHistory.length === 0) {
                 generateSimulationData();
+                resetLiveSensorDisplayData();
             }
 
             if (!isAuthenticated()) {
                 hideSubscriptionExpiredModal();
                 try {
-                    const response = await fetch(CONFIG.PUBLIC_LATEST_URL);
+                    const response = await fetch(`${CONFIG.PUBLIC_LATEST_URL}?t=${Date.now()}`, {
+                        cache: 'no-store'
+                    });
                     if (response.ok) {
                         const result = await response.json();
-                        if (result.success && Array.isArray(result.data) && result.data.length) {
-                            localStorage.setItem(PUBLIC_SENSOR_CACHE_KEY, JSON.stringify(result.data));
-                            updateSensorData(result.data, true);
+                        if (result.success && Array.isArray(result.data)) {
+                            const data = result.data;
+                            console.log("DEBUG - Data Received:", data);
+                            localStorage.setItem(PUBLIC_SENSOR_CACHE_KEY, JSON.stringify(data));
+                            updateSensorData(data, true);
                             dataError = false;
                             document.getElementById('offline-banner').style.display = 'none';
                             return;
@@ -3403,8 +3431,11 @@
                 if (cached) {
                     try {
                         updateSensorData(JSON.parse(cached), true);
+                        return;
                     } catch (e) { /* ignore cache error in demo mode */ }
                 }
+                resetLiveSensorDisplayData();
+                render();
                 dataError = false; // Always false for Demo Mode
                 return;
             }
@@ -3521,6 +3552,7 @@
                 'clima_co2': { s: 'clima', key: 'co2' },
                 'clima_wind_speed': { s: 'clima', key: 'windSpeed' }
             };
+            resetLiveSensorDisplayData();
 
             let updated = false;
             apiData.forEach(r => {
@@ -3550,8 +3582,8 @@
             });
             if (updated) {
                 syncCurrentSensorSnapshotToHistory(new Date());
-                render();
             }
+            render();
         }
 
         /* --- Predictive Intelligence Logic --- */
@@ -5413,7 +5445,8 @@
                     numDays = Math.ceil(Math.abs(filterState.customEnd - filterState.customStart) / (86400000)) || 1;
                 }
                 const req = (waterSettings.hectares || 0) * getCropConsumptionValue() * numDays;
-                const avail = current.valore * 1000;
+                const currentWaterLevel = parseNumericValue(current.valore);
+                const avail = Number.isFinite(currentWaterLevel) ? currentWaterLevel * 1000 : 0;
                 const isShortage = avail < req;
 
                 return `
@@ -5494,11 +5527,11 @@
                             ${selectedSensor === 'acqua' ? renderWater() : (selectedSensor === 'terreno' ? render7in1() : (selectedSensor === 'clima' ? renderClimate() : `
                                     ${renderDemoSectionHeading(t(current.nome))}
                                     <div class="flex flex-col md:flex-row items-center justify-between mb-16">
-                                        <div class="flex items-center justify-center">
+                                    <div class="flex items-center justify-center">
                                             <div class="text-[10rem] transform -rotate-12 transition-transform hover:rotate-0 duration-700">${current.icon}</div>
                                         </div>
                                         <div class="text-center md:text-right mt-12 md:mt-0">
-                                            <div class="text-[10rem] md:text-[12rem] font-black text-slate-900 tracking-tighter leading-none">${current.valore}<span class="text-4xl text-slate-300 ml-4 uppercase font-black">${current.unita}</span></div>
+                                            <div class="text-[10rem] md:text-[12rem] font-black text-slate-900 tracking-tighter leading-none">${formatMetricValue(current.valore)}<span class="text-4xl text-slate-300 ml-4 uppercase font-black">${current.unita}</span></div>
                                         </div>
                                     </div>
                                     ${renderActiveAlertFeed('energia')}
@@ -5789,11 +5822,15 @@
             trackRegistrationStart(currentView);
         }
 
-        // Auto-refresh ogni 5 minuti (ottimizzato per sensori BGT)
-        if (authToken && isCustomerRole(currentRole)) {
+        // Hard sync demo/live data every 10 seconds.
+        if (currentView === 'demo' || (authToken && isCustomerRole(currentRole))) {
             loadSensorData();
-            setInterval(loadSensorData, 300000);
         }
+        setInterval(() => {
+            if (currentView === 'demo' || (authToken && isCustomerRole(currentRole))) {
+                loadSensorData();
+            }
+        }, PUBLIC_SENSOR_POLL_INTERVAL_MS);
 
         // Handle Android hardware back button and browser back
         window.onpopstate = function (event) {
@@ -5876,7 +5913,7 @@
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20260331-mobile-app-ready', { updateViaCache: 'none' })
+                navigator.serviceWorker.register(`./sw.js?v=${FRONTEND_ASSET_VERSION}`, { updateViaCache: 'none' })
                     .then(reg => {
                         reg.update().catch(() => {});
                     })
