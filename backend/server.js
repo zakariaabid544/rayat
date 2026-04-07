@@ -44,6 +44,7 @@ const iotLimiter = rateLimit({
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/sensors/simple', require('./routes/simple')); // Simplified API format - registered broad first
+app.use('/api/sensors/update', iotLimiter);
 app.use('/api/sensors', require('./routes/sensors'));
 app.use('/api/iot/upload', iotLimiter);
 app.use('/api/iot', require('./routes/iot'));

@@ -416,12 +416,14 @@ async function run() {
   const authRouter = require('../routes/auth');
   const adminRouter = require('../routes/admin');
   const iotRouter = require('../routes/iot');
+  const sensorsRouter = require('../routes/sensors');
 
   const app = express();
   app.use(express.json());
   app.use('/api/auth', authRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/iot', iotRouter);
+  app.use('/api/sensors', sensorsRouter);
 
   const adminToken = jwt.sign({ id: 1, role: 'super_admin' }, process.env.JWT_SECRET);
   const clientToken = jwt.sign({ id: 2, role: 'client' }, process.env.JWT_SECRET);
@@ -543,13 +545,30 @@ async function run() {
         const uploadJson = await uploadRes.json();
         assert.equal(uploadJson.readings_count, 1);
 
+        const bridgeUpdateRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sensor_id: 'sensors/GW-001/clima/temperature',
+            device_id: 'GW-001',
+            api_key: createdDevice.api_key,
+            value: 29.4
+          })
+        });
+        assert.equal(bridgeUpdateRes.status, 200);
+        const bridgeUpdateJson = await bridgeUpdateRes.json();
+        assert.equal(bridgeUpdateJson.readings_count, 1);
+
         const sensorsRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensors?page=1&pageSize=25`, {
           headers: { Authorization: `Bearer ${reloginJson.token}` }
         });
         assert.equal(sensorsRes.status, 200);
         const sensorsJson = await sensorsRes.json();
-        assert.equal(sensorsJson.data.length, 1);
-        assert.equal(Number(sensorsJson.data[0].latest_value), 14.2);
+        assert.equal(sensorsJson.data.length, 2);
+        const waterSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'acqua_level');
+        const climateSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'clima_temperature');
+        assert.equal(Number(waterSensor.latest_value), 14.2);
+        assert.equal(Number(climateSensor.latest_value), 29.4);
 
         const iotDevicesRes = await fetch(`http://127.0.0.1:${port}/api/iot/devices`, {
           headers: { Authorization: `Bearer ${clientToken}` }
@@ -557,7 +576,7 @@ async function run() {
         assert.equal(iotDevicesRes.status, 200);
         const iotDevicesJson = await iotDevicesRes.json();
         assert.equal(iotDevicesJson.data.length, 1);
-        assert.equal(iotDevicesJson.data[0].sensor_count, 1);
+        assert.equal(iotDevicesJson.data[0].sensor_count, 2);
 
         console.log('SMOKE_TEST_OK');
         server.close(resolve);

@@ -1,0 +1,16 @@
+[Unit]
+Description=Rayat MQTT HTTP Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/rayat/backend
+EnvironmentFile=/opt/rayat/backend/scripts/mqtt-http-bridge.env
+ExecStart=/usr/bin/node /opt/rayat/backend/scripts/mqtt-http-bridge.js
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -169,6 +169,29 @@ POST /api/iot/upload
 }
 ```
 
+### Bridge MQTT -> sito
+
+```bash
+# Ingestione lato sito per il bridge che legge da Mosquitto
+POST /api/sensors/update
+
+# Esempio payload minimale
+{
+  "sensor_id": "sensors/GW-001/clima/temperature",
+  "value": 29.4,
+  "device_id": "GW-001",
+  "api_key": "api_key_del_device"
+}
+```
+
+Formati topic supportati:
+
+- `sensors/<device_id>/<type>/<subtype>`
+- `sensors/<device_id>/<alias>` come `temperature`, `humidity`, `soil`, `water`, `energy`
+- `sensors/<type>/<subtype>` oppure `sensors/<alias>` se hai configurato `MQTT_DEFAULT_DEVICE_ID` o vuoi usare il gateway auto-creato
+
+Se configuri `MQTT_INGEST_TOKEN`, il bridge VPS puo aggiornare un device per `device_id` senza includere `api_key` nel body.
+
 ## 🔌 Collegamento Dispositivi IoT
 
 ### Esempio Python (HTTP POST)
@@ -201,6 +224,16 @@ while True:
     send_sensor_data(2.3, 14.5, 58, 28)
     time.sleep(60)
 ```
+
+### Bridge MQTT sul VPS
+
+Nel repository trovi uno script pronto:
+
+- `backend/scripts/mqtt-http-bridge.js`
+- `backend/scripts/mqtt-http-bridge.env.example`
+- `backend/scripts/rayat-mqtt-bridge.service`
+
+Questo processo si collega a Mosquitto su `45.63.114.40:8080`, ascolta `sensors/#` e inoltra ogni messaggio a `https://rayat.ma/api/sensors/update`.
 
 ### Esempio Arduino/ESP32 (HTTP POST)
 

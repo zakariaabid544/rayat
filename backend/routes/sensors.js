@@ -3,6 +3,329 @@ const router = express.Router();
 const { query } = require('../config/database');
 const { authenticateToken, checkSubscription } = require('../middleware/auth');
 const { upsertAlarmEvent, resolveAlarmEvent } = require('../utils/alerts');
+const {
+    VALID_SENSOR_TYPES,
+    createHttpError,
+    getSensorProfile,
+    ingestDeviceReadings,
+    ingestTrustedReadings
+} = require('../utils/sensor-ingest');
+
+const DEFAULT_BRIDGE_TOKEN_HEADER = 'x-rayat-bridge-token';
+const SENSOR_ALIAS_MAP = {
+    acqua: { type: 'acqua', subtype: 'acqua_level', unit: 'm', name: 'Sensore Acqua' },
+    energy: { type: 'energia', subtype: 'energia_consumption', unit: 'kW', name: 'Sensore Energia' },
+    energia: { type: 'energia', subtype: 'energia_consumption', unit: 'kW', name: 'Sensore Energia' },
+    humidity: { type: 'clima', subtype: 'clima_humidity', unit: '%', name: 'Sensore Umidita' },
+    humidite: { type: 'clima', subtype: 'clima_humidity', unit: '%', name: 'Sensore Umidita' },
+    soil: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
+    terreno: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
+    moisture: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
+    temp: { type: 'clima', subtype: 'clima_temperature', unit: '°C', name: 'Sensore Temperatura' },
+    temperature: { type: 'clima', subtype: 'clima_temperature', unit: '°C', name: 'Sensore Temperatura' },
+    temperatura: { type: 'clima', subtype: 'clima_temperature', unit: '°C', name: 'Sensore Temperatura' },
+    water: { type: 'acqua', subtype: 'acqua_level', unit: 'm', name: 'Sensore Acqua' }
+};
+
+function cleanString(value) {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function isPlainObject(value) {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeKey(value) {
+    return cleanString(value).toLowerCase().replace(/[^a-z0-9_/-]+/g, '_');
+}
+
+function inferTypeFromSubtype(subtype) {
+    const normalized = normalizeKey(subtype);
+    if (!normalized) {
+        return '';
+    }
+
+    for (const type of VALID_SENSOR_TYPES) {
+        if (normalized === type || normalized.startsWith(`${type}_`)) {
+            return type;
+        }
+    }
+
+    if (SENSOR_ALIAS_MAP[normalized]) {
+        return SENSOR_ALIAS_MAP[normalized].type;
+    }
+
+    return '';
+}
+
+function normalizeSubtypeForType(type, rawSubtype) {
+    const normalizedType = cleanString(type);
+    const normalizedSubtype = normalizeKey(rawSubtype);
+
+    if (!normalizedSubtype) {
+        return getSensorProfile(normalizedType).subtype;
+    }
+
+    if (SENSOR_ALIAS_MAP[normalizedSubtype] && SENSOR_ALIAS_MAP[normalizedSubtype].type === normalizedType) {
+        return SENSOR_ALIAS_MAP[normalizedSubtype].subtype;
+    }
+
+    if (normalizedSubtype === normalizedType || normalizedSubtype.startsWith(`${normalizedType}_`)) {
+        return normalizedSubtype;
+    }
+
+    return `${normalizedType}_${normalizedSubtype}`;
+}
+
+function parseSensorTopic(topic) {
+    const rawTopic = cleanString(topic).replace(/^\/+|\/+$/g, '');
+    if (!rawTopic) {
+        return {};
+    }
+
+    const stripped = rawTopic.startsWith('sensors/') ? rawTopic.slice('sensors/'.length) : rawTopic;
+    const segments = stripped.split('/').filter(Boolean);
+
+    if (!segments.length) {
+        return {};
+    }
+
+    let deviceId = '';
+    let readingParts = segments;
+    const firstSegmentKey = normalizeKey(segments[0]);
+
+    if (
+        segments.length > 1 &&
+        !VALID_SENSOR_TYPES.has(firstSegmentKey) &&
+        !SENSOR_ALIAS_MAP[firstSegmentKey] &&
+        !inferTypeFromSubtype(firstSegmentKey)
+    ) {
+        deviceId = segments[0];
+        readingParts = segments.slice(1);
+    }
+
+    const joined = normalizeKey(readingParts.join('_'));
+    const firstReading = normalizeKey(readingParts[0]);
+    const type = VALID_SENSOR_TYPES.has(firstReading)
+        ? firstReading
+        : inferTypeFromSubtype(joined || firstReading);
+
+    if (!type) {
+        return { deviceId, topic: rawTopic };
+    }
+
+    let alias = SENSOR_ALIAS_MAP[firstReading] || SENSOR_ALIAS_MAP[joined] || null;
+    if (!alias && readingParts.length > 1) {
+        alias = SENSOR_ALIAS_MAP[normalizeKey(readingParts[1])] || null;
+    }
+
+    const profile = alias || getSensorProfile(type);
+    let subtype;
+
+    if (VALID_SENSOR_TYPES.has(firstReading)) {
+        subtype = normalizeSubtypeForType(type, readingParts.slice(1).join('_'));
+    } else if (alias) {
+        subtype = alias.subtype;
+    } else if (joined) {
+        subtype = normalizeSubtypeForType(type, joined);
+    } else {
+        subtype = profile.subtype;
+    }
+
+    return {
+        deviceId,
+        topic: rawTopic,
+        type,
+        subtype,
+        unit: profile.unit,
+        name: profile.name
+    };
+}
+
+function extractValue(value) {
+    if (!isPlainObject(value)) {
+        return value;
+    }
+
+    if (value.value !== undefined) {
+        return value.value;
+    }
+
+    if (value.reading !== undefined) {
+        return value.reading;
+    }
+
+    if (value.data !== undefined) {
+        return value.data;
+    }
+
+    const entries = Object.entries(value);
+    if (entries.length === 1) {
+        return entries[0][1];
+    }
+
+    return value;
+}
+
+function buildReading(rawReading, defaults = {}) {
+    const type = cleanString(rawReading.type || defaults.type || inferTypeFromSubtype(rawReading.subtype || defaults.subtype));
+    if (!type) {
+        throw createHttpError(400, 'Impossibile determinare il tipo del sensore');
+    }
+
+    const profile = getSensorProfile(type);
+    const subtype = cleanString(rawReading.subtype || defaults.subtype)
+        ? normalizeSubtypeForType(type, rawReading.subtype || defaults.subtype)
+        : profile.subtype;
+    const value = extractValue(
+        rawReading.value !== undefined
+            ? rawReading.value
+            : rawReading.payload !== undefined
+                ? rawReading.payload
+                : rawReading
+    );
+
+    const metadata = {};
+    if (defaults.topic) {
+        metadata.topic = defaults.topic;
+    }
+    if (isPlainObject(rawReading.metadata)) {
+        metadata.metadata = rawReading.metadata;
+    }
+
+    return {
+        type,
+        subtype,
+        name: cleanString(rawReading.name || defaults.name) || profile.name,
+        unit: cleanString(rawReading.unit || defaults.unit) || profile.unit,
+        value,
+        metadata: Object.keys(metadata).length ? metadata : null
+    };
+}
+
+function parseSensorUpdate(body = {}) {
+    const topic = cleanString(body.sensor_id || body.topic);
+    const topicInfo = parseSensorTopic(topic);
+    const payloadObject = isPlainObject(body.value)
+        ? body.value
+        : isPlainObject(body.payload)
+            ? body.payload
+            : null;
+    const rawReadings = Array.isArray(body.readings)
+        ? body.readings
+        : Array.isArray(payloadObject?.readings)
+            ? payloadObject.readings
+            : null;
+    const deviceId = cleanString(body.device_id || payloadObject?.device_id || topicInfo.deviceId);
+    const apiKey = cleanString(body.api_key || payloadObject?.api_key);
+    const timestamp = cleanString(body.timestamp || payloadObject?.timestamp);
+    const readingDefaults = {
+        topic,
+        type: cleanString(body.type || payloadObject?.type || topicInfo.type),
+        subtype: cleanString(body.subtype || payloadObject?.subtype || topicInfo.subtype),
+        unit: cleanString(body.unit || payloadObject?.unit || topicInfo.unit),
+        name: cleanString(body.name || payloadObject?.name || topicInfo.name)
+    };
+
+    let readings;
+
+    if (rawReadings) {
+        readings = rawReadings.map((reading) => buildReading(reading, readingDefaults));
+    } else {
+        const rawValue = body.value !== undefined
+            ? body.value
+            : body.payload !== undefined
+                ? body.payload
+                : payloadObject?.value !== undefined
+                    ? payloadObject.value
+                    : payloadObject?.reading !== undefined
+                        ? payloadObject.reading
+                        : payloadObject?.data;
+
+        if (rawValue === undefined) {
+            throw createHttpError(400, 'Valore sensore mancante');
+        }
+
+        readings = [
+            buildReading(
+                {
+                    type: body.type,
+                    subtype: body.subtype,
+                    unit: body.unit,
+                    name: body.name,
+                    value: rawValue
+                },
+                readingDefaults
+            )
+        ];
+    }
+
+    return {
+        deviceId,
+        apiKey,
+        timestamp,
+        readings
+    };
+}
+
+function getBridgeAuthorization(req) {
+    const configuredToken = cleanString(process.env.MQTT_INGEST_TOKEN);
+    const headerName = cleanString(process.env.MQTT_INGEST_TOKEN_HEADER) || DEFAULT_BRIDGE_TOKEN_HEADER;
+
+    if (!configuredToken) {
+        return {
+            tokenConfigured: false,
+            trustedBridge: false
+        };
+    }
+
+    return {
+        tokenConfigured: true,
+        trustedBridge: cleanString(req.get(headerName)) === configuredToken
+    };
+}
+
+// POST /api/sensors/update - Ingestione bridge MQTT -> sito
+router.post('/update', async (req, res) => {
+    try {
+        const bridgeAuth = getBridgeAuthorization(req);
+        const prepared = parseSensorUpdate(req.body);
+        let result;
+
+        if (prepared.apiKey) {
+            result = await ingestDeviceReadings({
+                deviceId: prepared.deviceId,
+                apiKey: prepared.apiKey,
+                timestamp: prepared.timestamp,
+                readings: prepared.readings
+            });
+        } else {
+            if (bridgeAuth.tokenConfigured && !bridgeAuth.trustedBridge) {
+                return res.status(401).json({ error: 'Bridge token non valido' });
+            }
+
+            result = await ingestTrustedReadings({
+                deviceId: bridgeAuth.trustedBridge ? prepared.deviceId : '',
+                timestamp: prepared.timestamp,
+                readings: prepared.readings
+            });
+        }
+
+        res.json({
+            success: true,
+            device_id: result.deviceId,
+            readings_count: result.insertedReadings.length,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ error: error.message });
+        }
+
+        console.error('Sensor bridge update error:', error);
+        res.status(500).json({ error: 'Errore nel salvataggio dati sensori' });
+    }
+});
 
 // GET /api/sensors/latest - Ultimi dati di tutti i sensori dell'utente
 router.get('/latest', authenticateToken, checkSubscription, async (req, res) => {
