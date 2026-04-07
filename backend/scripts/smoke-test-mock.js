@@ -50,7 +50,8 @@ const state = {
   devices: [],
   sensors: [],
   sensorReadings: [],
-  sensorLatest: []
+  sensorLatest: [],
+  publicLatest: []
 };
 
 let nextDeviceId = 1;
@@ -349,6 +350,51 @@ async function fakeQuery(sql, params = []) {
     return { affectedRows: 1 };
   }
 
+  if (text.startsWith('INSERT INTO public_sensor_latest')) {
+    const existing = state.publicLatest.find((row) => row.sensor_subtype === params[1]);
+    if (existing) {
+      existing.sensor_type = params[0];
+      existing.value = Number(params[2]);
+      existing.topic = params[3];
+      existing.timestamp = params[4];
+    } else {
+      state.publicLatest.push({
+        sensor_type: params[0],
+        sensor_subtype: params[1],
+        value: Number(params[2]),
+        topic: params[3],
+        timestamp: params[4]
+      });
+    }
+    return { affectedRows: 1 };
+  }
+
+  if (text === 'SELECT sensor_subtype AS subtype, value FROM public_sensor_latest') {
+    return state.publicLatest.map((row) => ({
+      subtype: row.sensor_subtype,
+      value: row.value
+    }));
+  }
+
+  if (text.startsWith('SELECT s.subtype, sr.value FROM sensor_readings sr INNER JOIN sensors s ON sr.sensor_id = s.id WHERE sr.timestamp = ( SELECT MAX(timestamp) FROM sensor_readings WHERE sensor_id = s.id )')) {
+    return state.sensors
+      .map((sensor) => {
+        const latestReading = state.sensorReadings
+          .filter((reading) => reading.sensor_id === sensor.id)
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+
+        if (!latestReading || sensor.enabled === false) {
+          return null;
+        }
+
+        return {
+          subtype: sensor.subtype,
+          value: latestReading.value
+        };
+      })
+      .filter(Boolean);
+  }
+
   if (text.startsWith('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')) {
     const user = state.users.find((row) => row.id === Number(params[1]));
     if (user) {
@@ -416,6 +462,7 @@ async function run() {
   const authRouter = require('../routes/auth');
   const adminRouter = require('../routes/admin');
   const iotRouter = require('../routes/iot');
+  const simpleRouter = require('../routes/simple');
   const sensorsRouter = require('../routes/sensors');
 
   const app = express();
@@ -423,6 +470,7 @@ async function run() {
   app.use('/api/auth', authRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/iot', iotRouter);
+  app.use('/api/sensors/simple', simpleRouter);
   app.use('/api/sensors', sensorsRouter);
 
   const adminToken = jwt.sign({ id: 1, role: 'super_admin' }, process.env.JWT_SECRET);
@@ -558,6 +606,12 @@ async function run() {
         assert.equal(bridgeUpdateRes.status, 200);
         const bridgeUpdateJson = await bridgeUpdateRes.json();
         assert.equal(bridgeUpdateJson.readings_count, 1);
+
+        const simpleLatestRes = await fetch(`http://127.0.0.1:${port}/api/sensors/simple/latest`);
+        assert.equal(simpleLatestRes.status, 200);
+        const simpleLatestJson = await simpleLatestRes.json();
+        assert.equal(Number(simpleLatestJson.water), 14.2);
+        assert.equal(Number(simpleLatestJson.temperature), 29.4);
 
         const sensorsRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensors?page=1&pageSize=25`, {
           headers: { Authorization: `Bearer ${reloginJson.token}` }

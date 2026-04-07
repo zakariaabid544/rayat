@@ -8,7 +8,8 @@ const {
     createHttpError,
     getSensorProfile,
     ingestDeviceReadings,
-    ingestTrustedReadings
+    ingestTrustedReadings,
+    ingestPublicReadings
 } = require('../utils/sensor-ingest');
 
 const DEFAULT_BRIDGE_TOKEN_HEADER = 'x-rayat-bridge-token';
@@ -304,16 +305,31 @@ router.post('/update', async (req, res) => {
                 return res.status(401).json({ error: 'Bridge token non valido' });
             }
 
-            result = await ingestTrustedReadings({
-                deviceId: bridgeAuth.trustedBridge ? prepared.deviceId : '',
-                timestamp: prepared.timestamp,
-                readings: prepared.readings
-            });
+            try {
+                result = await ingestTrustedReadings({
+                    deviceId: bridgeAuth.trustedBridge ? prepared.deviceId : '',
+                    timestamp: prepared.timestamp,
+                    readings: prepared.readings
+                });
+            } catch (error) {
+                if (
+                    error.statusCode === 400 &&
+                    /Più clienti attivi trovati|Nessun cliente attivo trovato/i.test(error.message || '')
+                ) {
+                    result = await ingestPublicReadings({
+                        timestamp: prepared.timestamp,
+                        readings: prepared.readings
+                    });
+                } else {
+                    throw error;
+                }
+            }
         }
 
         res.json({
             success: true,
-            device_id: result.deviceId,
+            device_id: result.deviceId || null,
+            mode: result.mode || 'device',
             readings_count: result.insertedReadings.length,
             timestamp: new Date().toISOString()
         });

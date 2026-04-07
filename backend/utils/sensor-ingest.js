@@ -90,6 +90,26 @@ function normalizeReadings(readings) {
     return normalizedReadings;
 }
 
+async function persistPublicSensorLatest(execute, normalizedReadings, readingTimestamp) {
+    for (const reading of normalizedReadings) {
+        const topic = reading.metadata && typeof reading.metadata === 'object'
+            ? reading.metadata.topic || null
+            : null;
+
+        await execute(
+            `INSERT INTO public_sensor_latest (sensor_type, sensor_subtype, value, topic, timestamp)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT (sensor_subtype) DO UPDATE
+             SET sensor_type = EXCLUDED.sensor_type,
+                 value = EXCLUDED.value,
+                 topic = EXCLUDED.topic,
+                 timestamp = EXCLUDED.timestamp,
+                 updated_at = CURRENT_TIMESTAMP`,
+            [reading.type, reading.subtype, reading.value, topic, readingTimestamp]
+        );
+    }
+}
+
 async function persistReadingsForDevice(execute, device, normalizedReadings, readingTimestamp) {
     await execute(
         `UPDATE devices
@@ -159,6 +179,8 @@ async function persistReadingsForDevice(execute, device, normalizedReadings, rea
         });
     }
 
+    await persistPublicSensorLatest(execute, normalizedReadings, readingTimestamp);
+
     return {
         deviceId: device.device_id,
         userId: device.user_id,
@@ -167,6 +189,10 @@ async function persistReadingsForDevice(execute, device, normalizedReadings, rea
 }
 
 async function triggerAlerts(result) {
+    if (!result.userId) {
+        return;
+    }
+
     await Promise.allSettled(
         result.insertedReadings.map((reading) =>
             checkAlerts(
@@ -329,6 +355,27 @@ async function ingestTrustedReadings({ deviceId, timestamp, readings }) {
     return result;
 }
 
+async function ingestPublicReadings({ timestamp, readings }) {
+    const normalizedReadings = normalizeReadings(readings);
+    const readingTimestamp = normalizeTimestamp(timestamp);
+
+    await withTransaction(async (connection) => {
+        const execute = createExecutor(connection);
+        await persistPublicSensorLatest(execute, normalizedReadings, readingTimestamp);
+    });
+
+    return {
+        mode: 'public_only',
+        insertedReadings: normalizedReadings.map((reading) => ({
+            sensor_id: null,
+            type: reading.type,
+            subtype: reading.subtype,
+            value: reading.value,
+            timestamp: readingTimestamp
+        }))
+    };
+}
+
 module.exports = {
     VALID_SENSOR_TYPES,
     DEFAULT_SENSOR_PROFILES,
@@ -336,5 +383,6 @@ module.exports = {
     getSensorProfile,
     normalizeReading,
     ingestDeviceReadings,
-    ingestTrustedReadings
+    ingestTrustedReadings,
+    ingestPublicReadings
 };

@@ -245,6 +245,22 @@ async function ensureCoreTables(changes) {
 
   if (
     await ensureTable(
+      'public_sensor_latest',
+      `CREATE TABLE IF NOT EXISTS public_sensor_latest (
+         sensor_subtype VARCHAR(80) PRIMARY KEY,
+         sensor_type VARCHAR(32) NOT NULL,
+         value NUMERIC(10, 2) NOT NULL,
+         topic TEXT NULL,
+         timestamp TIMESTAMPTZ NOT NULL,
+         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+       )`
+    )
+  ) {
+    changes.push('public_sensor_latest table');
+  }
+
+  if (
+    await ensureTable(
       'password_resets',
       `CREATE TABLE IF NOT EXISTS password_resets (
          id SERIAL PRIMARY KEY,
@@ -510,6 +526,16 @@ async function ensurePlatformSchema() {
     )
   ) {
     changes.push('idx_sensor_latest_timestamp');
+  }
+
+  if (
+    await ensureIndex(
+      'public_sensor_latest',
+      'idx_public_sensor_latest_timestamp',
+      'CREATE INDEX idx_public_sensor_latest_timestamp ON public_sensor_latest (timestamp)'
+    )
+  ) {
+    changes.push('idx_public_sensor_latest_timestamp');
   }
 
   return changes;
