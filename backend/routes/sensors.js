@@ -15,17 +15,35 @@ const {
 const DEFAULT_BRIDGE_TOKEN_HEADER = 'x-rayat-bridge-token';
 const SENSOR_ALIAS_MAP = {
     acqua: { type: 'acqua', subtype: 'acqua_level', unit: 'm', name: 'Sensore Acqua' },
+    co2: { type: 'clima', subtype: 'clima_co2', unit: 'ppm', name: 'Sensore CO2' },
+    ec: { type: 'terreno', subtype: 'terreno_ec', unit: 'dS/m', name: 'Sensore EC' },
     energy: { type: 'energia', subtype: 'energia_consumption', unit: 'kW', name: 'Sensore Energia' },
     energia: { type: 'energia', subtype: 'energia_consumption', unit: 'kW', name: 'Sensore Energia' },
+    h2o: { type: 'acqua', subtype: 'acqua_level', unit: 'm', name: 'Sensore Acqua' },
     humidity: { type: 'clima', subtype: 'clima_humidity', unit: '%', name: 'Sensore Umidita' },
     humidite: { type: 'clima', subtype: 'clima_humidity', unit: '%', name: 'Sensore Umidita' },
+    k: { type: 'terreno', subtype: 'terreno_k', unit: 'ppm', name: 'Sensore Potassio' },
+    nitrogen: { type: 'terreno', subtype: 'terreno_n', unit: 'ppm', name: 'Sensore Azoto' },
+    n: { type: 'terreno', subtype: 'terreno_n', unit: 'ppm', name: 'Sensore Azoto' },
+    p: { type: 'terreno', subtype: 'terreno_p', unit: 'ppm', name: 'Sensore Fosforo' },
+    ph: { type: 'terreno', subtype: 'terreno_ph', unit: 'pH', name: 'Sensore pH' },
+    phosphorus: { type: 'terreno', subtype: 'terreno_p', unit: 'ppm', name: 'Sensore Fosforo' },
+    potassium: { type: 'terreno', subtype: 'terreno_k', unit: 'ppm', name: 'Sensore Potassio' },
     soil: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
+    soil_ec: { type: 'terreno', subtype: 'terreno_ec', unit: 'dS/m', name: 'Sensore EC' },
+    soil_humidity: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
+    soil_moisture: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
+    soil_ph: { type: 'terreno', subtype: 'terreno_ph', unit: 'pH', name: 'Sensore pH' },
+    soil_temperature: { type: 'terreno', subtype: 'terreno_temperature', unit: '°C', name: 'Sensore Temperatura Terreno' },
+    temp_suolo: { type: 'terreno', subtype: 'terreno_temperature', unit: '°C', name: 'Sensore Temperatura Terreno' },
     terreno: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
     moisture: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
     temp: { type: 'clima', subtype: 'clima_temperature', unit: '°C', name: 'Sensore Temperatura' },
     temperature: { type: 'clima', subtype: 'clima_temperature', unit: '°C', name: 'Sensore Temperatura' },
     temperatura: { type: 'clima', subtype: 'clima_temperature', unit: '°C', name: 'Sensore Temperatura' },
-    water: { type: 'acqua', subtype: 'acqua_level', unit: 'm', name: 'Sensore Acqua' }
+    water: { type: 'acqua', subtype: 'acqua_level', unit: 'm', name: 'Sensore Acqua' },
+    wind: { type: 'clima', subtype: 'clima_wind_speed', unit: 'km/h', name: 'Sensore Vento' },
+    wind_speed: { type: 'clima', subtype: 'clima_wind_speed', unit: 'km/h', name: 'Sensore Vento' }
 };
 
 function cleanString(value) {
@@ -285,6 +303,30 @@ function getBridgeAuthorization(req) {
         trustedBridge: cleanString(req.get(headerName)) === configuredToken
     };
 }
+
+// GET /api/sensors/public/latest - Ultimi dati pubblici per la demo senza login
+router.get('/public/latest', async (_req, res) => {
+    try {
+        const rows = await query(
+            `SELECT
+                sensor_type AS type,
+                sensor_subtype AS subtype,
+                value,
+                topic,
+                timestamp
+             FROM public_sensor_latest
+             ORDER BY sensor_type ASC, sensor_subtype ASC`
+        );
+
+        res.json({
+            success: true,
+            data: rows
+        });
+    } catch (error) {
+        console.error('Get public latest sensors error:', error);
+        res.status(500).json({ error: 'Errore nel recupero dati sensori pubblici' });
+    }
+});
 
 // POST /api/sensors/update - Ingestione bridge MQTT -> sito
 router.post('/update', async (req, res) => {

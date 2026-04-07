@@ -12,6 +12,7 @@
         const CONFIG = {
             API_BASE_URL: `${API_ORIGIN}/api`,
             REAL_API_URL: `${API_ORIGIN}/api/sensors/simple/latest`,
+            PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
 
@@ -23,6 +24,7 @@
         const AUTH_STORAGE_MODE_KEY = 'rayat_auth_storage_mode';
         const ADMIN_AUTH_TOKEN_STORAGE_KEY = 'rayat_admin_token';
         const ADMIN_AUTH_USER_STORAGE_KEY = 'rayat_admin_user';
+        const PUBLIC_SENSOR_CACHE_KEY = 'rayat_public_sensor_cache';
 
         let authToken = null;
         let currentRole = 'guest';
@@ -3383,7 +3385,21 @@
 
             if (!isAuthenticated()) {
                 hideSubscriptionExpiredModal();
-                const cached = localStorage.getItem('rayat_sensor_cache');
+                try {
+                    const response = await fetch(CONFIG.PUBLIC_LATEST_URL);
+                    if (response.ok) {
+                        const result = await response.json();
+                        if (result.success && Array.isArray(result.data) && result.data.length) {
+                            localStorage.setItem(PUBLIC_SENSOR_CACHE_KEY, JSON.stringify(result.data));
+                            updateSensorData(result.data, true);
+                            dataError = false;
+                            document.getElementById('offline-banner').style.display = 'none';
+                            return;
+                        }
+                    }
+                } catch (error) { }
+
+                const cached = localStorage.getItem(PUBLIC_SENSOR_CACHE_KEY);
                 if (cached) {
                     try {
                         updateSensorData(JSON.parse(cached), true);
@@ -3468,9 +3484,7 @@
             activeRefreshPromise = (async () => {
                 try {
                     if (!isAuthenticated() || !isCustomerRole(currentRole)) {
-                        generateSimulationData();
-                        dataError = false;
-                        render();
+                        await loadSensorData();
                         await new Promise((resolve) => setTimeout(resolve, 3400));
                         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
                         return;
@@ -3500,9 +3514,12 @@
                 'terreno_ec': { s: 'terreno', key: 'ec' },
                 'terreno_ph': { s: 'terreno', key: 'pH' },
                 'terreno_n': { s: 'terreno', key: 'nitrogen' },
+                'terreno_p': { s: 'terreno', key: 'phosphorus' },
+                'terreno_k': { s: 'terreno', key: 'potassium' },
                 'clima_temperature': { s: 'clima', val: true, key: 'temperature' },
                 'clima_humidity': { s: 'clima', key: 'humidity' },
-                'clima_co2': { s: 'clima', key: 'co2' }
+                'clima_co2': { s: 'clima', key: 'co2' },
+                'clima_wind_speed': { s: 'clima', key: 'windSpeed' }
             };
 
             let updated = false;

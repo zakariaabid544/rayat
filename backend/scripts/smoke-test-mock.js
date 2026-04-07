@@ -376,6 +376,25 @@ async function fakeQuery(sql, params = []) {
     }));
   }
 
+  if (text === 'SELECT sensor_type AS type, sensor_subtype AS subtype, value, topic, timestamp FROM public_sensor_latest ORDER BY sensor_type ASC, sensor_subtype ASC') {
+    return state.publicLatest
+      .slice()
+      .sort((a, b) => {
+        const typeCompare = String(a.sensor_type).localeCompare(String(b.sensor_type));
+        if (typeCompare !== 0) {
+          return typeCompare;
+        }
+        return String(a.sensor_subtype).localeCompare(String(b.sensor_subtype));
+      })
+      .map((row) => ({
+        type: row.sensor_type,
+        subtype: row.sensor_subtype,
+        value: row.value,
+        topic: row.topic,
+        timestamp: row.timestamp
+      }));
+  }
+
   if (text.startsWith('SELECT s.subtype, sr.value FROM sensor_readings sr INNER JOIN sensors s ON sr.sensor_id = s.id WHERE sr.timestamp = ( SELECT MAX(timestamp) FROM sensor_readings WHERE sensor_id = s.id )')) {
     return state.sensors
       .map((sensor) => {
@@ -606,6 +625,12 @@ async function run() {
         assert.equal(bridgeUpdateRes.status, 200);
         const bridgeUpdateJson = await bridgeUpdateRes.json();
         assert.equal(bridgeUpdateJson.readings_count, 1);
+
+        const publicLatestRes = await fetch(`http://127.0.0.1:${port}/api/sensors/public/latest`);
+        assert.equal(publicLatestRes.status, 200);
+        const publicLatestJson = await publicLatestRes.json();
+        assert.equal(publicLatestJson.success, true);
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_temperature'));
 
         const simpleLatestRes = await fetch(`http://127.0.0.1:${port}/api/sensors/simple/latest`);
         assert.equal(simpleLatestRes.status, 200);
