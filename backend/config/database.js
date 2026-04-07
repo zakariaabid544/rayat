@@ -102,7 +102,7 @@ function shouldReturnInsertId(sql) {
     return false;
   }
 
-  return match[1].toLowerCase() !== 'sensor_latest';
+  return !['sensor_latest', 'public_sensor_latest'].includes(match[1].toLowerCase());
 }
 
 function isSelectQuery(sql) {
