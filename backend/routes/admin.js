@@ -637,7 +637,6 @@ router.post('/login', async (req, res) => {
 
         const rows = await query('SELECT * FROM users WHERE email = ?', [email]);
         if (!rows.length) {
-            console.log('❌ User not found');
             return sendAdminError(res, 401, 'Credenziali non valide', 'admin_invalid_credentials');
         }
 
@@ -653,7 +652,6 @@ router.post('/login', async (req, res) => {
 
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) {
-            console.log('❌ Wrong password');
             return sendAdminError(res, 401, 'Credenziali non valide', 'admin_invalid_credentials');
         }
 
@@ -663,8 +661,6 @@ router.post('/login', async (req, res) => {
             name: user.name,
             role: normalizedRole
         });
-
-        console.log('✅ Login success');
 
         res.cookie(
             ADMIN_SESSION_COOKIE,

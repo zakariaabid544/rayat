@@ -322,6 +322,46 @@ function getBridgeAuthorization(req) {
     };
 }
 
+function parseHistoryDate(value, endOfDay = false) {
+    const normalized = cleanString(value);
+    if (!normalized) {
+        return null;
+    }
+
+    const candidate = /^\d{4}-\d{2}-\d{2}$/.test(normalized)
+        ? new Date(`${normalized}${endOfDay ? 'T23:59:59.999Z' : 'T00:00:00.000Z'}`)
+        : new Date(normalized);
+
+    if (Number.isNaN(candidate.getTime())) {
+        throw createHttpError(400, `Data non valida: ${normalized}`);
+    }
+
+    return candidate;
+}
+
+function resolveHistoryRange(queryParams = {}) {
+    const start = parseHistoryDate(queryParams.start || queryParams.startDate, false);
+    const end = parseHistoryDate(queryParams.end || queryParams.endDate, true);
+    const hours = Number.parseInt(queryParams.hours, 10);
+    const days = Number.parseInt(queryParams.days, 10);
+    const endDate = end || new Date();
+
+    if (start && endDate < start) {
+        throw createHttpError(400, 'La data di fine non può precedere la data di inizio');
+    }
+
+    if (start) {
+        return { startDate: start, endDate };
+    }
+
+    const durationHours = Number.isFinite(hours) && hours > 0
+        ? hours
+        : (Number.isFinite(days) && days > 0 ? days * 24 : 30 * 24);
+    const startDate = new Date(endDate.getTime() - durationHours * 60 * 60 * 1000);
+
+    return { startDate, endDate };
+}
+
 // GET /api/sensors/public/latest - Ultimi dati pubblici per la demo senza login
 router.get('/public/latest', async (_req, res) => {
     try {
@@ -347,6 +387,91 @@ router.get('/public/latest', async (_req, res) => {
     } catch (error) {
         console.error('Get public latest sensors error:', error);
         res.status(500).json({ error: 'Errore nel recupero dati sensori pubblici' });
+    }
+});
+
+// GET /api/sensors/public/history - Storico dati pubblici per la demo senza login
+router.get('/public/history', async (req, res) => {
+    try {
+        const sensorType = cleanString(req.query.type);
+        const subtype = cleanString(req.query.subtype);
+
+        if (!VALID_SENSOR_TYPES.has(sensorType)) {
+            return res.status(400).json({ error: 'Tipo sensore non valido' });
+        }
+
+        const { startDate, endDate } = resolveHistoryRange(req.query);
+        let sql = `
+            SELECT
+                sensor_type AS type,
+                sensor_subtype AS subtype,
+                value,
+                topic,
+                timestamp
+            FROM public_sensor_readings
+            WHERE sensor_type = ?
+              AND timestamp >= ?
+              AND timestamp <= ?
+        `;
+        const params = [sensorType, startDate, endDate];
+
+        if (subtype) {
+            sql += ' AND sensor_subtype = ?';
+            params.push(subtype);
+        }
+
+        sql += ' ORDER BY timestamp ASC, sensor_subtype ASC';
+
+        let rows = await query(sql, params);
+
+        if (!rows.length) {
+            let fallbackSql = `
+                SELECT
+                    s.type,
+                    s.subtype,
+                    sr.value,
+                    COALESCE((sr.metadata->>'topic')::text, NULL) AS topic,
+                    sr.timestamp
+                FROM sensor_readings sr
+                INNER JOIN sensors s ON s.id = sr.sensor_id
+                WHERE s.type = ?
+                  AND s.enabled = TRUE
+                  AND sr.timestamp >= ?
+                  AND sr.timestamp <= ?
+            `;
+            const fallbackParams = [sensorType, startDate, endDate];
+
+            if (subtype) {
+                fallbackSql += ' AND s.subtype = ?';
+                fallbackParams.push(subtype);
+            }
+
+            fallbackSql += ' ORDER BY sr.timestamp ASC, s.subtype ASC';
+            rows = await query(fallbackSql, fallbackParams);
+        }
+
+        res.json({
+            success: true,
+            data: rows.map((row) => ({
+                type: row.type,
+                subtype: row.subtype,
+                value: parseFloat(row.value),
+                topic: row.topic || null,
+                timestamp: row.timestamp
+            })),
+            count: rows.length,
+            range: {
+                start: startDate.toISOString(),
+                end: endDate.toISOString()
+            }
+        });
+    } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ error: error.message });
+        }
+
+        console.error('Get public history sensors error:', error);
+        res.status(500).json({ error: 'Errore nel recupero storico sensori pubblici' });
     }
 });
 
@@ -515,8 +640,8 @@ router.get('/:type/history', authenticateToken, checkSubscription, async (req, r
     try {
         const userId = req.user.id;
         const sensorType = req.params.type;
-        const days = parseInt(req.query.days) || 30;
         const subtype = req.query.subtype; // Opzionale per sensori multi-parametro
+        const { startDate, endDate } = resolveHistoryRange(req.query);
 
         let sql = `
       SELECT 
@@ -529,10 +654,11 @@ router.get('/:type/history', authenticateToken, checkSubscription, async (req, r
       INNER JOIN devices d ON s.device_id = d.id
       WHERE d.user_id = ? 
         AND s.type = ?
-        AND sr.timestamp >= DATE_SUB(NOW(), INTERVAL ? DAY)
+        AND sr.timestamp >= ?
+        AND sr.timestamp <= ?
     `;
 
-        const params = [userId, sensorType, days];
+        const params = [userId, sensorType, startDate, endDate];
 
         // Se specificato subtype (es: terreno_moisture)
         if (subtype) {
@@ -554,7 +680,11 @@ router.get('/:type/history', authenticateToken, checkSubscription, async (req, r
         res.json({
             success: true,
             data: chartData,
-            count: chartData.length
+            count: chartData.length,
+            range: {
+                start: startDate.toISOString(),
+                end: endDate.toISOString()
+            }
         });
 
     } catch (error) {

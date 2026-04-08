@@ -354,6 +354,13 @@ async function persistPublicSensorLatest(execute, normalizedReadings, readingTim
         const topic = reading.metadata && typeof reading.metadata === 'object'
             ? reading.metadata.topic || null
             : null;
+        const metadata = reading.metadata ? JSON.stringify(reading.metadata) : null;
+
+        await execute(
+            `INSERT INTO public_sensor_readings (sensor_type, sensor_subtype, value, topic, timestamp, metadata)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [reading.type, reading.subtype, reading.value, topic, readingTimestamp, metadata]
+        );
 
         await execute(
             `INSERT INTO public_sensor_latest (sensor_type, sensor_subtype, value, topic, timestamp)

@@ -51,7 +51,8 @@ const state = {
   sensors: [],
   sensorReadings: [],
   sensorLatest: [],
-  publicLatest: []
+  publicLatest: [],
+  publicSensorReadings: []
 };
 
 let nextDeviceId = 1;
@@ -369,6 +370,19 @@ async function fakeQuery(sql, params = []) {
     return { affectedRows: 1 };
   }
 
+  if (text.startsWith('INSERT INTO public_sensor_readings')) {
+    state.publicSensorReadings.push({
+      id: state.publicSensorReadings.length + 1,
+      sensor_type: params[0],
+      sensor_subtype: params[1],
+      value: Number(params[2]),
+      topic: params[3],
+      timestamp: params[4],
+      metadata: params[5]
+    });
+    return { insertId: state.publicSensorReadings.length };
+  }
+
   if (text === 'SELECT sensor_subtype AS subtype, value FROM public_sensor_latest') {
     return state.publicLatest.map((row) => ({
       subtype: row.sensor_subtype,
@@ -393,6 +407,26 @@ async function fakeQuery(sql, params = []) {
         topic: row.topic,
         timestamp: row.timestamp,
         online_status: 'online'
+      }));
+  }
+
+  if (text.startsWith('SELECT sensor_type AS type, sensor_subtype AS subtype, value, topic, timestamp FROM public_sensor_readings WHERE sensor_type = ?')) {
+    let rows = state.publicSensorReadings
+      .filter((row) => row.sensor_type === params[0])
+      .filter((row) => new Date(row.timestamp) >= new Date(params[1]) && new Date(row.timestamp) <= new Date(params[2]));
+
+    if (params[3]) {
+      rows = rows.filter((row) => row.sensor_subtype === params[3]);
+    }
+
+    return rows
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp) || String(a.sensor_subtype).localeCompare(String(b.sensor_subtype)))
+      .map((row) => ({
+        type: row.sensor_type,
+        subtype: row.sensor_subtype,
+        value: row.value,
+        topic: row.topic,
+        timestamp: row.timestamp
       }));
   }
 
@@ -650,6 +684,13 @@ async function run() {
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_p' && Number(row.value) === 50));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_k' && Number(row.value) === 209));
         assert.ok(publicLatestJson.data.every((row) => row.online_status === 'online'));
+
+        const publicHistoryRes = await fetch(`http://127.0.0.1:${port}/api/sensors/public/history?type=terreno&days=30`);
+        assert.equal(publicHistoryRes.status, 200);
+        const publicHistoryJson = await publicHistoryRes.json();
+        assert.equal(publicHistoryJson.success, true);
+        assert.ok(publicHistoryJson.data.some((row) => row.subtype === 'terreno_temperature' && Number(row.value) === 25.2));
+        assert.ok(publicHistoryJson.data.some((row) => row.subtype === 'terreno_ec' && Number(row.value) === 1270));
 
         const simpleLatestRes = await fetch(`http://127.0.0.1:${port}/api/sensors/simple/latest`);
         assert.equal(simpleLatestRes.status, 200);

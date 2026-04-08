@@ -261,6 +261,24 @@ async function ensureCoreTables(changes) {
 
   if (
     await ensureTable(
+      'public_sensor_readings',
+      `CREATE TABLE IF NOT EXISTS public_sensor_readings (
+         id BIGSERIAL PRIMARY KEY,
+         sensor_type VARCHAR(32) NOT NULL,
+         sensor_subtype VARCHAR(80) NOT NULL,
+         value NUMERIC(12, 3) NOT NULL,
+         topic TEXT NULL,
+         timestamp TIMESTAMPTZ NOT NULL,
+         metadata JSONB NULL,
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+       )`
+    )
+  ) {
+    changes.push('public_sensor_readings table');
+  }
+
+  if (
+    await ensureTable(
       'password_resets',
       `CREATE TABLE IF NOT EXISTS password_resets (
          id SERIAL PRIMARY KEY,
@@ -536,6 +554,24 @@ async function ensurePlatformSchema() {
     )
   ) {
     changes.push('idx_public_sensor_latest_timestamp');
+  }
+  if (
+    await ensureIndex(
+      'public_sensor_readings',
+      'idx_public_sensor_readings_type_timestamp',
+      'CREATE INDEX idx_public_sensor_readings_type_timestamp ON public_sensor_readings (sensor_type, timestamp)'
+    )
+  ) {
+    changes.push('idx_public_sensor_readings_type_timestamp');
+  }
+  if (
+    await ensureIndex(
+      'public_sensor_readings',
+      'idx_public_sensor_readings_subtype_timestamp',
+      'CREATE INDEX idx_public_sensor_readings_subtype_timestamp ON public_sensor_readings (sensor_subtype, timestamp)'
+    )
+  ) {
+    changes.push('idx_public_sensor_readings_subtype_timestamp');
   }
 
   return changes;

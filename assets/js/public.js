@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.1';
+        const FRONTEND_ASSET_VERSION = '1.1.2';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 10000;
 
         let isRefreshingData = false;
@@ -3071,112 +3071,303 @@
             `;
         }
 
-        // --- Historical Data (populated by generateSimulationData) ---
+        // --- Historical Data ---
 
-        // --- Filter State ---
         let filterState = {
-            period: '24h', // 24h, 7d, 30d, custom
+            period: '24h',
             customStart: null,
             customEnd: null
         };
+        let historyState = {
+            loading: false,
+            error: false,
+            usesLiveData: false,
+            lastLoadedAt: 0,
+            requestKey: ''
+        };
 
-        function setFilterPeriod(period) {
-            filterState.period = period;
+        const HISTORY_FIELD_MAP = {
+            energia_consumption: 'energia',
+            acqua_level: 'acqua',
+            clima_temperature: 'climaTemp',
+            clima_humidity: 'humidity',
+            clima_co2: 'co2',
+            clima_wind: 'windSpeed',
+            clima_wind_speed: 'windSpeed',
+            terreno_temperature: 'temperature',
+            terreno_moisture: 'terreno',
+            terreno_ec: 'ec',
+            terreno_ph: 'pH',
+            terreno_n: 'nitrogen',
+            terreno_nitrogen: 'nitrogen',
+            terreno_p: 'phosphorus',
+            terreno_phosphorus: 'phosphorus',
+            terreno_k: 'potassium',
+            terreno_potassium: 'potassium'
+        };
 
-            // Visual feedback - flash the card
-            const card = document.querySelector('.bg-white.rounded-2xl.shadow-xl.p-6');
-            if (card) {
-                card.classList.add('opacity-50');
-                setTimeout(() => {
-                    card.classList.remove('opacity-50');
-                    render();
-                }, 300);
+        function createHistoryRow(date) {
+            return {
+                date,
+                energia: null,
+                acqua: null,
+                climaTemp: null,
+                humidity: null,
+                co2: null,
+                windSpeed: null,
+                temperature: null,
+                terreno: null,
+                ec: null,
+                pH: null,
+                nitrogen: null,
+                phosphorus: null,
+                potassium: null,
+                status: 'statusNormal'
+            };
+        }
+
+        function applyHistoryReading(row, reading) {
+            const field = HISTORY_FIELD_MAP[reading.subtype];
+            if (!field) {
+                return row;
+            }
+
+            row[field] = parseNumericValue(reading.value);
+            return row;
+        }
+
+        function normalizeHistoryRows(records = []) {
+            const grouped = new Map();
+
+            records.forEach((reading) => {
+                if (!reading || !reading.timestamp) {
+                    return;
+                }
+
+                const date = new Date(reading.timestamp);
+                if (Number.isNaN(date.getTime())) {
+                    return;
+                }
+
+                const key = date.toISOString();
+                const row = grouped.get(key) || createHistoryRow(date);
+                applyHistoryReading(row, reading);
+                grouped.set(key, row);
+            });
+
+            return Array.from(grouped.values()).sort((left, right) => left.date - right.date);
+        }
+
+        function getFilterRange() {
+            const now = new Date();
+
+            if (filterState.period === 'custom' && filterState.customStart && filterState.customEnd) {
+                return {
+                    start: new Date(filterState.customStart),
+                    end: new Date(filterState.customEnd)
+                };
+            }
+
+            const end = new Date(now);
+            const start = new Date(now);
+
+            if (filterState.period === '24h') {
+                start.setHours(start.getHours() - 24);
+            } else if (filterState.period === '7d') {
+                start.setDate(start.getDate() - 7);
             } else {
+                start.setDate(start.getDate() - 30);
+            }
+
+            return { start, end };
+        }
+
+        function buildHistoryQueryParams() {
+            const params = new URLSearchParams();
+
+            if (filterState.period === '24h') {
+                params.set('hours', '24');
+            } else if (filterState.period === '7d') {
+                params.set('days', '7');
+            } else if (filterState.period === '30d') {
+                params.set('days', '30');
+            } else if (filterState.period === 'custom' && filterState.customStart && filterState.customEnd) {
+                params.set('start', filterState.customStart.toISOString());
+                params.set('end', filterState.customEnd.toISOString());
+            }
+
+            return params;
+        }
+
+        async function loadHistoryData() {
+            if (!(currentView === 'demo' || (isAuthenticated() && isCustomerRole(currentRole)))) {
+                return;
+            }
+
+            historyState.loading = true;
+            historyState.error = false;
+            const requestKey = [
+                isAuthenticated() && isCustomerRole(currentRole) ? 'private' : 'public',
+                selectedSensor,
+                buildHistoryQueryParams().toString()
+            ].join(':');
+            historyState.requestKey = requestKey;
+
+            try {
+                const params = buildHistoryQueryParams();
+                let response;
+
+                if (isAuthenticated() && isCustomerRole(currentRole)) {
+                    response = await fetch(`${CONFIG.API_BASE_URL}/sensors/${selectedSensor}/history?${params.toString()}`, {
+                        headers: { 'Authorization': `Bearer ${authToken}` },
+                        cache: 'no-store'
+                    });
+                } else {
+                    params.set('type', selectedSensor);
+                    response = await fetch(`${CONFIG.API_BASE_URL}/sensors/public/history?${params.toString()}`, {
+                        cache: 'no-store'
+                    });
+                }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+                if (historyState.requestKey !== requestKey) {
+                    return;
+                }
+                globalHistory = normalizeHistoryRows(Array.isArray(result.data) ? result.data : []);
+                historyState.usesLiveData = true;
+                historyState.lastLoadedAt = Date.now();
+            } catch (error) {
+                if (historyState.requestKey !== requestKey) {
+                    return;
+                }
+                historyState.error = true;
+                if (!historyState.usesLiveData) {
+                    globalHistory = [];
+                }
+            } finally {
+                historyState.loading = false;
                 render();
             }
         }
 
-        function setCustomFilter() {
+        async function setFilterPeriod(period) {
+            filterState.period = period;
+            await loadHistoryData();
+        }
+
+        async function setCustomFilter() {
             const startInput = document.getElementById('startDate');
             const endInput = document.getElementById('endDate');
-            const start = startInput.value;
-            const end = endInput.value;
+            const start = startInput?.value;
+            const end = endInput?.value;
 
-            if (start && end) {
-                const startDate = new Date(start);
-                const endDate = new Date(end);
-
-                if (endDate < startDate) {
-                    alert('La data di fine non può essere precedente alla data di inizio.');
-                    return;
-                }
-
-                filterState.period = 'custom';
-                filterState.customStart = startDate;
-                filterState.customEnd = endDate;
-                filterState.customEnd.setHours(23, 59, 59, 999);
-
-                // Visual feedback - loading state on button
-                const btn = document.querySelector('button[onclick="setCustomFilter()"]');
-                const originalText = btn.innerHTML;
-                btn.innerHTML = '⌛ ...';
-                btn.disabled = true;
-
-                const tableContainer = document.querySelector('.overflow-x-auto.max-h-96');
-                if (tableContainer) tableContainer.style.opacity = '0.3';
-
-                setTimeout(() => {
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                    if (tableContainer) tableContainer.style.opacity = '1';
-                    render();
-                }, 600);
+            if (!(start && end)) {
+                return;
             }
+
+            const startDate = new Date(`${start}T00:00:00`);
+            const endDate = new Date(`${end}T23:59:59.999`);
+
+            if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+                alert('Intervallo date non valido.');
+                return;
+            }
+
+            if (endDate < startDate) {
+                alert('La data di fine non può essere precedente alla data di inizio.');
+                return;
+            }
+
+            filterState.period = 'custom';
+            filterState.customStart = startDate;
+            filterState.customEnd = endDate;
+            await loadHistoryData();
         }
 
         function getFilteredHistory() {
-            if (globalHistory.length === 0) return [];
-            if (filterState.period === '24h') return globalHistory.slice(-24);
-            if (filterState.period === '7d') return globalHistory.slice(-168);
-            if (filterState.period === '30d') return globalHistory.slice(-720);
-            if (filterState.period === 'custom' && filterState.customStart && filterState.customEnd) {
-                return globalHistory.filter(d => d.date >= filterState.customStart && d.date <= filterState.customEnd);
+            if (!globalHistory.length) {
+                return [];
             }
-            return globalHistory; // Return all for full view
+
+            const { start, end } = getFilterRange();
+            return globalHistory.filter((entry) => entry.date >= start && entry.date <= end);
+        }
+
+        function formatHistoryNumber(value, { group = null, key = null } = {}) {
+            if (group && key) {
+                const normalized = normalizeMetricValue(group, key, value);
+                return Number.isFinite(normalized) ? formatMetricValue(normalized) : '--';
+            }
+
+            const numeric = parseNumericValue(value);
+            return Number.isFinite(numeric) ? formatMetricValue(numeric) : '--';
         }
 
         function exportCSV() {
-            const data = globalHistory; // Export all 168h as requested
+            const data = getFilteredHistory();
+            if (!data.length) {
+                return;
+            }
+
             const csvRows = [];
-            // Header
-            csvRows.push(['Date', 'Time', 'Battery (V)', 'Water (m)', 'Temp Air (°C)', 'Hum Air (%)', 'CO2 (ppm)', 'Wind (km/h)', 'Soil Temp (°C)', 'Soil Moisture (%)', 'Soil EC (μS/cm)', 'N (mg/kg)', 'P (mg/kg)', 'K (mg/kg)', 'pH']);
 
-            data.forEach(row => {
-                csvRows.push([
-                    row.date.toLocaleDateString(),
-                    row.date.toLocaleTimeString(),
-                    row.energia.toFixed(2),
-                    row.acqua.toFixed(2),
-                    row.climaTemp.toFixed(1),
-                    row.humidity.toFixed(0),
-                    row.co2.toFixed(0),
-                    row.windSpeed.toFixed(1),
-                    row.temperature.toFixed(1),
-                    row.terreno.toFixed(0),
-                    row.ec.toFixed(0),
-                    row.nitrogen.toFixed(0),
-                    row.phosphorus.toFixed(0),
-                    row.potassium.toFixed(0),
-                    row.pH.toFixed(1)
-                ]);
-            });
+            if (selectedSensor === 'energia') {
+                csvRows.push(['Date', 'Time', 'Energy (kW)']);
+                data.forEach((row) => {
+                    csvRows.push([
+                        formatLocalizedDate(row.date),
+                        formatLocalizedTime(row.date),
+                        formatHistoryNumber(row.energia)
+                    ]);
+                });
+            } else if (selectedSensor === 'acqua') {
+                csvRows.push(['Date', 'Time', 'Water (m)']);
+                data.forEach((row) => {
+                    csvRows.push([
+                        formatLocalizedDate(row.date),
+                        formatLocalizedTime(row.date),
+                        formatHistoryNumber(row.acqua)
+                    ]);
+                });
+            } else if (selectedSensor === 'terreno') {
+                csvRows.push(['Date', 'Time', 'Soil Temp', 'Soil Humidity', 'EC', 'N', 'P', 'K', 'pH']);
+                data.forEach((row) => {
+                    csvRows.push([
+                        formatLocalizedDate(row.date),
+                        formatLocalizedTime(row.date),
+                        formatHistoryNumber(row.temperature, { group: 'soil', key: 'temperature' }),
+                        formatHistoryNumber(row.terreno, { group: 'soil', key: 'moisture' }),
+                        formatHistoryNumber(row.ec, { group: 'soil', key: 'ec' }),
+                        formatHistoryNumber(row.nitrogen, { group: 'soil', key: 'nitrogen' }),
+                        formatHistoryNumber(row.phosphorus, { group: 'soil', key: 'phosphorus' }),
+                        formatHistoryNumber(row.potassium, { group: 'soil', key: 'potassium' }),
+                        formatHistoryNumber(row.pH, { group: 'soil', key: 'pH' })
+                    ]);
+                });
+            } else if (selectedSensor === 'clima') {
+                csvRows.push(['Date', 'Time', 'Air Temp', 'Humidity', 'CO2', 'Wind']);
+                data.forEach((row) => {
+                    csvRows.push([
+                        formatLocalizedDate(row.date),
+                        formatLocalizedTime(row.date),
+                        formatHistoryNumber(row.climaTemp, { group: 'climate', key: 'temperature' }),
+                        formatHistoryNumber(row.humidity, { group: 'climate', key: 'humidity' }),
+                        formatHistoryNumber(row.co2, { group: 'climate', key: 'co2' }),
+                        formatHistoryNumber(row.windSpeed, { group: 'climate', key: 'windSpeed' })
+                    ]);
+                });
+            }
 
-            const csvString = csvRows.map(e => e.join(",")).join("\n");
+            const csvString = csvRows.map((entry) => entry.join(',')).join('\n');
             const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
+            const link = document.createElement('a');
             const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", `rayat_full_data_168h.csv`);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `rayat_${selectedSensor}_history.csv`);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
@@ -3401,6 +3592,7 @@
             }
             if (view === 'demo') {
                 loadSensorData().catch(() => {});
+                loadHistoryData().catch(() => {});
             }
             window.scrollTo({ top: 0, behavior: 'instant' });
 
@@ -3412,6 +3604,9 @@
         async function setSensor(sensor) {
             selectedSensor = sensor;
             render();
+            if (currentView === 'demo' || (isAuthenticated() && isCustomerRole(currentRole))) {
+                await loadHistoryData();
+            }
             // removed setSensor chart logic
         }
 
@@ -3553,12 +3748,14 @@
                 try {
                     if (!isAuthenticated() || !isCustomerRole(currentRole)) {
                         await loadSensorData();
+                        await loadHistoryData();
                         await new Promise((resolve) => setTimeout(resolve, 3400));
                         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
                         return;
                     }
 
                     await loadSensorData();
+                    await loadHistoryData();
                     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
                 } finally {
                     isRefreshingData = false;
@@ -3626,7 +3823,9 @@
                 }
             });
             if (updated) {
-                syncCurrentSensorSnapshotToHistory(new Date());
+                if (!historyState.usesLiveData) {
+                    syncCurrentSensorSnapshotToHistory(new Date());
+                }
             }
             render();
         }
@@ -5607,7 +5806,21 @@
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-gray-50">
-                                            ${getFilteredHistory().map(row => {
+                                            ${(() => {
+                    const historyRows = getFilteredHistory();
+                    const emptyColspan = selectedSensor === 'terreno'
+                        ? 9
+                        : (selectedSensor === 'clima' ? 6 : (selectedSensor === 'energia' ? 3 : 4));
+                    if (!historyRows.length) {
+                        return `
+                            <tr class="rayat-history-row">
+                                <td colspan="${emptyColspan}" class="py-10 text-center text-sm font-semibold text-slate-400">
+                                    ${historyState.loading ? 'Caricamento storico in corso...' : 'Nessun dato storico disponibile per il periodo selezionato.'}
+                                </td>
+                            </tr>
+                        `;
+                    }
+                    return historyRows.map(row => {
                     const s = selectedSensor;
                     let cells = '';
                     const timeCell = `
@@ -5620,18 +5833,19 @@
                         const energyLevel = getMetricState(parseNumericValue(row.energia), { min: 12.2, max: 13.8, unit: 'V' }).level;
                         cells = `
                                                         ${timeCell}
-                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(energyLevel)}">${row.energia.toFixed(2)}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(energyLevel)}">${formatHistoryNumber(row.energia)}</td>
                                                         ${renderHistoryStatusCell(energyLevel)}
                                                     `;
                     } else if (s === 'acqua') {
                         const currentHectares = parseFloat(waterSettings.hectares) || 0;
                         const consumptionPerHa = getCropConsumptionValue();
                         const req = currentHectares * consumptionPerHa;
-                        const avail = row.acqua * 1000;
+                        const waterValue = parseNumericValue(row.acqua);
+                        const avail = Number.isFinite(waterValue) ? waterValue * 1000 : null;
                         const waterLevel = avail < (req * 0.7) ? 'alert' : (avail < req ? 'attention' : 'normal');
                         cells = `
                                                         ${timeCell}
-                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg text-blue-700">${avail.toLocaleString()}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg text-blue-700">${Number.isFinite(avail) ? avail.toLocaleString() : '--'}</td>
                                                         <td class="rayat-history-value-cell rayat-history-value-cell--md text-blue-900">${req.toLocaleString()}</td>
                                                         ${renderHistoryStatusCell(waterLevel, t('statusOk'))}
                                                     `;
@@ -5647,13 +5861,13 @@
                         ];
                         cells = `
                                                         ${timeCell}
-                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[0])}">${row.temperature.toFixed(1)}</td>
-                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[1])}">${row.terreno.toFixed(0)}</td>
-                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[2])}">${(row.ec / 1000).toFixed(2)}</td>
-                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[3])}">${row.nitrogen.toFixed(0)}</td>
-                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[4])}">${row.phosphorus.toFixed(0)}</td>
-                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[5])}">${row.potassium.toFixed(0)}</td>
-                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[6])}">${row.pH.toFixed(1)}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[0])}">${formatHistoryNumber(row.temperature, { group: 'soil', key: 'temperature' })}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[1])}">${formatHistoryNumber(row.terreno, { group: 'soil', key: 'moisture' })}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[2])}">${formatHistoryNumber(row.ec, { group: 'soil', key: 'ec' })}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[3])}">${formatHistoryNumber(row.nitrogen, { group: 'soil', key: 'nitrogen' })}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[4])}">${formatHistoryNumber(row.phosphorus, { group: 'soil', key: 'phosphorus' })}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[5])}">${formatHistoryNumber(row.potassium, { group: 'soil', key: 'potassium' })}</td>
+                                                        <td class="rayat-history-value-cell ${getLevelClass(soilLevels[6])}">${formatHistoryNumber(row.pH, { group: 'soil', key: 'pH' })}</td>
                                                         ${renderHistoryStatusCell(getOverallLevel(soilLevels))}
                                                     `;
                     } else if (s === 'clima') {
@@ -5665,15 +5879,16 @@
                         ];
                         cells = `
                                                         ${timeCell}
-                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[0])}">${row.climaTemp.toFixed(1)}</td>
-                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[1])}">${row.humidity.toFixed(0)}</td>
-                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[2])}">${row.co2.toFixed(0)}</td>
-                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[3])}">${row.windSpeed.toFixed(1)}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[0])}">${formatHistoryNumber(row.climaTemp, { group: 'climate', key: 'temperature' })}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[1])}">${formatHistoryNumber(row.humidity, { group: 'climate', key: 'humidity' })}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[2])}">${formatHistoryNumber(row.co2, { group: 'climate', key: 'co2' })}</td>
+                                                        <td class="rayat-history-value-cell rayat-history-value-cell--lg ${getLevelClass(climateLevels[3])}">${formatHistoryNumber(row.windSpeed, { group: 'climate', key: 'windSpeed' })}</td>
                                                         ${renderHistoryStatusCell(getOverallLevel(climateLevels))}
                                                     `;
                     }
                     return `<tr class="rayat-history-row hover:bg-gray-50 transition duration-300">${cells}</tr>`;
-                }).join('')}
+                }).join('');
+                })()}
                                         </tbody>
                                     </table>
                                 </div>
@@ -5850,10 +6065,14 @@
         // Hard sync demo/live data every 10 seconds.
         if (currentView === 'demo' || (authToken && isCustomerRole(currentRole))) {
             loadSensorData();
+            loadHistoryData();
         }
         setInterval(() => {
             if (currentView === 'demo' || (authToken && isCustomerRole(currentRole))) {
                 loadSensorData();
+                if ((Date.now() - historyState.lastLoadedAt) >= 60000) {
+                    loadHistoryData();
+                }
             }
         }, PUBLIC_SENSOR_POLL_INTERVAL_MS);
 
@@ -5863,10 +6082,18 @@
                 currentView = event.state.view;
                 render();
                 trackPageView(currentView);
+                if (currentView === 'demo' || (authToken && isCustomerRole(currentRole))) {
+                    loadSensorData().catch(() => {});
+                    loadHistoryData().catch(() => {});
+                }
             } else if (window.location.pathname) {
                 currentView = getViewFromPath(window.location.pathname);
                 render();
                 trackPageView(currentView);
+                if (currentView === 'demo' || (authToken && isCustomerRole(currentRole))) {
+                    loadSensorData().catch(() => {});
+                    loadHistoryData().catch(() => {});
+                }
             } else if (currentView !== 'home') {
                 // Return to home if no specific state (simulates Android "exit to home" before closing)
                 currentView = 'home';

@@ -2,7 +2,7 @@
 // RAYAT Service Worker - Offline Cache
 // =============================================
 // RAYAT FIX - mobile app ready optimization
-const CACHE_VERSION = '1.1.1';
+const CACHE_VERSION = '1.1.2';
 const CACHE_NAME = `rayat-${CACHE_VERSION}`;
 const ASSETS_TO_CACHE = [
     './',
@@ -12,8 +12,8 @@ const ASSETS_TO_CACHE = [
     './favicon.png',
     './favicon-32.png',
     './favicon.ico',
-    './assets/css/public.css?v=1.1.1',
-    './assets/js/public.js?v=1.1.1',
+    './assets/css/public.css?v=1.1.2',
+    './assets/js/public.js?v=1.1.2',
     './assets/logo/logo-black.svg',
     './assets/logo/logo-green.svg',
     './assets/logo/logo-white.svg',
@@ -69,6 +69,10 @@ function isPublicSensorLatestRequest(url) {
     return url.origin === self.location.origin && url.pathname === '/api/sensors/public/latest';
 }
 
+function isPublicSensorHistoryRequest(url) {
+    return url.origin === self.location.origin && url.pathname === '/api/sensors/public/history';
+}
+
 // Fetch: prefer fresh network for pages and local code assets
 self.addEventListener('fetch', event => {
     // Skip non-GET and chrome-extension requests
@@ -77,7 +81,7 @@ self.addEventListener('fetch', event => {
 
     // For API calls: network first, fallback to cache
     if (event.request.url.includes('/api/')) {
-        const livePublicRequest = isPublicSensorLatestRequest(requestUrl);
+        const livePublicRequest = isPublicSensorLatestRequest(requestUrl) || isPublicSensorHistoryRequest(requestUrl);
         event.respondWith(
             fetch(event.request, livePublicRequest ? { cache: 'no-store' } : undefined)
                 .then(response => {
