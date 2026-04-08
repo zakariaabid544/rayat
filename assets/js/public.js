@@ -15,8 +15,9 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.3';
+        const FRONTEND_ASSET_VERSION = '1.1.4';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 10000;
+        const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
 
         let isRefreshingData = false;
         let activeRefreshPromise = null;
@@ -28,10 +29,10 @@
         const ADMIN_AUTH_USER_STORAGE_KEY = 'rayat_admin_user';
         const PUBLIC_SENSOR_CACHE_KEY = 'rayat_public_sensor_cache';
         let sensorConnectionState = {
-            energia: 'offline',
-            acqua: 'offline',
-            terreno: 'offline',
-            clima: 'offline'
+            energia: 'loading',
+            acqua: 'loading',
+            terreno: 'loading',
+            clima: 'loading'
         };
 
         let authToken = null;
@@ -639,6 +640,17 @@
                     #ef4444 ${toPct(upperCritical)}%,
                     #ef4444 100%)`
             };
+        }
+
+        function getGaugeMarkerPercent(value, min, max) {
+            const numericValue = parseNumericValue(value);
+            if (!Number.isFinite(numericValue) || !Number.isFinite(min) || !Number.isFinite(max) || max === min) {
+                return null;
+            }
+
+            const ratio = (numericValue - min) / (max - min);
+            const clampedRatio = Math.max(0, Math.min(1, ratio));
+            return clampedRatio * 100;
         }
 
         function buildOptimalRangeLabel(range, mode = 'range') {
@@ -2610,10 +2622,10 @@
 
         function resetSensorConnectionState() {
             sensorConnectionState = {
-                energia: 'offline',
-                acqua: 'offline',
-                terreno: 'offline',
-                clima: 'offline'
+                energia: 'loading',
+                acqua: 'loading',
+                terreno: 'loading',
+                clima: 'loading'
             };
         }
 
@@ -2628,15 +2640,15 @@
 
             const freshnessSource = reading?.last_seen || reading?.timestamp;
             if (!freshnessSource) {
-                return 'offline';
+                return 'loading';
             }
 
             const freshnessDate = new Date(freshnessSource);
             if (Number.isNaN(freshnessDate.getTime())) {
-                return 'offline';
+                return 'loading';
             }
 
-            return (Date.now() - freshnessDate.getTime()) <= (10 * 60 * 1000) ? 'online' : 'offline';
+            return (Date.now() - freshnessDate.getTime()) < SENSOR_ONLINE_WINDOW_MS ? 'online' : 'offline';
         }
 
 
@@ -2876,10 +2888,25 @@
             const unit = getMetricUnit(group, metric.key, metric.unit || metric.unita || '');
             const state = getMetricState(normalizedValue, range);
             const gauge = range ? getGaugeMeta(group, metric.key, range) : null;
+            const gaugeMarkerPercent = gauge ? getGaugeMarkerPercent(normalizedValue, gauge.min, gauge.max) : null;
             const rangeLabel = buildOptimalRangeLabel(range, group === 'climate' ? 'climate' : 'range');
+            const mobileOrderMap = {
+                temperature: 1,
+                moisture: 2,
+                humidity: 2,
+                co2: 3,
+                pH: 4,
+                water: 5,
+                nitrogen: 6,
+                phosphorus: 7,
+                potassium: 8,
+                ec: 9,
+                windSpeed: 10
+            };
+            const mobileOrderClass = mobileOrderMap[metric.key] ? `rayat-metric-card--mobile-order-${mobileOrderMap[metric.key]}` : '';
 
             return `
-                <article class="rayat-metric-card ${state.cssModifier}">
+                <article class="rayat-metric-card ${state.cssModifier} ${mobileOrderClass}" data-metric-key="${metric.key}">
                     <div class="rayat-metric-card-head mb-4">
                         <div class="rayat-metric-card-header-main">
                             <span class="rayat-metric-card-icon">${metric.icon}</span>
@@ -2896,7 +2923,7 @@
                     </div>
                     ${gauge ? `
                         <div class="rayat-range-track" style="background:${gauge.gradient};">
-                            <div class="rayat-range-pointer" style="left:calc(${gauge.pointerLeft(normalizedValue)}% - 9px);"></div>
+                            ${gaugeMarkerPercent === null ? '' : `<div class="rayat-range-pointer" style="left:calc(${gaugeMarkerPercent}% - 9px);"></div>`}
                         </div>
                         <div class="flex justify-between text-[11px] font-semibold text-slate-400 mt-3">
                             <span>${formatMetricValue(gauge.min)}${unit ? ` ${unit}` : ''}</span>
@@ -5587,7 +5614,13 @@
 
 
         function renderDemoPage() {
-            const demoStatusState = sensorConnectionState[selectedSensor] === 'online' ? 'online' : 'offline';
+            const demoStatusState = sensorConnectionState[selectedSensor] || 'loading';
+            const demoStatusClass = demoStatusState === 'online'
+                ? 'is-online'
+                : (demoStatusState === 'offline' ? 'is-offline' : 'is-loading');
+            const demoStatusLabel = demoStatusState === 'online'
+                ? t('monitoringOnline')
+                : (demoStatusState === 'offline' ? t('monitoringOffline') : t('refreshingDataAction'));
 
             // RAYAT FIX - demo section refresh cleanup and repositioning
             const renderMonitoringRefreshControl = (variant = 'toolbar') => `
@@ -5624,7 +5657,7 @@
                 <div class="rayat-demo-section-heading">
                     <div class="rayat-demo-section-heading__row">
                         <div class="rayat-demo-section-heading__controls rayat-demo-section-heading__controls--balance" aria-hidden="true">
-                            <span class="rayat-demo-section-heading__status ${demoStatusState === 'online' ? 'is-online' : 'is-offline'}"></span>
+                            <span class="rayat-demo-section-heading__status ${demoStatusClass}"></span>
                             ${renderMonitoringRefreshControl('section')}
                         </div>
                         <div class="rayat-demo-section-heading__copy">
@@ -5633,9 +5666,9 @@
                         </div>
                         <div class="rayat-demo-section-heading__controls">
                             <span
-                                class="rayat-demo-section-heading__status ${demoStatusState === 'online' ? 'is-online' : 'is-offline'}"
-                                aria-label="${escapeHtml(demoStatusState === 'online' ? t('monitoringOnline') : t('monitoringOffline'))}"
-                                title="${escapeHtml(demoStatusState === 'online' ? t('monitoringOnline') : t('monitoringOffline'))}"
+                                class="rayat-demo-section-heading__status ${demoStatusClass}"
+                                aria-label="${escapeHtml(demoStatusLabel)}"
+                                title="${escapeHtml(demoStatusLabel)}"
                             ></span>
                             ${renderMonitoringRefreshControl('section')}
                         </div>
@@ -5651,7 +5684,7 @@
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-12">${rows}</div>
+                <div class="rayat-sensor-card-grid rayat-sensor-card-grid--soil grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-12">${rows}</div>
                 ${renderActiveAlertFeed('terreno')}`;
             };
 
@@ -5663,7 +5696,7 @@
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">${rows}</div>
+                <div class="rayat-sensor-card-grid rayat-sensor-card-grid--climate grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">${rows}</div>
                 ${renderActiveAlertFeed('clima')}`;
             };
 

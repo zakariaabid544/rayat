@@ -394,7 +394,7 @@ router.get('/public/latest', async (_req, res) => {
                 topic,
                 timestamp,
                 CASE
-                    WHEN timestamp >= NOW() - INTERVAL '10 minutes' THEN 'online'
+                    WHEN timestamp >= NOW() - INTERVAL '35 minutes' THEN 'online'
                     ELSE 'offline'
                 END AS online_status
              FROM public_sensor_latest
@@ -547,7 +547,7 @@ router.get('/latest', authenticateToken, checkSubscription, async (req, res) => 
     d.last_seen,
     CASE
       WHEN d.last_seen IS NULL THEN 'never'
-      WHEN d.last_seen >= NOW() - INTERVAL '10 minutes' THEN 'online'
+      WHEN d.last_seen >= NOW() - INTERVAL '35 minutes' THEN 'online'
       ELSE 'offline'
     END AS online_status
   FROM sensors s
@@ -610,7 +610,7 @@ router.get('/:type/latest', authenticateToken, checkSubscription, async (req, re
         d.last_seen,
         CASE
           WHEN d.last_seen IS NULL THEN 'never'
-          WHEN d.last_seen >= NOW() - INTERVAL '10 minutes' THEN 'online'
+          WHEN d.last_seen >= NOW() - INTERVAL '35 minutes' THEN 'online'
           ELSE 'offline'
         END AS online_status
       FROM sensors s

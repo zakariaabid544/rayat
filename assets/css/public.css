@@ -1122,6 +1122,12 @@
             box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12), 0 0 20px rgba(239, 68, 68, 0.35);
         }
 
+        .rayat-monitoring-status-pill.is-loading .rayat-monitoring-status-pill__dot {
+            background: #94a3b8;
+            box-shadow: 0 0 0 6px rgba(148, 163, 184, 0.12), 0 0 20px rgba(148, 163, 184, 0.24);
+            animation: rayatSensorStatusBlink 1.8s ease-in-out infinite;
+        }
+
         .rayat-monitoring-status-pill__copy {
             display: flex;
             flex-direction: column;
@@ -1339,6 +1345,12 @@
         .rayat-demo-section-heading__status.is-offline {
             background: #ef4444;
             box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12), 0 0 18px rgba(239, 68, 68, 0.22);
+            animation: rayatSensorStatusBlink 1.8s ease-in-out infinite;
+        }
+
+        .rayat-demo-section-heading__status.is-loading {
+            background: #94a3b8;
+            box-shadow: 0 0 0 6px rgba(148, 163, 184, 0.12), 0 0 18px rgba(148, 163, 184, 0.22);
             animation: rayatSensorStatusBlink 1.8s ease-in-out infinite;
         }
 
@@ -1813,6 +1825,27 @@
                 grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             }
 
+            .rayat-sensor-card-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.85rem !important;
+            }
+
+            .rayat-sensor-card-grid .rayat-metric-card {
+                min-width: 0;
+                padding: 1rem;
+            }
+
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-1 { order: 1; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-2 { order: 2; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-3 { order: 3; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-4 { order: 4; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-5 { order: 5; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-6 { order: 6; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-7 { order: 7; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-8 { order: 8; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-9 { order: 9; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-10 { order: 10; }
+
             .md\:flex-row,
             .lg\:flex-row {
                 flex-direction: column !important;
@@ -2209,6 +2242,15 @@
 
             .rayat-demo-nav-grid button {
                 min-height: 108px;
+            }
+
+            .rayat-sensor-card-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.75rem !important;
+            }
+
+            .rayat-sensor-card-grid .rayat-metric-card {
+                padding: 0.9rem;
             }
 
             .rayat-demo-panel .text-4xl,
