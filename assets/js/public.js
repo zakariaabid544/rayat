@@ -69,7 +69,7 @@
         };
         const DASHBOARD_SENSOR_ROUTE_KEYS = new Set(['energia', 'acqua', 'terreno', 'clima']);
         const HOMEPAGE_REAL_SENSOR_KEYS = ['terreno', 'clima'];
-        const GAUGE_MARKER_SAFE_OFFSET_PERCENT = 6;
+        const GAUGE_MARKER_SAFE_OFFSET_PERCENT = 5;
         const WHATSAPP_CTA_URL = 'https://wa.me/393513203307';
         const WHATSAPP_DISPLAY_NUMBER = '+39 351 320 3307';
         const USER_PROFILE_STORAGE_PREFIX = 'rayat_user_profile_';
@@ -3014,8 +3014,10 @@
                         `}
                     </div>
                     ${gauge ? `
-                        <div class="rayat-range-track" style="background:${gauge.gradient};">
-                            ${metricInstalled && gaugeMarkerPercent !== null ? `<div class="rayat-range-pointer" style="left:${gaugeMarkerPercent}%;" aria-hidden="true"></div>` : ''}
+                        <div class="rayat-range-track-shell">
+                            <div class="rayat-range-track" style="background:${gauge.gradient};">
+                                ${metricInstalled && gaugeMarkerPercent !== null ? `<div class="rayat-range-pointer" style="left:${gaugeMarkerPercent}%;" aria-hidden="true"></div>` : ''}
+                            </div>
                         </div>
                         <div class="flex justify-between text-[11px] font-semibold text-slate-400 mt-3">
                             <span>${formatMetricValue(gauge.min)}${unit ? ` ${unit}` : ''}</span>
