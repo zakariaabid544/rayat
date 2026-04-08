@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.7';
+        const FRONTEND_ASSET_VERSION = '1.1.8';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -438,6 +438,7 @@
             expiryDate: null,
             dismissed: false
         };
+        let isSubscriptionModalOpen = false;
         let lastAlarmSyncSignature = '';
         let lastAlarmSyncAt = 0;
         const dashboardAlertCooldowns = new Map();
@@ -2368,7 +2369,9 @@
 
         // RAYAT FIX - checkbox remember me + desktop scroll
         function syncBodyScrollLock() {
-            const shouldLockScroll = isMobileMenuOpen && window.innerWidth <= 768;
+            const shouldLockScroll = ((isMobileMenuOpen && window.innerWidth <= 768) || isSubscriptionModalOpen);
+            document.documentElement.classList.toggle('rayat-scroll-locked', shouldLockScroll);
+            document.body.classList.toggle('rayat-scroll-locked', shouldLockScroll);
             document.body.classList.toggle('rayat-menu-open', shouldLockScroll);
         }
 
@@ -4105,7 +4108,8 @@
             if (modal) {
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
-                document.body.style.overflow = 'hidden'; // Prevent scrolling
+                isSubscriptionModalOpen = true;
+                syncBodyScrollLock();
                 
                 // Hide main app visual noise
                 const skel = document.getElementById('view-skeleton');
@@ -4120,7 +4124,8 @@
                 modal.classList.remove('flex');
             }
 
-            document.body.style.overflow = '';
+            isSubscriptionModalOpen = false;
+            syncBodyScrollLock();
             const skel = document.getElementById('view-skeleton');
             if (skel) skel.style.display = '';
         }

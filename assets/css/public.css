@@ -271,6 +271,12 @@
             overflow-x: hidden;
         }
 
+        html.rayat-scroll-locked,
+        body.rayat-scroll-locked {
+            overflow: hidden;
+            overscroll-behavior: none;
+        }
+
         img,
         svg,
         canvas,
