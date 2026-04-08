@@ -15,8 +15,8 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.6';
-        const PUBLIC_SENSOR_POLL_INTERVAL_MS = 10000;
+        const FRONTEND_ASSET_VERSION = '1.1.7';
+        const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
 
@@ -58,7 +58,7 @@
             home: '/',
             login: '/login',
             register: '/register',
-            demo: '/demo',
+            demo: '/dashboard',
             profilo: '/profilo',
             servizi: '/services',
             'chi-siamo': '/chi-siamo',
@@ -67,6 +67,8 @@
             terms: '/terms',
             'reset-password': '/reset-password'
         };
+        const HOMEPAGE_REAL_SENSOR_KEYS = ['terreno', 'clima'];
+        const GAUGE_MARKER_SAFE_OFFSET_PERCENT = 6;
         const WHATSAPP_CTA_URL = 'https://wa.me/393513203307';
         const WHATSAPP_DISPLAY_NUMBER = '+39 351 320 3307';
         const USER_PROFILE_STORAGE_PREFIX = 'rayat_user_profile_';
@@ -663,7 +665,8 @@
 
             const ratio = (numericValue - min) / (max - min);
             const clampedRatio = Math.max(0, Math.min(1, ratio));
-            return clampedRatio * 100;
+            const usableTrackWidth = 100 - (GAUGE_MARKER_SAFE_OFFSET_PERCENT * 2);
+            return GAUGE_MARKER_SAFE_OFFSET_PERCENT + (clampedRatio * usableTrackWidth);
         }
 
         function buildOptimalRangeLabel(range, mode = 'range') {
@@ -988,6 +991,9 @@
 
         function getViewFromPath(pathname = window.location.pathname) {
             const normalizedPath = pathname.replace(/\/+$/, '') || '/';
+            if (normalizedPath === '/demo' || normalizedPath === '/dashboard') {
+                return 'demo';
+            }
             const match = Object.entries(VIEW_PATHS).find(([, path]) => path === normalizedPath);
             return match ? match[0] : 'home';
         }
@@ -2116,7 +2122,7 @@
             toggleMobileMenu(false);
 
             if (isAuthenticated() && isCustomerRole(currentRole)) {
-                setViewWithTracking('demo');
+                openSensorDashboard(selectedSensor || 'terreno');
                 return;
             }
 
@@ -2125,7 +2131,26 @@
                 return;
             }
 
-            setViewWithTracking('demo');
+            openSensorDashboard('terreno');
+        }
+
+        function openSensorDashboard(sensorKey = null, options = {}) {
+            closeProfileMenu();
+            toggleMobileMenu(false);
+
+            if (sensorKey && sensorData[sensorKey]) {
+                selectedSensor = sensorKey;
+            }
+
+            const navigate = options.tracked === false ? setView : setViewWithTracking;
+            navigate('demo', { path: getPathForView('demo') });
+        }
+
+        function handleSensorCardKeydown(event, sensorKey) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openSensorDashboard(sensorKey);
+            }
         }
 
         function scrollToProfileSection(sectionId, options = {}) {
@@ -2959,7 +2984,7 @@
                     </div>
                     ${gauge ? `
                         <div class="rayat-range-track" style="background:${gauge.gradient};">
-                            ${metricInstalled && gaugeMarkerPercent !== null ? `<div class="rayat-range-pointer" style="left:calc(${gaugeMarkerPercent}% - 9px);"></div>` : ''}
+                            ${metricInstalled && gaugeMarkerPercent !== null ? `<div class="rayat-range-pointer" style="left:${gaugeMarkerPercent}%;" aria-hidden="true"></div>` : ''}
                         </div>
                         <div class="flex justify-between text-[11px] font-semibold text-slate-400 mt-3">
                             <span>${formatMetricValue(gauge.min)}${unit ? ` ${unit}` : ''}</span>
@@ -3031,8 +3056,7 @@
                             </div>
                         </div>
                         <div class="grid gap-8 xl:grid-cols-2">
-                            ${renderHomeLiveSensorPanel('terreno', 'soil')}
-                            ${renderHomeLiveSensorPanel('clima', 'climate')}
+                            ${HOMEPAGE_REAL_SENSOR_KEYS.map((sensorKey) => renderHomeLiveSensorPanel(sensorKey, sensorKey === 'terreno' ? 'soil' : 'climate')).join('')}
                         </div>
                     </div>
                 </section>
@@ -4391,7 +4415,7 @@
                             </h1>
                             <p class="rayat-hero-subtitle rayat-fade-in">${t('heroPlatformSub')}</p>
                             <div class="rayat-mobile-actions flex gap-4 justify-center">
-                                <button onclick="setViewWithTracking('demo')" class="bg-orange-500 hover:bg-orange-600 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-orange-950/20">
+                                <button onclick="openSensorDashboard('terreno')" class="bg-orange-500 hover:bg-orange-600 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-orange-950/20">
                                 ${t('tryDemo')}
                                 </button>
                                 <button onclick="setView('servizi')" class="bg-white text-green-800 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-green-950/10">
@@ -4407,14 +4431,14 @@
                 <section class="py-16 bg-white">
                     <div class="container mx-auto px-4">
                         <h3 class="text-4xl font-bold text-center mb-12 text-green-800">${t('ourSensors')}</h3>
-                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-10">
-                            ${Object.keys(sensorData).map(key => {
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto">
+                            ${HOMEPAGE_REAL_SENSOR_KEYS.map(key => {
                 const sensor = sensorData[key];
                 return `
-                                    <div class="bg-white p-12 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] hover:shadow-[0_40px_80px_rgba(0,0,0,0.15)] transition-all duration-700 cursor-pointer transform hover:scale-110 hover:-translate-y-4 flex flex-col items-center justify-center group" onclick="setView('servizi'); setTimeout(() => { document.getElementById('service-${key}').scrollIntoView({behavior: 'smooth'}); }, 100);">
+                                    <button type="button" class="bg-white p-12 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] hover:shadow-[0_40px_80px_rgba(0,0,0,0.15)] transition-all duration-700 cursor-pointer transform hover:scale-110 hover:-translate-y-4 flex flex-col items-center justify-center group text-center w-full" onclick="openSensorDashboard('${key}')">
                                         <div class="text-8xl mb-6 transition-transform group-hover:scale-110 duration-500">${sensor.icon}</div>
                                         <h4 class="text-2xl font-black text-gray-800 text-center uppercase tracking-tighter">${t(sensor.nome)}</h4>
-                                    </div>
+                                    </button>
                                 `;
             }).join('')}
                         </div>
@@ -4886,7 +4910,14 @@
                         ${Object.keys(sensorData).map(key => {
                 const sensor = sensorData[key];
                 return `
-                                    <div id="service-${key}" class="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
+                                    <div
+                                        id="service-${key}"
+                                        class="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100 cursor-pointer transition hover:shadow-[0_28px_70px_rgba(15,23,42,0.12)]"
+                                        role="button"
+                                        tabindex="0"
+                                        onclick="openSensorDashboard('${key}')"
+                                        onkeydown="handleSensorCardKeydown(event, '${key}')"
+                                    >
                                         <div class="flex flex-col md:flex-row items-center md:space-x-8 mb-6">
                                             <div class="text-8xl mb-4 md:mb-0">${sensor.icon}</div>
                                             <div class="text-center md:text-left flex-grow">
@@ -4894,7 +4925,7 @@
                                                 <p class="text-xl text-gray-600">${t(sensor.descrizioneEstesa || sensor.descrizione)}</p>
                                             </div>
                                             <div class="mt-4 md:mt-0">
-                                                <button onclick="setSensor('${key}'); trackNavigationEvent('demo'); setView('demo')" class="w-full md:w-auto bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-lg text-lg font-bold transition transform hover:scale-105 shadow-lg">
+                                                <button onclick="event.stopPropagation(); openSensorDashboard('${key}')" class="w-full md:w-auto bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-lg text-lg font-bold transition transform hover:scale-105 shadow-lg">
                                                     ${user ? (t('dashboardBtn') || 'Dashboard Privata') : (t('demoBtn') || 'Versione Demo')} 📊
                                                 </button>
                                             </div>

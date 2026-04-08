@@ -124,7 +124,7 @@ app.use(express.static(path.join(__dirname, '../'), {
 }));
 
 // Root → serve the public Rayat site
-app.get(['/', '/login', '/login/', '/register', '/register/', '/demo', '/demo/', '/services', '/services/', '/chi-siamo', '/chi-siamo/', '/contatti', '/contatti/', '/privacy', '/privacy/', '/terms', '/terms/', '/reset-password', '/reset-password/'], (req, res) => {
+app.get(['/', '/login', '/login/', '/register', '/register/', '/demo', '/demo/', '/dashboard', '/dashboard/', '/profilo', '/profilo/', '/services', '/services/', '/chi-siamo', '/chi-siamo/', '/contatti', '/contatti/', '/privacy', '/privacy/', '/terms', '/terms/', '/reset-password', '/reset-password/'], (req, res) => {
     res.sendFile(path.join(__dirname, '../index.html'));
 });
 
