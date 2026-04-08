@@ -15,8 +15,9 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.4';
+        const FRONTEND_ASSET_VERSION = '1.1.5';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 10000;
+        const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
 
         let isRefreshingData = false;
@@ -514,6 +515,18 @@
                 return numeric.toFixed(1).replace(/\.0$/, '');
             }
             return numeric.toFixed(2).replace(/0$/, '').replace(/\.$/, '');
+        }
+
+        function setOfflineBannerVisibility(visible, message = '') {
+            const banner = document.getElementById('offline-banner');
+            if (!banner) {
+                return;
+            }
+
+            banner.style.display = visible ? 'block' : 'none';
+            if (visible) {
+                banner.innerText = message;
+            }
         }
 
         function getCurrentCropRanges() {
@@ -1155,6 +1168,9 @@
                 heroPlatformSub: 'Monitoraggio IoT avanzato di suolo, clima, acqua ed energia, tutto in un\'unica piattaforma.',
                 tryDemo: 'Prova la Demo', discoverServices: 'Scopri i Servizi', insurance: 'Assicurazione Agricola Rayat Smart Monitoring',
                 ourSensors: 'Tecnologia Rayat', ourReality: 'La Nostra Realtà',
+                liveMonitoringTitle: 'Monitoraggio in tempo reale',
+                liveMonitoringSubtitle: 'Dati live dei sensori Rayat aggiornati automaticamente ogni 60 secondi.',
+                sensorNotInstalled: 'Sensore non installato',
                 ourRealityDesc: 'Rayat nasce dalla passione per l\'agricoltura e dalla profonda comprensione delle sfide che ogni agricoltore affronta. Siamo un team di esperti che porta tecnologia accessibile nei campi.',
                 ourMission: 'La Nostra Missione', ourMissionDesc: 'Crediamo che ogni agricoltore meriti strumenti professionali. Vogliamo rendere la tecnologia agricola semplice e potente.',
                 ourDuty: 'Dovere Professionale', ourDutyDesc: 'Siamo i vostri partner di fiducia nella gestione efficiente del campo.',
@@ -1293,6 +1309,9 @@
                 heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy, all in one platform.',
                 tryDemo: 'Try Demo', discoverServices: 'Discover Services', insurance: 'Your agricultural insurance - Continuous real-time monitoring',
                 ourSensors: 'Our Sensors', ourReality: 'Our Reality',
+                liveMonitoringTitle: 'Real-time monitoring',
+                liveMonitoringSubtitle: 'Live Rayat sensor data refreshed automatically every 60 seconds.',
+                sensorNotInstalled: 'Sensor not installed',
                 ourRealityDesc: 'Rayat was born from a passion for agriculture. We are a team of experts bringing accessible innovation to the fields.',
                 ourMission: 'Our Mission', ourMissionDesc: 'Our mission is simple. We believe every farmer deserves professional tools.',
                 ourDuty: 'Our Duty to Clients', ourDutyDesc: 'We are your trusted partner. We ensure:',
@@ -1429,6 +1448,9 @@
                 heroPlatformSub: 'Surveillance IoT avancee du sol, du climat, de l\'eau et de l\'energie, dans une seule plateforme.',
                 tryDemo: 'Tester la Démo', discoverServices: 'Nos Services', insurance: 'Assurance Agricole Rayat Smart Monitoring',
                 ourSensors: 'Technologie Rayat', ourReality: 'Notre Réalité',
+                liveMonitoringTitle: 'Surveillance en temps réel',
+                liveMonitoringSubtitle: 'Données capteurs Rayat mises à jour automatiquement toutes les 60 secondes.',
+                sensorNotInstalled: 'Capteur non installé',
                 ourRealityDesc: 'Rayat est né d\'une passion pour l\'agriculture. Nous sommes une équipe d\'experts apportant une innovation accessible directement aux champs.',
                 ourMission: 'Notre Mission', ourMissionDesc: 'Nous croyons que chaque agriculteur mérite des outils professionnels de surveillance.',
                 ourDuty: 'Devoir Professionnel', ourDutyDesc: 'Votre partenaire de confiance pour une gestion efficace des ressources.',
@@ -1565,6 +1587,9 @@
                 heroPlatformSub: 'مراقبة IoT متقدمة للتربة والمناخ والمياه والطاقة في منصة واحدة.',
                 tryDemo: 'تجريب النسخة', discoverServices: 'خدماتنا', insurance: 'تأمينك الزراعي مع رايات',
                 ourSensors: 'تكنولوجيا رايات', ourReality: 'واقعنا',
+                liveMonitoringTitle: 'مراقبة في الوقت الحقيقي',
+                liveMonitoringSubtitle: 'بيانات حساسات رايات الحية تُحدَّث تلقائيًا كل 60 ثانية.',
+                sensorNotInstalled: 'المستشعر غير مثبت',
                 ourRealityDesc: 'ولدت رايات من شغف بالزراعة. نحن فريق من الخبراء نجلب الابتكار المتاح إلى الحقول.',
                 ourMission: 'مهمتنا', ourMissionDesc: 'نؤمن بأن كل مزارع يستحق أدوات مراقبة احترافية.',
                 ourDuty: 'واجبنا المهني', ourDutyDesc: 'شريكك الموثوق للإدارة الفعالة للموارد.',
@@ -1689,6 +1714,9 @@
                 tryDemo: 'ⴰⵔⴰⵎ ⴷⵉⵎⵓ',
                 discoverServices: 'ⵥⵕ ⵉⵎⴰⵣⵣⴰⵍⵏ',
                 ourSensors: 'ⵉⵎⴰⵙⵙⵏ ⵏⵏⵖ <span class="text-xs text-gray-500 block">Imassn</span>',
+                liveMonitoringTitle: 'ⴰⵍⵖⵓ ⵏ ⵜⵎⴰⵢⵏⵓⵜ',
+                liveMonitoringSubtitle: 'ⵉⵙⴼⴽⴰ ⵏ Rayat ⵙ ⵜⵓⵙⵙⵏⴰ ⵏ 60 ⵏ ⵜⵉⵙⵉⵏ.',
+                sensorNotInstalled: 'ⴰⵎⴰⵙⵙⴰⵏ ⵓⵔ ⵉⵜⵜⵓⵙⴱⴷⴷ',
                 whyChoose: 'ⵎⴰⵅ ⵔⴰⵢⴰⵜ? <span class="text-xs text-gray-400 block">Maix Rayat?</span>',
                 continuous: 'ⵜⴰⴳⴳⴰ ⵜⴰⵎⴰⴳⵓⵔⵜ',
                 continuousDesc: 'ⵀⴰⵏⴰ ⴽⵓⵍⵍⵓ ⵜⴰⵙⵔⴰⴳⵉⵏ ⵏ ⵡⴰⵙⵙ. ⵜⴰⴳⴳⴰ ⵏ ⵓⴽⴰⵍ ⵏⵏⵓⵏ.',
@@ -2890,6 +2918,7 @@
             const gauge = range ? getGaugeMeta(group, metric.key, range) : null;
             const gaugeMarkerPercent = gauge ? getGaugeMarkerPercent(normalizedValue, gauge.min, gauge.max) : null;
             const rangeLabel = buildOptimalRangeLabel(range, group === 'climate' ? 'climate' : 'range');
+            const metricInstalled = metric.installed !== false && Number.isFinite(normalizedValue);
             const mobileOrderMap = {
                 temperature: 1,
                 moisture: 2,
@@ -2904,26 +2933,33 @@
                 windSpeed: 10
             };
             const mobileOrderClass = mobileOrderMap[metric.key] ? `rayat-metric-card--mobile-order-${mobileOrderMap[metric.key]}` : '';
+            const cardModifierClass = metricInstalled ? state.cssModifier : 'rayat-metric-card--inactive';
+            const stateClass = metricInstalled ? getLevelClass(state.level) : 'text-slate-500';
+            const stateLabel = metricInstalled ? state.label : t('sensorNotInstalled');
 
             return `
-                <article class="rayat-metric-card ${state.cssModifier} ${mobileOrderClass}" data-metric-key="${metric.key}">
+                <article class="rayat-metric-card ${cardModifierClass} ${mobileOrderClass}" data-metric-key="${metric.key}">
                     <div class="rayat-metric-card-head mb-4">
                         <div class="rayat-metric-card-header-main">
                             <span class="rayat-metric-card-icon">${metric.icon}</span>
                             <div class="rayat-metric-card-copy">
                                 <p class="rayat-metric-card-title">${t(metric.label)}</p>
-                                <p class="rayat-metric-card-state ${getLevelClass(state.level)}">${state.label}</p>
+                                <p class="rayat-metric-card-state ${stateClass}">${stateLabel}</p>
                             </div>
                         </div>
-                        ${state.badge ? `<span class="rayat-alert-badge ${state.level === 'alert' ? 'rayat-alert-badge--alert' : 'rayat-alert-badge--attention'}">${state.badge}</span>` : ''}
+                        ${metricInstalled && state.badge ? `<span class="rayat-alert-badge ${state.level === 'alert' ? 'rayat-alert-badge--alert' : 'rayat-alert-badge--attention'}">${state.badge}</span>` : ''}
                     </div>
                     <div class="flex items-end gap-2 mb-5">
-                        <span class="text-5xl font-black text-slate-900 leading-none">${formatMetricValue(normalizedValue)}</span>
-                        <span class="text-sm font-bold text-slate-400 uppercase">${unit}</span>
+                        ${metricInstalled ? `
+                            <span class="text-5xl font-black text-slate-900 leading-none">${formatMetricValue(normalizedValue)}</span>
+                            <span class="text-sm font-bold text-slate-400 uppercase">${unit}</span>
+                        ` : `
+                            <span class="rayat-metric-card-placeholder">${t('sensorNotInstalled')}</span>
+                        `}
                     </div>
                     ${gauge ? `
                         <div class="rayat-range-track" style="background:${gauge.gradient};">
-                            ${gaugeMarkerPercent === null ? '' : `<div class="rayat-range-pointer" style="left:calc(${gaugeMarkerPercent}% - 9px);"></div>`}
+                            ${metricInstalled && gaugeMarkerPercent !== null ? `<div class="rayat-range-pointer" style="left:calc(${gaugeMarkerPercent}% - 9px);"></div>` : ''}
                         </div>
                         <div class="flex justify-between text-[11px] font-semibold text-slate-400 mt-3">
                             <span>${formatMetricValue(gauge.min)}${unit ? ` ${unit}` : ''}</span>
@@ -2932,6 +2968,74 @@
                     ` : ''}
                     <p class="rayat-metric-card-range ${state.level === 'normal' ? 'text-slate-600' : getLevelClass(state.level)}">${rangeLabel}</p>
                 </article>
+            `;
+        }
+
+        function getSensorConnectionMeta(sensorKey) {
+            const state = sensorConnectionState[sensorKey] || 'loading';
+            return {
+                state,
+                className: state === 'online' ? 'is-online' : (state === 'offline' ? 'is-offline' : 'is-loading'),
+                label: state === 'online'
+                    ? t('monitoringOnline')
+                    : (state === 'offline' ? t('monitoringOffline') : t('refreshingDataAction'))
+            };
+        }
+
+        function renderSensorMetricGrid(sensorKey, group, className = '') {
+            const sensor = sensorData[sensorKey];
+            if (!sensor?.details?.length) {
+                return '';
+            }
+
+            const rows = sensor.details.map((metric) => renderMetricCard(group, metric)).join('');
+            const variantClass = sensorKey === 'terreno'
+                ? 'rayat-sensor-card-grid--soil'
+                : (sensorKey === 'clima' ? 'rayat-sensor-card-grid--climate' : '');
+
+            return `<div class="rayat-sensor-card-grid ${variantClass} ${className}">${rows}</div>`;
+        }
+
+        function renderHomeLiveSensorPanel(sensorKey, group) {
+            const sensor = sensorData[sensorKey];
+            const statusMeta = getSensorConnectionMeta(sensorKey);
+
+            return `
+                <article class="rayat-home-live-panel bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(15,23,42,0.08)] border border-slate-100 p-6 md:p-8">
+                    <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between mb-6">
+                        <div>
+                            <p class="text-xs font-black uppercase tracking-[0.28em] text-slate-400 mb-2">${t('realTimeMonitoring')}</p>
+                            <h4 class="text-2xl md:text-3xl font-black text-green-800 tracking-tighter">${t(sensor.nome)}</h4>
+                        </div>
+                        <span class="rayat-monitoring-status-pill ${statusMeta.className}">
+                            <span class="rayat-monitoring-status-pill__dot" aria-hidden="true"></span>
+                            <span class="rayat-monitoring-status-pill__copy">
+                                <strong>${statusMeta.label}</strong>
+                                <span>${t(sensor.descrizione)}</span>
+                            </span>
+                        </span>
+                    </div>
+                    ${renderSensorMetricGrid(sensorKey, group, 'grid grid-cols-1 md:grid-cols-2 gap-6')}
+                </article>
+            `;
+        }
+
+        function renderHomeLiveSensorsSection() {
+            return `
+                <section class="py-16 bg-gradient-to-b from-white to-slate-50 border-b border-slate-100">
+                    <div class="container mx-auto px-4">
+                        <div class="rayat-monitoring-toolbar">
+                            <div class="rayat-monitoring-toolbar__copy">
+                                <h2 class="rayat-monitoring-toolbar__title">${t('liveMonitoringTitle')}</h2>
+                                <p class="rayat-monitoring-toolbar__subtitle">${t('liveMonitoringSubtitle')}</p>
+                            </div>
+                        </div>
+                        <div class="grid gap-8 xl:grid-cols-2">
+                            ${renderHomeLiveSensorPanel('terreno', 'soil')}
+                            ${renderHomeLiveSensorPanel('clima', 'climate')}
+                        </div>
+                    </div>
+                </section>
             `;
         }
 
@@ -3623,6 +3727,9 @@
             if (view === 'register') {
                 trackRegistrationStart(view);
             }
+            if (view === 'home') {
+                loadSensorData().catch(() => {});
+            }
             if (view === 'demo') {
                 loadSensorData().catch(() => {});
                 loadHistoryData().catch(() => {});
@@ -3685,7 +3792,7 @@
                             localStorage.setItem(PUBLIC_SENSOR_CACHE_KEY, JSON.stringify(data));
                             updateSensorData(data, true);
                             dataError = false;
-                            document.getElementById('offline-banner').style.display = 'none';
+                            setOfflineBannerVisibility(false);
                             return;
                         }
                     }
@@ -3746,7 +3853,7 @@
                         localStorage.setItem('rayat_sensor_cache', JSON.stringify(result.data));
                         updateSensorData(result.data);
                         dataError = false;
-                        document.getElementById('offline-banner').style.display = 'none';
+                        setOfflineBannerVisibility(false);
                     }
                 }
             } catch (error) { }
@@ -3760,8 +3867,7 @@
             if (cached) {
                 try {
                     updateSensorData(JSON.parse(cached), true);
-                    document.getElementById('offline-banner').style.display = 'block';
-                    document.getElementById('offline-banner').innerText = t('usingCache');
+                    setOfflineBannerVisibility(true, t('usingCache'));
                 } catch (e) { }
             }
             
@@ -4295,6 +4401,8 @@
                         </div>
                     </div>
                 </section>
+
+                ${renderHomeLiveSensorsSection()}
 
                 <section class="py-16 bg-white">
                     <div class="container mx-auto px-4">
@@ -5677,26 +5785,22 @@
             `;
 
             const render7in1 = () => {
-                const rows = sensorData.terreno.details.map((metric) => renderMetricCard('soil', metric)).join('');
-
                 return `
                 ${renderDemoSectionHeading(t('sensorSoName'))}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
-                <div class="rayat-sensor-card-grid rayat-sensor-card-grid--soil grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-12">${rows}</div>
+                ${renderSensorMetricGrid('terreno', 'soil', 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-12')}
                 ${renderActiveAlertFeed('terreno')}`;
             };
 
             const renderClimate = () => {
-                const rows = sensorData.clima.details.map((metric) => renderMetricCard('climate', metric)).join('');
-
                 return `
                 ${renderDemoSectionHeading(t('sensorClName'))}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
-                <div class="rayat-sensor-card-grid rayat-sensor-card-grid--climate grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">${rows}</div>
+                ${renderSensorMetricGrid('clima', 'climate', 'grid grid-cols-1 md:grid-cols-2 gap-6 mb-12')}
                 ${renderActiveAlertFeed('clima')}`;
             };
 
@@ -6095,25 +6199,34 @@
                 history.replaceState({ view: 'login' }, '', '/login');
             }
         }
+        resetLiveSensorDisplayData();
+        resetSensorConnectionState();
         render();
         trackPageView(currentView);
         if (currentView === 'register') {
             trackRegistrationStart(currentView);
         }
 
-        // Hard sync demo/live data every 10 seconds.
-        if (currentView === 'demo' || (authToken && isCustomerRole(currentRole))) {
+        // Hard sync live data.
+        if (currentView === 'home' || currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
             loadSensorData();
+        }
+        if (currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
             loadHistoryData();
         }
         setInterval(() => {
-            if (currentView === 'demo' || (authToken && isCustomerRole(currentRole))) {
+            if (currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
                 loadSensorData();
                 if ((Date.now() - historyState.lastLoadedAt) >= 60000) {
                     loadHistoryData();
                 }
             }
         }, PUBLIC_SENSOR_POLL_INTERVAL_MS);
+        setInterval(() => {
+            if (currentView === 'home') {
+                loadSensorData().catch(() => {});
+            }
+        }, HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS);
 
         // Handle Android hardware back button and browser back
         window.onpopstate = function (event) {
@@ -6121,16 +6234,20 @@
                 currentView = event.state.view;
                 render();
                 trackPageView(currentView);
-                if (currentView === 'demo' || (authToken && isCustomerRole(currentRole))) {
+                if (currentView === 'home' || currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
                     loadSensorData().catch(() => {});
+                }
+                if (currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
                     loadHistoryData().catch(() => {});
                 }
             } else if (window.location.pathname) {
                 currentView = getViewFromPath(window.location.pathname);
                 render();
                 trackPageView(currentView);
-                if (currentView === 'demo' || (authToken && isCustomerRole(currentRole))) {
+                if (currentView === 'home' || currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
                     loadSensorData().catch(() => {});
+                }
+                if (currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
                     loadHistoryData().catch(() => {});
                 }
             } else if (currentView !== 'home') {
@@ -6192,10 +6309,9 @@
         if (window.Capacitor && window.Capacitor.Plugins.Network) {
             window.Capacitor.Plugins.Network.addListener('networkStatusChange', status => {
                 if (!status.connected) {
-                    document.getElementById('offline-banner').style.display = 'block';
-                    document.getElementById('offline-banner').innerText = t('usingCache');
+                    setOfflineBannerVisibility(true, t('usingCache'));
                 } else {
-                    document.getElementById('offline-banner').style.display = 'none';
+                    setOfflineBannerVisibility(false);
                     loadSensorData();
                 }
             });
