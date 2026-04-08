@@ -15,13 +15,17 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.11';
+        const FRONTEND_ASSET_VERSION = '1.1.12';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
 
         let isRefreshingData = false;
         let activeRefreshPromise = null;
+        let activeSensorLoadPromise = null;
+        let activeSensorLoadScope = '';
+        let activeHistoryLoadPromise = null;
+        let lastSensorPayloadSignature = '';
 
         const AUTH_TOKEN_STORAGE_KEY = 'rayat_token';
         const AUTH_USER_STORAGE_KEY = 'rayat_user';
@@ -1026,6 +1030,26 @@
             }
             const match = Object.entries(VIEW_PATHS).find(([, path]) => path === normalizedPath);
             return match ? match[0] : 'home';
+        }
+
+        function shouldLoadSensorDataForView(view = currentView) {
+            return view === 'home'
+                || view === 'demo'
+                || (view === 'profilo' && isAuthenticated() && isCustomerRole(currentRole));
+        }
+
+        function shouldLoadHistoryDataForView(view = currentView) {
+            return view === 'demo';
+        }
+
+        function requestViewData(view = currentView, options = {}) {
+            if (shouldLoadSensorDataForView(view)) {
+                loadSensorData({ ...options, view }).catch(() => {});
+            }
+
+            if (shouldLoadHistoryDataForView(view)) {
+                loadHistoryData({ ...options, view }).catch(() => {});
+            }
         }
 
         function restorePublicSession() {
@@ -3446,58 +3470,87 @@
             return params;
         }
 
-        async function loadHistoryData() {
-            if (!(currentView === 'demo' || (isAuthenticated() && isCustomerRole(currentRole)))) {
-                return;
+        async function loadHistoryData(options = {}) {
+            const targetView = options.view || currentView;
+            if (!shouldLoadHistoryDataForView(targetView)) {
+                return false;
             }
 
-            historyState.loading = true;
-            historyState.error = false;
             const requestKey = [
                 isAuthenticated() && isCustomerRole(currentRole) ? 'private' : 'public',
                 selectedSensor,
                 buildHistoryQueryParams().toString()
             ].join(':');
+
+            if (!options.force && activeHistoryLoadPromise && historyState.requestKey === requestKey) {
+                return activeHistoryLoadPromise;
+            }
+
+            historyState.loading = true;
+            historyState.error = false;
             historyState.requestKey = requestKey;
 
-            try {
+            const historyPromise = (async () => {
                 const params = buildHistoryQueryParams();
-                let response;
+                let shouldRenderHistory = false;
 
-                if (isAuthenticated() && isCustomerRole(currentRole)) {
-                    response = await fetch(`${CONFIG.API_BASE_URL}/sensors/${selectedSensor}/history?${params.toString()}`, {
-                        headers: { 'Authorization': `Bearer ${authToken}` },
-                        cache: 'no-store'
-                    });
-                } else {
-                    params.set('type', selectedSensor);
-                    response = await fetch(`${CONFIG.API_BASE_URL}/sensors/public/history?${params.toString()}`, {
-                        cache: 'no-store'
-                    });
+                try {
+                    let response;
+
+                    if (isAuthenticated() && isCustomerRole(currentRole)) {
+                        response = await fetch(`${CONFIG.API_BASE_URL}/sensors/${selectedSensor}/history?${params.toString()}`, {
+                            headers: { 'Authorization': `Bearer ${authToken}` },
+                            cache: 'no-store'
+                        });
+                    } else {
+                        params.set('type', selectedSensor);
+                        response = await fetch(`${CONFIG.API_BASE_URL}/sensors/public/history?${params.toString()}`, {
+                            cache: 'no-store'
+                        });
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    if (historyState.requestKey !== requestKey) {
+                        return false;
+                    }
+                    globalHistory = normalizeHistoryRows(Array.isArray(result.data) ? result.data : []);
+                    historyState.usesLiveData = true;
+                    historyState.lastLoadedAt = Date.now();
+                    shouldRenderHistory = true;
+                } catch (error) {
+                    if (historyState.requestKey !== requestKey) {
+                        return false;
+                    }
+                    historyState.error = true;
+                    if (!historyState.usesLiveData) {
+                        globalHistory = [];
+                    }
+                    shouldRenderHistory = true;
+                } finally {
+                    if (historyState.requestKey === requestKey) {
+                        historyState.loading = false;
+                    }
                 }
 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                if (shouldRenderHistory) {
+                    render();
                 }
 
-                const result = await response.json();
-                if (historyState.requestKey !== requestKey) {
-                    return;
-                }
-                globalHistory = normalizeHistoryRows(Array.isArray(result.data) ? result.data : []);
-                historyState.usesLiveData = true;
-                historyState.lastLoadedAt = Date.now();
-            } catch (error) {
-                if (historyState.requestKey !== requestKey) {
-                    return;
-                }
-                historyState.error = true;
-                if (!historyState.usesLiveData) {
-                    globalHistory = [];
-                }
+                return shouldRenderHistory;
+            })();
+
+            activeHistoryLoadPromise = historyPromise;
+
+            try {
+                return await historyPromise;
             } finally {
-                historyState.loading = false;
-                render();
+                if (activeHistoryLoadPromise === historyPromise) {
+                    activeHistoryLoadPromise = null;
+                }
             }
         }
 
@@ -3663,7 +3716,6 @@
                         window.location.href = `${API_ORIGIN}/admin/`;
                     } else {
                         setView('demo');
-                        loadSensorData().catch(() => {});
                     }
                 } else {
                     const errorEl = document.getElementById('error');
@@ -3837,13 +3889,7 @@
             if (view === 'register') {
                 trackRegistrationStart(view);
             }
-            if (view === 'home') {
-                loadSensorData().catch(() => {});
-            }
-            if (view === 'demo') {
-                loadSensorData().catch(() => {});
-                loadHistoryData().catch(() => {});
-            }
+            requestViewData(view);
             window.scrollTo({ top: 0, behavior: 'instant' });
 
             // Re-initialize maps for specific views
@@ -3893,106 +3939,147 @@
 
         /* --- API Data Loading --- */
 
-        async function loadSensorData() {
+        async function loadSensorData(options = {}) {
+            const targetView = options.view || currentView;
+            if (!shouldLoadSensorDataForView(targetView)) {
+                return false;
+            }
+
+            const requestScope = !isAuthenticated()
+                ? 'public'
+                : (isCustomerRole(currentRole) ? 'private' : 'skip');
+
+            if (requestScope === 'skip') {
+                hideSubscriptionExpiredModal();
+                dataError = false;
+                return false;
+            }
+
+            if (!options.force && activeSensorLoadPromise && activeSensorLoadScope === requestScope) {
+                return activeSensorLoadPromise;
+            }
+
             // Always ensure we have some data to show (Demo Mode)
             if (globalHistory.length === 0) {
                 generateSimulationData();
                 resetLiveSensorDisplayData();
             }
 
-            if (!isAuthenticated()) {
-                hideSubscriptionExpiredModal();
+            const sensorPromise = (async () => {
+                if (requestScope === 'public') {
+                    hideSubscriptionExpiredModal();
+                    try {
+                        const response = await fetch(`${CONFIG.PUBLIC_LATEST_URL}?t=${Date.now()}`, {
+                            cache: 'no-store'
+                        });
+                        if (response.ok) {
+                            const result = await response.json();
+                            if (result.success && Array.isArray(result.data)) {
+                                const data = result.data;
+                                localStorage.setItem(PUBLIC_SENSOR_CACHE_KEY, JSON.stringify(data));
+                                const didRender = updateSensorData(data, true);
+                                dataError = false;
+                                setOfflineBannerVisibility(false);
+                                return didRender;
+                            }
+                        }
+                    } catch (error) { }
+
+                    const cached = localStorage.getItem(PUBLIC_SENSOR_CACHE_KEY);
+                    if (cached) {
+                        try {
+                            const didRender = updateSensorData(JSON.parse(cached), true);
+                            dataError = false;
+                            setOfflineBannerVisibility(true, t('usingCache'));
+                            return didRender;
+                        } catch (e) { /* ignore cache error in demo mode */ }
+                    }
+
+                    const hadRenderedData = Boolean(lastSensorPayloadSignature);
+                    lastSensorPayloadSignature = '';
+                    resetSensorConnectionState();
+                    resetLiveSensorDisplayData();
+                    dataError = false;
+                    if (hadRenderedData) {
+                        render();
+                    }
+                    return hadRenderedData;
+                }
+
+                if (subscriptionUiState.expired) {
+                    if (!subscriptionUiState.dismissed) {
+                        showSubscriptionExpiredModal();
+                    }
+                    return false;
+                }
+
                 try {
-                    const response = await fetch(`${CONFIG.PUBLIC_LATEST_URL}?t=${Date.now()}`, {
-                        cache: 'no-store'
+                    const response = await fetch(`${CONFIG.API_BASE_URL}/sensors/latest`, {
+                        headers: { 'Authorization': `Bearer ${authToken}` }
                     });
+
+                    if (response.status === 401 || response.status === 403) {
+                        const errorData = await response.json().catch(() => ({}));
+                        if (response.status === 403 && errorData.error === 'subscription_expired' && user && isCustomerRole(currentRole)) {
+                            subscriptionUiState = {
+                                ...subscriptionUiState,
+                                expired: true,
+                                expiringSoon: false,
+                                dismissed: false
+                            };
+                            showSubscriptionExpiredModal();
+                            return false;
+                        }
+
+                        clearPublicSession({ keepCurrentView: true });
+                        return false;
+                    }
+
                     if (response.ok) {
                         const result = await response.json();
-                        if (result.success && Array.isArray(result.data)) {
-                            const data = result.data;
-                            localStorage.setItem(PUBLIC_SENSOR_CACHE_KEY, JSON.stringify(data));
-                            updateSensorData(data, true);
+                        if (result.success && result.data) {
+                            localStorage.setItem('rayat_sensor_cache', JSON.stringify(result.data));
+                            const didRender = updateSensorData(result.data);
                             dataError = false;
                             setOfflineBannerVisibility(false);
-                            return;
+                            return didRender;
                         }
                     }
                 } catch (error) { }
 
-                const cached = localStorage.getItem(PUBLIC_SENSOR_CACHE_KEY);
+                dataError = false;
+
+                const cached = localStorage.getItem('rayat_sensor_cache');
                 if (cached) {
                     try {
-                        updateSensorData(JSON.parse(cached), true);
-                        return;
-                    } catch (e) { /* ignore cache error in demo mode */ }
+                        const didRender = updateSensorData(JSON.parse(cached), true);
+                        dataError = false;
+                        setOfflineBannerVisibility(true, t('usingCache'));
+                        return didRender;
+                    } catch (e) { }
                 }
+
+                const hadRenderedData = Boolean(lastSensorPayloadSignature);
+                lastSensorPayloadSignature = '';
                 resetSensorConnectionState();
                 resetLiveSensorDisplayData();
-                render();
-                dataError = false; // Always false for Demo Mode
-                return;
-            }
-
-            if (!isCustomerRole(currentRole)) {
-                hideSubscriptionExpiredModal();
-                dataError = false;
-                return;
-            }
-
-            if (subscriptionUiState.expired) {
-                if (!subscriptionUiState.dismissed) {
-                    showSubscriptionExpiredModal();
+                if (hadRenderedData) {
+                    render();
                 }
-                return;
-            }
+                return hadRenderedData;
+            })();
+
+            activeSensorLoadPromise = sensorPromise;
+            activeSensorLoadScope = requestScope;
 
             try {
-                const response = await fetch(`${CONFIG.API_BASE_URL}/sensors/latest`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                
-                if (response.status === 401 || response.status === 403) {
-                    const errorData = await response.json().catch(() => ({}));
-                    if (response.status === 403 && errorData.error === 'subscription_expired' && user && isCustomerRole(currentRole)) {
-                        subscriptionUiState = {
-                            ...subscriptionUiState,
-                            expired: true,
-                            expiringSoon: false,
-                            dismissed: false
-                        };
-                        showSubscriptionExpiredModal();
-                        return;
-                    }
-
-                    clearPublicSession({ keepCurrentView: true });
-                    return;
+                return await sensorPromise;
+            } finally {
+                if (activeSensorLoadPromise === sensorPromise) {
+                    activeSensorLoadPromise = null;
+                    activeSensorLoadScope = '';
                 }
-                
-                if (response.ok) {
-                    const result = await response.json();
-                    if (result.success && result.data) {
-                        localStorage.setItem('rayat_sensor_cache', JSON.stringify(result.data));
-                        updateSensorData(result.data);
-                        dataError = false;
-                        setOfflineBannerVisibility(false);
-                    }
-                }
-            } catch (error) { }
-            
-            // In Demo Mode, we NEVER set dataError to true
-            dataError = false;
-            
-            // If offline or error, we might still want to show the offline banner if using cache
-            // but the overlay must stay hidden.
-            const cached = localStorage.getItem('rayat_sensor_cache');
-            if (cached) {
-                try {
-                    updateSensorData(JSON.parse(cached), true);
-                    setOfflineBannerVisibility(true, t('usingCache'));
-                } catch (e) { }
             }
-            
-            render(); 
         }
 
         // RAYAT FIX - refresh header button shared across demo/live monitoring
@@ -4027,9 +4114,33 @@
             return activeRefreshPromise;
         }
 
+        function buildSensorPayloadSignature(apiData = []) {
+            if (!Array.isArray(apiData) || !apiData.length) {
+                return '';
+            }
+
+            return apiData
+                .filter(Boolean)
+                .map((reading) => {
+                    const numericValue = parseNumericValue(reading.value);
+                    return [
+                        reading.type || '',
+                        reading.subtype || '',
+                        Number.isFinite(numericValue) ? numericValue : '',
+                        reading.unit || '',
+                        resolveSensorOnlineStatus(reading),
+                        reading.device_name || '',
+                        reading.name || ''
+                    ].join(':');
+                })
+                .sort()
+                .join('|');
+        }
+
         function updateSensorData(apiData, fromCache = false) {
             if (!apiData || !Array.isArray(apiData)) return;
             latestAssignedSensors = buildProfileSensorSnapshot(apiData);
+            const nextPayloadSignature = buildSensorPayloadSignature(apiData);
 
             const typeMap = {
                 'energia_consumption': { s: 'energia', val: true },
@@ -4087,7 +4198,16 @@
                     syncCurrentSensorSnapshotToHistory(new Date());
                 }
             }
-            render();
+
+            const shouldRender = nextPayloadSignature !== lastSensorPayloadSignature;
+            lastSensorPayloadSignature = nextPayloadSignature;
+
+            if (shouldRender) {
+                render();
+                return true;
+            }
+
+            return false;
         }
 
         /* --- Predictive Intelligence Logic --- */
@@ -4970,7 +5090,6 @@
                     syncSubscriptionUiState();
                     hideSubscriptionExpiredModal();
                     setView('demo');
-                    loadSensorData().catch(() => {});
                     alert('Benvenuto in Rayat! ✅');
                 } else {
                     throw new Error(data.error);
@@ -6253,7 +6372,9 @@
         /* PATCH-02 — end */
 
         function render() {
-            checkAlerts();
+            if (currentView === 'home' || currentView === 'demo' || currentView === 'profilo') {
+                checkAlerts();
+            }
             const app = document.getElementById('app');
             const routes = {
                 'home': renderHomePage,
@@ -6325,17 +6446,12 @@
         }
 
         // Hard sync live data.
-        if (currentView === 'home' || currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
-            loadSensorData();
-        }
-        if (currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
-            loadHistoryData();
-        }
+        requestViewData(currentView);
         setInterval(() => {
-            if (currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
-                loadSensorData();
+            if (currentView === 'demo') {
+                loadSensorData().catch(() => {});
                 if ((Date.now() - historyState.lastLoadedAt) >= 60000) {
-                    loadHistoryData();
+                    loadHistoryData().catch(() => {});
                 }
             }
         }, PUBLIC_SENSOR_POLL_INTERVAL_MS);
@@ -6354,12 +6470,7 @@
                 }
                 render();
                 trackPageView(currentView);
-                if (currentView === 'home' || currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
-                    loadSensorData().catch(() => {});
-                }
-                if (currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
-                    loadHistoryData().catch(() => {});
-                }
+                requestViewData(currentView);
             } else if (window.location.pathname) {
                 currentView = getViewFromPath(window.location.pathname);
                 if (currentView === 'demo') {
@@ -6367,12 +6478,7 @@
                 }
                 render();
                 trackPageView(currentView);
-                if (currentView === 'home' || currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
-                    loadSensorData().catch(() => {});
-                }
-                if (currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
-                    loadHistoryData().catch(() => {});
-                }
+                requestViewData(currentView);
             } else if (currentView !== 'home') {
                 // Return to home if no specific state (simulates Android "exit to home" before closing)
                 currentView = 'home';
