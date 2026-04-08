@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.10';
+        const FRONTEND_ASSET_VERSION = '1.1.11';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -3067,6 +3067,20 @@
             return `<div class="rayat-sensor-card-grid ${variantClass} ${className}">${rows}</div>`;
         }
 
+        function renderHomeSensorBadge(sensorKey) {
+            const sensor = sensorData[sensorKey];
+            if (!sensor) {
+                return '';
+            }
+
+            return `
+                <span class="inline-flex items-center gap-3 rounded-full border border-green-100 bg-green-50 px-4 py-2 text-sm font-black uppercase tracking-[0.14em] text-green-800">
+                    <span class="text-lg" aria-hidden="true">${sensor.icon}</span>
+                    <span>${t(sensor.nome)}</span>
+                </span>
+            `;
+        }
+
         function renderHomeLiveSensorPanel(sensorKey, group) {
             const sensor = sensorData[sensorKey];
             const statusMeta = getSensorConnectionMeta(sensorKey);
@@ -3077,6 +3091,7 @@
                         <div>
                             <p class="text-xs font-black uppercase tracking-[0.28em] text-slate-400 mb-2">${t('realTimeMonitoring')}</p>
                             <h4 class="text-2xl md:text-3xl font-black text-green-800 tracking-tighter">${t(sensor.nome)}</h4>
+                            <p class="mt-3 text-sm md:text-base font-medium leading-relaxed text-slate-500">${t(sensor.descrizioneEstesa || sensor.descrizione)}</p>
                         </div>
                         <span class="rayat-monitoring-status-pill ${statusMeta.className}">
                             <span class="rayat-monitoring-status-pill__dot" aria-hidden="true"></span>
@@ -3087,6 +3102,15 @@
                         </span>
                     </div>
                     ${renderSensorMetricGrid(sensorKey, group, 'grid grid-cols-1 md:grid-cols-2 gap-6')}
+                    <div class="mt-6 flex justify-start">
+                        <button
+                            type="button"
+                            class="inline-flex min-h-[52px] items-center justify-center rounded-2xl bg-green-700 px-6 py-3 text-sm font-black uppercase tracking-[0.14em] text-white transition hover:bg-green-800"
+                            onclick="openSensorDashboard('${sensorKey}')"
+                        >
+                            ${user ? t('dashboardBtn') : t('tryDemo')}
+                        </button>
+                    </div>
                 </article>
             `;
         }
@@ -3101,8 +3125,24 @@
                                 <p class="rayat-monitoring-toolbar__subtitle">${t('liveMonitoringSubtitle')}</p>
                             </div>
                         </div>
-                        <div class="grid gap-8 xl:grid-cols-2">
-                            ${HOMEPAGE_REAL_SENSOR_KEYS.map((sensorKey) => renderHomeLiveSensorPanel(sensorKey, sensorKey === 'terreno' ? 'soil' : 'climate')).join('')}
+                        <div class="rounded-[2.5rem] border border-slate-100 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:p-8 lg:p-10">
+                            <div class="mb-8 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                                <div class="max-w-3xl">
+                                    <p class="mb-3 text-xs font-black uppercase tracking-[0.28em] text-slate-400">${t('realTimeMonitoring')}</p>
+                                    <h3 class="text-3xl font-black tracking-tighter text-slate-900 md:text-5xl">
+                                        ${t('sensorSoName')} + ${t('sensorClName')}
+                                    </h3>
+                                    <p class="mt-4 text-base leading-relaxed text-slate-600 md:text-lg">
+                                        ${t('sensorSoDesc')} • ${t('sensorClDetails')}
+                                    </p>
+                                </div>
+                                <div class="flex flex-wrap gap-3">
+                                    ${HOMEPAGE_REAL_SENSOR_KEYS.map((sensorKey) => renderHomeSensorBadge(sensorKey)).join('')}
+                                </div>
+                            </div>
+                            <div class="grid gap-8 xl:grid-cols-2">
+                                ${HOMEPAGE_REAL_SENSOR_KEYS.map((sensorKey) => renderHomeLiveSensorPanel(sensorKey, sensorKey === 'terreno' ? 'soil' : 'climate')).join('')}
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -4486,23 +4526,6 @@
                 </section>
 
                 ${renderHomeLiveSensorsSection()}
-
-                <section class="py-16 bg-white">
-                    <div class="container mx-auto px-4">
-                        <h3 class="text-4xl font-bold text-center mb-12 text-green-800">${t('ourSensors')}</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto">
-                            ${HOMEPAGE_REAL_SENSOR_KEYS.map(key => {
-                const sensor = sensorData[key];
-                return `
-                                    <button type="button" class="bg-white p-12 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] hover:shadow-[0_40px_80px_rgba(0,0,0,0.15)] transition-all duration-700 cursor-pointer transform hover:scale-110 hover:-translate-y-4 flex flex-col items-center justify-center group text-center w-full" onclick="openSensorDashboard('${key}')">
-                                        <div class="text-8xl mb-6 transition-transform group-hover:scale-110 duration-500">${sensor.icon}</div>
-                                        <h4 class="text-2xl font-black text-gray-800 text-center uppercase tracking-tighter">${t(sensor.nome)}</h4>
-                                    </button>
-                                `;
-            }).join('')}
-                        </div>
-                    </div>
-                </section>
                 <section class="py-16 bg-gradient-to-b from-white to-green-50" id="chi-siamo-section">
                     <div class="container mx-auto px-4">
                         <h3 class="text-4xl font-bold text-center mb-4 text-green-800">${t('aboutUs')}</h3>
