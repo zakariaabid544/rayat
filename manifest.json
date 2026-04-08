@@ -46,7 +46,7 @@
         {
             "name": "Dashboard",
             "short_name": "Demo",
-            "url": "/demo",
+            "url": "/dashboard",
             "description": "Apri la dashboard sensori"
         },
         {

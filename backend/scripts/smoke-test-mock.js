@@ -520,12 +520,19 @@ async function run() {
   const sensorsRouter = require('../routes/sensors');
 
   const app = express();
+  const publicIndexPath = path.resolve(__dirname, '../../index.html');
   app.use(express.json());
   app.use('/api/auth', authRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/iot', iotRouter);
   app.use('/api/sensors/simple', simpleRouter);
   app.use('/api/sensors', sensorsRouter);
+  app.get(['/demo', '/demo/'], (_req, res) => {
+    res.redirect(302, '/dashboard');
+  });
+  app.get(['/dashboard', '/dashboard/'], (_req, res) => {
+    res.sendFile(publicIndexPath);
+  });
 
   const adminToken = jwt.sign({ id: 1, role: 'super_admin' }, process.env.JWT_SECRET);
   const clientToken = jwt.sign({ id: 2, role: 'client' }, process.env.JWT_SECRET);
@@ -535,6 +542,17 @@ async function run() {
       const { port } = server.address();
 
       try {
+        const dashboardRes = await fetch(`http://127.0.0.1:${port}/dashboard`);
+        assert.equal(dashboardRes.status, 200);
+        const dashboardHtml = await dashboardRes.text();
+        assert.ok(dashboardHtml.includes('<div id="app"></div>'));
+
+        const legacyDemoRes = await fetch(`http://127.0.0.1:${port}/demo`, {
+          redirect: 'manual'
+        });
+        assert.equal(legacyDemoRes.status, 302);
+        assert.equal(legacyDemoRes.headers.get('location'), '/dashboard');
+
         const loginRes = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
