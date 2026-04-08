@@ -2,6 +2,11 @@ const crypto = require('crypto');
 
 const { withTransaction } = require('../config/database');
 const { checkAlerts } = require('./alerts');
+const {
+    extractRawEnvelope,
+    bufferFromEnvelope,
+    decodeModbusTelemetryFrame
+} = require('./dtu-decoder');
 
 const VALID_SENSOR_TYPES = new Set(['energia', 'acqua', 'terreno', 'clima']);
 const DEFAULT_SENSOR_PROFILES = {
@@ -319,8 +324,21 @@ function prepareIncomingSensorPayload(body = {}) {
     if (rawReadings) {
         readings = normalizeReadings(rawReadings);
     } else {
+        const rawEnvelope = extractRawEnvelope(source) || extractRawEnvelope(payloadObject);
+
+        if (rawEnvelope) {
+            try {
+                const decoded = decodeModbusTelemetryFrame(bufferFromEnvelope(rawEnvelope));
+                readings = normalizeReadings(decoded.readings);
+            } catch (error) {
+                throw createHttpError(400, `Payload DTU non decodificabile: ${error.message}`);
+            }
+        }
+
         const flatSource = payloadObject || source;
-        readings = buildReadingsFromFlatPayload(flatSource);
+        if (!readings.length) {
+            readings = buildReadingsFromFlatPayload(flatSource);
+        }
 
         if (!readings.length && source.value !== undefined && !isPlainObject(source.value)) {
             const fallback = normalizeReading({

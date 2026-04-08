@@ -2,7 +2,7 @@
 // RAYAT Service Worker - Offline Cache
 // =============================================
 // RAYAT FIX - mobile app ready optimization
-const CACHE_VERSION = '1.1.2';
+const CACHE_VERSION = '1.1.3';
 const CACHE_NAME = `rayat-${CACHE_VERSION}`;
 const ASSETS_TO_CACHE = [
     './',
@@ -12,8 +12,8 @@ const ASSETS_TO_CACHE = [
     './favicon.png',
     './favicon-32.png',
     './favicon.ico',
-    './assets/css/public.css?v=1.1.2',
-    './assets/js/public.js?v=1.1.2',
+    './assets/css/public.css?v=1.1.3',
+    './assets/js/public.js?v=1.1.3',
     './assets/logo/logo-black.svg',
     './assets/logo/logo-green.svg',
     './assets/logo/logo-white.svg',

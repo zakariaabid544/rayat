@@ -12,6 +12,11 @@ const {
     ingestTrustedReadings,
     ingestPublicReadings
 } = require('../utils/sensor-ingest');
+const {
+    extractRawEnvelope,
+    bufferFromEnvelope,
+    decodeModbusTelemetryFrame
+} = require('../utils/dtu-decoder');
 
 const DEFAULT_BRIDGE_TOKEN_HEADER = 'x-rayat-bridge-token';
 const SENSOR_ALIAS_MAP = {
@@ -257,6 +262,20 @@ function parseSensorUpdate(body = {}) {
     };
 
     let readings;
+    const rawEnvelope = extractRawEnvelope(body) || extractRawEnvelope(payloadObject);
+    let decodedRawReadings = [];
+
+    if (rawEnvelope) {
+        try {
+            decodedRawReadings = decodeModbusTelemetryFrame(bufferFromEnvelope(rawEnvelope)).readings.map((reading) => buildReading(reading, {
+                ...readingDefaults,
+                type: reading.type,
+                subtype: reading.subtype
+            }));
+        } catch (error) {
+            throw createHttpError(400, `Payload DTU non decodificabile: ${error.message}`);
+        }
+    }
     const flatReadings = buildReadingsFromFlatPayload(payloadObject || body)
         .map((reading) => buildReading(reading, {
             ...readingDefaults,
@@ -266,6 +285,8 @@ function parseSensorUpdate(body = {}) {
 
     if (rawReadings) {
         readings = rawReadings.map((reading) => buildReading(reading, readingDefaults));
+    } else if (decodedRawReadings.length) {
+        readings = decodedRawReadings;
     } else if (flatReadings.length) {
         readings = flatReadings;
     } else {

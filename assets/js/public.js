@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.2';
+        const FRONTEND_ASSET_VERSION = '1.1.3';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 10000;
 
         let isRefreshingData = false;
@@ -3136,6 +3136,12 @@
             return row;
         }
 
+        function getHistoryBucketKey(date) {
+            const bucket = new Date(date);
+            bucket.setSeconds(0, 0);
+            return bucket.toISOString();
+        }
+
         function normalizeHistoryRows(records = []) {
             const grouped = new Map();
 
@@ -3149,8 +3155,8 @@
                     return;
                 }
 
-                const key = date.toISOString();
-                const row = grouped.get(key) || createHistoryRow(date);
+                const key = getHistoryBucketKey(date);
+                const row = grouped.get(key) || createHistoryRow(new Date(key));
                 applyHistoryReading(row, reading);
                 grouped.set(key, row);
             });

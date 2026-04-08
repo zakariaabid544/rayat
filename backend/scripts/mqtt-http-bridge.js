@@ -1,16 +1,49 @@
 #!/usr/bin/env node
 
 const mqtt = require('mqtt');
+const { TextDecoder } = require('util');
+
+const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
 
 function cleanString(value) {
     return typeof value === 'string' ? value.trim() : '';
 }
 
+function containsBinaryControlCharacters(value) {
+    return /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(value);
+}
+
 function parsePayload(buffer) {
-    const raw = buffer.toString('utf8').trim();
+    if (!Buffer.isBuffer(buffer) || !buffer.length) {
+        return { value: null, raw: '' };
+    }
+
+    let raw = '';
+
+    try {
+        raw = utf8Decoder.decode(buffer).trim();
+    } catch (_error) {
+        return {
+            value: null,
+            raw: '',
+            rawHex: buffer.toString('hex'),
+            rawBase64: buffer.toString('base64'),
+            isBinary: true
+        };
+    }
 
     if (!raw) {
         return { value: null, raw: '' };
+    }
+
+    if (containsBinaryControlCharacters(raw)) {
+        return {
+            value: null,
+            raw: '',
+            rawHex: buffer.toString('hex'),
+            rawBase64: buffer.toString('base64'),
+            isBinary: true
+        };
     }
 
     try {
@@ -24,6 +57,16 @@ function parsePayload(buffer) {
 function buildRequestBody(topic, parsedPayload) {
     const now = new Date().toISOString();
     const payload = parsedPayload.value;
+
+    if (parsedPayload.isBinary && parsedPayload.rawHex) {
+        return {
+            sensor_id: topic,
+            timestamp: now,
+            raw_hex: parsedPayload.rawHex,
+            raw_base64: parsedPayload.rawBase64,
+            payload_encoding: 'modbus_rtu'
+        };
+    }
 
     if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
         return {
