@@ -67,6 +67,7 @@
             terms: '/terms',
             'reset-password': '/reset-password'
         };
+        const DASHBOARD_SENSOR_ROUTE_KEYS = new Set(['energia', 'acqua', 'terreno', 'clima']);
         const HOMEPAGE_REAL_SENSOR_KEYS = ['terreno', 'clima'];
         const GAUGE_MARKER_SAFE_OFFSET_PERCENT = 6;
         const WHATSAPP_CTA_URL = 'https://wa.me/393513203307';
@@ -990,9 +991,37 @@
             return VIEW_PATHS[view] || '/';
         }
 
+        function normalizeDashboardSensorKey(sensorKey) {
+            const normalizedSensorKey = String(sensorKey || '').trim().toLowerCase();
+            return DASHBOARD_SENSOR_ROUTE_KEYS.has(normalizedSensorKey) ? normalizedSensorKey : null;
+        }
+
+        function getDashboardSensorFromPath(pathname = window.location.pathname) {
+            const normalizedPath = pathname.replace(/\/+$/, '') || '/';
+            const match = normalizedPath.match(/^\/(?:dashboard|demo)\/([^/]+)$/);
+            return normalizeDashboardSensorKey(match?.[1]);
+        }
+
+        function getDashboardPathForSensor(sensorKey = selectedSensor) {
+            const normalizedSensorKey = normalizeDashboardSensorKey(sensorKey);
+            return normalizedSensorKey ? `${VIEW_PATHS.demo}/${normalizedSensorKey}` : VIEW_PATHS.demo;
+        }
+
+        function syncDashboardSensorFromPath(pathname = window.location.pathname) {
+            const routeSensorKey = getDashboardSensorFromPath(pathname);
+            if (routeSensorKey) {
+                selectedSensor = routeSensorKey;
+            }
+        }
+
         function getViewFromPath(pathname = window.location.pathname) {
             const normalizedPath = pathname.replace(/\/+$/, '') || '/';
-            if (normalizedPath === '/demo' || normalizedPath === '/dashboard') {
+            if (
+                normalizedPath === '/demo'
+                || normalizedPath === '/dashboard'
+                || normalizedPath.startsWith('/demo/')
+                || normalizedPath.startsWith('/dashboard/')
+            ) {
                 return 'demo';
             }
             const match = Object.entries(VIEW_PATHS).find(([, path]) => path === normalizedPath);
@@ -2139,12 +2168,11 @@
             closeProfileMenu();
             toggleMobileMenu(false);
 
-            if (sensorKey && sensorData[sensorKey]) {
-                selectedSensor = sensorKey;
-            }
+            const normalizedSensorKey = normalizeDashboardSensorKey(sensorKey) || selectedSensor || 'terreno';
+            selectedSensor = normalizedSensorKey;
 
             const navigate = options.tracked === false ? setView : setViewWithTracking;
-            navigate('demo', { path: getPathForView('demo') });
+            navigate('demo', { path: getDashboardPathForSensor(normalizedSensorKey) });
         }
 
         function handleSensorCardKeydown(event, sensorKey) {
@@ -3769,7 +3797,18 @@
         }
 
         async function setSensor(sensor) {
-            selectedSensor = sensor;
+            const normalizedSensorKey = normalizeDashboardSensorKey(sensor);
+            if (!normalizedSensorKey) {
+                return;
+            }
+
+            selectedSensor = normalizedSensorKey;
+            if (currentView === 'demo') {
+                const nextPath = getDashboardPathForSensor(normalizedSensorKey);
+                if (window.location.pathname !== nextPath) {
+                    history.pushState({ view: 'demo' }, '', nextPath);
+                }
+            }
             render();
             if (currentView === 'demo' || (isAuthenticated() && isCustomerRole(currentRole))) {
                 await loadHistoryData();
@@ -5917,7 +5956,7 @@
                     <div class="rayat-demo-nav-grid grid grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
                         ${Object.keys(sensorData).map(key => {
                 const isSel = selectedSensor === key;
-                return `<button onclick="setSensor('${key}')" class="p-10 rounded-[3rem] transition-all duration-700 transform hover:scale-110 ${isSel ? 'bg-green-700 text-white shadow-[0_35px_60px_-15px_rgba(21,128,61,0.3)] scale-110 z-10' : 'bg-white text-gray-800 shadow-2xl hover:bg-green-50'}">
+                return `<button onclick="openSensorDashboard('${key}', { tracked: false })" class="p-10 rounded-[3rem] transition-all duration-700 transform hover:scale-110 ${isSel ? 'bg-green-700 text-white shadow-[0_35px_60px_-15px_rgba(21,128,61,0.3)] scale-110 z-10' : 'bg-white text-gray-800 shadow-2xl hover:bg-green-50'}">
                                     <div class="text-7xl mb-6">${sensorData[key].icon}</div>
                                     <div class="text-2xl font-black uppercase tracking-tighter">${t(sensorData[key].nome)}</div>
                                 </button>`;
@@ -6220,6 +6259,9 @@
             }
         }).catch(() => {});
         currentView = getViewFromPath(window.location.pathname);
+        if (currentView === 'demo') {
+            syncDashboardSensorFromPath(window.location.pathname);
+        }
         if (currentView === 'profilo' && !isAuthenticated()) {
             if (hasPrivilegedAdminShortcut()) {
                 goToAdminArea();
@@ -6268,6 +6310,9 @@
         window.onpopstate = function (event) {
             if (event.state && event.state.view) {
                 currentView = event.state.view;
+                if (currentView === 'demo') {
+                    syncDashboardSensorFromPath(window.location.pathname);
+                }
                 render();
                 trackPageView(currentView);
                 if (currentView === 'home' || currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {
@@ -6278,6 +6323,9 @@
                 }
             } else if (window.location.pathname) {
                 currentView = getViewFromPath(window.location.pathname);
+                if (currentView === 'demo') {
+                    syncDashboardSensorFromPath(window.location.pathname);
+                }
                 render();
                 trackPageView(currentView);
                 if (currentView === 'home' || currentView === 'demo' || (currentView !== 'home' && authToken && isCustomerRole(currentRole))) {

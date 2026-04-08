@@ -530,7 +530,13 @@ async function run() {
   app.get(['/demo', '/demo/'], (_req, res) => {
     res.redirect(302, '/dashboard');
   });
+  app.get(['/demo/:sensor(acqua|energia|terreno|clima)', '/demo/:sensor(acqua|energia|terreno|clima)/'], (req, res) => {
+    res.redirect(302, `/dashboard/${req.params.sensor}`);
+  });
   app.get(['/dashboard', '/dashboard/'], (_req, res) => {
+    res.sendFile(publicIndexPath);
+  });
+  app.get(['/dashboard/:sensor(acqua|energia|terreno|clima)', '/dashboard/:sensor(acqua|energia|terreno|clima)/'], (_req, res) => {
     res.sendFile(publicIndexPath);
   });
 
@@ -547,11 +553,27 @@ async function run() {
         const dashboardHtml = await dashboardRes.text();
         assert.ok(dashboardHtml.includes('<div id="app"></div>'));
 
+        const waterDashboardRes = await fetch(`http://127.0.0.1:${port}/dashboard/acqua`);
+        assert.equal(waterDashboardRes.status, 200);
+        const waterDashboardHtml = await waterDashboardRes.text();
+        assert.ok(waterDashboardHtml.includes('<div id="app"></div>'));
+
+        const energyDashboardRes = await fetch(`http://127.0.0.1:${port}/dashboard/energia`);
+        assert.equal(energyDashboardRes.status, 200);
+        const energyDashboardHtml = await energyDashboardRes.text();
+        assert.ok(energyDashboardHtml.includes('<div id="app"></div>'));
+
         const legacyDemoRes = await fetch(`http://127.0.0.1:${port}/demo`, {
           redirect: 'manual'
         });
         assert.equal(legacyDemoRes.status, 302);
         assert.equal(legacyDemoRes.headers.get('location'), '/dashboard');
+
+        const legacySensorDemoRes = await fetch(`http://127.0.0.1:${port}/demo/acqua`, {
+          redirect: 'manual'
+        });
+        assert.equal(legacySensorDemoRes.status, 302);
+        assert.equal(legacySensorDemoRes.headers.get('location'), '/dashboard/acqua');
 
         const loginRes = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
           method: 'POST',

@@ -127,8 +127,12 @@ app.get(['/demo', '/demo/'], (_req, res) => {
     res.redirect(302, '/dashboard');
 });
 
+app.get(['/demo/:sensor(acqua|energia|terreno|clima)', '/demo/:sensor(acqua|energia|terreno|clima)/'], (req, res) => {
+    res.redirect(302, `/dashboard/${req.params.sensor}`);
+});
+
 // Root → serve the public Rayat site
-app.get(['/', '/login', '/login/', '/register', '/register/', '/demo', '/demo/', '/dashboard', '/dashboard/', '/profilo', '/profilo/', '/services', '/services/', '/chi-siamo', '/chi-siamo/', '/contatti', '/contatti/', '/privacy', '/privacy/', '/terms', '/terms/', '/reset-password', '/reset-password/'], (req, res) => {
+app.get(['/', '/login', '/login/', '/register', '/register/', '/demo', '/demo/', '/dashboard', '/dashboard/', '/dashboard/:sensor(acqua|energia|terreno|clima)', '/dashboard/:sensor(acqua|energia|terreno|clima)/', '/profilo', '/profilo/', '/services', '/services/', '/chi-siamo', '/chi-siamo/', '/contatti', '/contatti/', '/privacy', '/privacy/', '/terms', '/terms/', '/reset-password', '/reset-password/'], (req, res) => {
     res.sendFile(path.join(__dirname, '../index.html'));
 });
 
