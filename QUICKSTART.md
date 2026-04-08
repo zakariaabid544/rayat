@@ -154,14 +154,14 @@ CORS_ORIGIN=*
 - `terreno_temperature` - Temperatura (°C)
 - `terreno_ec` - Conducibilità elettrica (dS/m)
 - `terreno_ph` - pH
-- `terreno_nitrogen` - Azoto (ppm)
-- `terreno_phosphorus` - Fosforo (ppm)
-- `terreno_potassium` - Potassio (ppm)
+- `terreno_n` - Azoto (ppm)
+- `terreno_p` - Fosforo (ppm)
+- `terreno_k` - Potassio (ppm)
 
 **Clima:**
 - `clima_temperature` - Temperatura ambiente (°C)
 - `clima_humidity` - Umidità relativa (%)
-- `clima_wind` - Velocità vento (km/h)
+- `clima_wind_speed` - Velocità vento (km/h)
 
 ---
 

@@ -376,7 +376,7 @@ async function fakeQuery(sql, params = []) {
     }));
   }
 
-  if (text === 'SELECT sensor_type AS type, sensor_subtype AS subtype, value, topic, timestamp FROM public_sensor_latest ORDER BY sensor_type ASC, sensor_subtype ASC') {
+  if (text.startsWith('SELECT sensor_type AS type, sensor_subtype AS subtype, value, topic, timestamp,')) {
     return state.publicLatest
       .slice()
       .sort((a, b) => {
@@ -391,7 +391,8 @@ async function fakeQuery(sql, params = []) {
         subtype: row.sensor_subtype,
         value: row.value,
         topic: row.topic,
-        timestamp: row.timestamp
+        timestamp: row.timestamp,
+        online_status: 'online'
       }));
   }
 
@@ -605,12 +606,22 @@ async function run() {
           body: JSON.stringify({
             device_id: 'GW-001',
             api_key: createdDevice.api_key,
-            readings: [{ type: 'acqua', subtype: 'acqua_level', value: 14.2, unit: 'm' }]
+            temperature: 35.1,
+            humidity: 56.5,
+            co2: 86,
+            soilTemperature: 25.2,
+            soilHumidity: 44.5,
+            soilConductivity: 1270,
+            nitrogen: 159,
+            phosphorus: 50,
+            potassium: 209,
+            pH: 7.35,
+            height: 91
           })
         });
         assert.equal(uploadRes.status, 200);
         const uploadJson = await uploadRes.json();
-        assert.equal(uploadJson.readings_count, 1);
+        assert.equal(uploadJson.readings_count, 10);
 
         const bridgeUpdateRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, {
           method: 'POST',
@@ -631,23 +642,34 @@ async function run() {
         const publicLatestJson = await publicLatestRes.json();
         assert.equal(publicLatestJson.success, true);
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_temperature'));
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_temperature' && Number(row.value) === 25.2));
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_moisture' && Number(row.value) === 44.5));
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_ec' && Number(row.value) === 1270));
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_ph' && Number(row.value) === 7.35));
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_n' && Number(row.value) === 159));
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_p' && Number(row.value) === 50));
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_k' && Number(row.value) === 209));
+        assert.ok(publicLatestJson.data.every((row) => row.online_status === 'online'));
 
         const simpleLatestRes = await fetch(`http://127.0.0.1:${port}/api/sensors/simple/latest`);
         assert.equal(simpleLatestRes.status, 200);
         const simpleLatestJson = await simpleLatestRes.json();
-        assert.equal(Number(simpleLatestJson.water), 14.2);
+        assert.equal(simpleLatestJson.water, null);
         assert.equal(Number(simpleLatestJson.temperature), 29.4);
+        assert.equal(Number(simpleLatestJson.humidity), 56.5);
+        assert.equal(Number(simpleLatestJson.co2), 86);
+        assert.equal(Number(simpleLatestJson.soil), 44.5);
 
         const sensorsRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensors?page=1&pageSize=25`, {
           headers: { Authorization: `Bearer ${reloginJson.token}` }
         });
         assert.equal(sensorsRes.status, 200);
         const sensorsJson = await sensorsRes.json();
-        assert.equal(sensorsJson.data.length, 2);
-        const waterSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'acqua_level');
+        assert.equal(sensorsJson.data.length, 11);
         const climateSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'clima_temperature');
-        assert.equal(Number(waterSensor.latest_value), 14.2);
+        const soilPhosphorusSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'terreno_p');
         assert.equal(Number(climateSensor.latest_value), 29.4);
+        assert.equal(Number(soilPhosphorusSensor.latest_value), 50);
 
         const iotDevicesRes = await fetch(`http://127.0.0.1:${port}/api/iot/devices`, {
           headers: { Authorization: `Bearer ${clientToken}` }
@@ -655,7 +677,7 @@ async function run() {
         assert.equal(iotDevicesRes.status, 200);
         const iotDevicesJson = await iotDevicesRes.json();
         assert.equal(iotDevicesJson.data.length, 1);
-        assert.equal(iotDevicesJson.data[0].sensor_count, 2);
+        assert.equal(iotDevicesJson.data[0].sensor_count, 11);
 
         console.log('SMOKE_TEST_OK');
         server.close(resolve);

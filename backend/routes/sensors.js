@@ -7,6 +7,7 @@ const {
     VALID_SENSOR_TYPES,
     createHttpError,
     getSensorProfile,
+    buildReadingsFromFlatPayload,
     ingestDeviceReadings,
     ingestTrustedReadings,
     ingestPublicReadings
@@ -27,21 +28,27 @@ const SENSOR_ALIAS_MAP = {
     n: { type: 'terreno', subtype: 'terreno_n', unit: 'ppm', name: 'Sensore Azoto' },
     p: { type: 'terreno', subtype: 'terreno_p', unit: 'ppm', name: 'Sensore Fosforo' },
     ph: { type: 'terreno', subtype: 'terreno_ph', unit: 'pH', name: 'Sensore pH' },
+    p_h: { type: 'terreno', subtype: 'terreno_ph', unit: 'pH', name: 'Sensore pH' },
     phosphorus: { type: 'terreno', subtype: 'terreno_p', unit: 'ppm', name: 'Sensore Fosforo' },
     potassium: { type: 'terreno', subtype: 'terreno_k', unit: 'ppm', name: 'Sensore Potassio' },
     soil: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
     soil_ec: { type: 'terreno', subtype: 'terreno_ec', unit: 'dS/m', name: 'Sensore EC' },
+    soil_conductivity: { type: 'terreno', subtype: 'terreno_ec', unit: 'dS/m', name: 'Sensore EC' },
     soil_humidity: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
     soil_moisture: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
     soil_ph: { type: 'terreno', subtype: 'terreno_ph', unit: 'pH', name: 'Sensore pH' },
     soil_temperature: { type: 'terreno', subtype: 'terreno_temperature', unit: '°C', name: 'Sensore Temperatura Terreno' },
     temp_suolo: { type: 'terreno', subtype: 'terreno_temperature', unit: '°C', name: 'Sensore Temperatura Terreno' },
+    terreno_nitrogen: { type: 'terreno', subtype: 'terreno_n', unit: 'ppm', name: 'Sensore Azoto' },
+    terreno_phosphorus: { type: 'terreno', subtype: 'terreno_p', unit: 'ppm', name: 'Sensore Fosforo' },
+    terreno_potassium: { type: 'terreno', subtype: 'terreno_k', unit: 'ppm', name: 'Sensore Potassio' },
     terreno: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
     moisture: { type: 'terreno', subtype: 'terreno_moisture', unit: '%', name: 'Sensore Terreno' },
     temp: { type: 'clima', subtype: 'clima_temperature', unit: '°C', name: 'Sensore Temperatura' },
     temperature: { type: 'clima', subtype: 'clima_temperature', unit: '°C', name: 'Sensore Temperatura' },
     temperatura: { type: 'clima', subtype: 'clima_temperature', unit: '°C', name: 'Sensore Temperatura' },
     water: { type: 'acqua', subtype: 'acqua_level', unit: 'm', name: 'Sensore Acqua' },
+    clima_wind: { type: 'clima', subtype: 'clima_wind_speed', unit: 'km/h', name: 'Sensore Vento' },
     wind: { type: 'clima', subtype: 'clima_wind_speed', unit: 'km/h', name: 'Sensore Vento' },
     wind_speed: { type: 'clima', subtype: 'clima_wind_speed', unit: 'km/h', name: 'Sensore Vento' }
 };
@@ -55,7 +62,10 @@ function isPlainObject(value) {
 }
 
 function normalizeKey(value) {
-    return cleanString(value).toLowerCase().replace(/[^a-z0-9_/-]+/g, '_');
+    return cleanString(value)
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .toLowerCase()
+        .replace(/[^a-z0-9_/-]+/g, '_');
 }
 
 function inferTypeFromSubtype(subtype) {
@@ -247,9 +257,17 @@ function parseSensorUpdate(body = {}) {
     };
 
     let readings;
+    const flatReadings = buildReadingsFromFlatPayload(payloadObject || body)
+        .map((reading) => buildReading(reading, {
+            ...readingDefaults,
+            type: reading.type,
+            subtype: reading.subtype
+        }));
 
     if (rawReadings) {
         readings = rawReadings.map((reading) => buildReading(reading, readingDefaults));
+    } else if (flatReadings.length) {
+        readings = flatReadings;
     } else {
         const rawValue = body.value !== undefined
             ? body.value
@@ -313,7 +331,11 @@ router.get('/public/latest', async (_req, res) => {
                 sensor_subtype AS subtype,
                 value,
                 topic,
-                timestamp
+                timestamp,
+                CASE
+                    WHEN timestamp >= NOW() - INTERVAL '10 minutes' THEN 'online'
+                    ELSE 'offline'
+                END AS online_status
              FROM public_sensor_latest
              ORDER BY sensor_type ASC, sensor_subtype ASC`
         );
@@ -400,7 +422,14 @@ router.get('/latest', authenticateToken, checkSubscription, async (req, res) => 
     sl.value,
     sl.timestamp,
     d.device_id,
-    d.name as device_name
+    d.name as device_name,
+    d.status as device_status,
+    d.last_seen,
+    CASE
+      WHEN d.last_seen IS NULL THEN 'never'
+      WHEN d.last_seen >= NOW() - INTERVAL '10 minutes' THEN 'online'
+      ELSE 'offline'
+    END AS online_status
   FROM sensors s
   INNER JOIN devices d ON s.device_id = d.id
   LEFT JOIN sensor_latest sl ON s.id = sl.sensor_id
@@ -454,7 +483,16 @@ router.get('/:type/latest', authenticateToken, checkSubscription, async (req, re
         s.name,
         s.unit,
         sl.value,
-        sl.timestamp
+        sl.timestamp,
+        d.device_id,
+        d.name as device_name,
+        d.status as device_status,
+        d.last_seen,
+        CASE
+          WHEN d.last_seen IS NULL THEN 'never'
+          WHEN d.last_seen >= NOW() - INTERVAL '10 minutes' THEN 'online'
+          ELSE 'offline'
+        END AS online_status
       FROM sensors s
       INNER JOIN devices d ON s.device_id = d.id
       INNER JOIN sensor_latest sl ON s.id = sl.sensor_id

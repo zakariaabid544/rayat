@@ -75,14 +75,13 @@ router.get('/latest', async (req, res) => {
 
     } catch (error) {
         console.error('Get simple sensors error:', error);
-        // Ritorna dati di fallback se database non disponibile
         res.json({
             co2: null,
-            temperature: 28,
-            humidity: 45,
-            soil: 60,
-            water: 14.2,
-            energy: 2.3
+            temperature: null,
+            humidity: null,
+            soil: null,
+            water: null,
+            energy: null
         });
     }
 });

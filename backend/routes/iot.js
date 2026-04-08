@@ -2,25 +2,28 @@ const express = require('express');
 
 const { query } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
-const { ingestDeviceReadings } = require('../utils/sensor-ingest');
+const { ingestDeviceReadings, prepareIncomingSensorPayload } = require('../utils/sensor-ingest');
 
 const router = express.Router();
 
 // POST /api/iot/upload - Endpoint per dispositivi IoT (HTTP POST)
 router.post('/upload', async (req, res) => {
     try {
-        const { device_id, api_key, timestamp, readings } = req.body;
+        const prepared = prepareIncomingSensorPayload(req.body);
+        const {
+            deviceId: device_id,
+            apiKey: api_key,
+            timestamp,
+            readings
+        } = prepared;
 
-        if (!device_id || !api_key || !Array.isArray(readings)) {
+        if (!device_id || !api_key || !readings.length) {
             return res.status(400).json({
                 error: 'Dati mancanti o non validi',
-                required: ['device_id', 'api_key', 'readings']
+                required: ['device_id', 'api_key', 'readings | flat_payload']
             });
         }
 
-        if (!readings.length) {
-            return res.status(400).json({ error: 'Almeno una lettura è obbligatoria' });
-        }
         if (readings.length > 100) {
             return res.status(400).json({ error: 'Massimo 100 letture per richiesta' });
         }

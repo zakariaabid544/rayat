@@ -68,19 +68,19 @@ def generate_sensor_readings():
         },
         {
             "type": "terreno",
-            "subtype": "terreno_nitrogen",
+            "subtype": "terreno_n",
             "value": round(100 + random.uniform(-20, 40), 0),
             "unit": "ppm"
         },
         {
             "type": "terreno",
-            "subtype": "terreno_phosphorus",
+            "subtype": "terreno_p",
             "value": round(40 + random.uniform(-10, 15), 0),
             "unit": "ppm"
         },
         {
             "type": "terreno",
-            "subtype": "terreno_potassium",
+            "subtype": "terreno_k",
             "value": round(160 + random.uniform(-30, 50), 0),
             "unit": "ppm"
         },
@@ -98,7 +98,7 @@ def generate_sensor_readings():
         },
         {
             "type": "clima",
-            "subtype": "clima_wind",
+            "subtype": "clima_wind_speed",
             "value": round(10 + random.uniform(-5, 10), 1),
             "unit": "km/h"
         }

@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.0';
+        const FRONTEND_ASSET_VERSION = '1.1.1';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 10000;
 
         let isRefreshingData = false;
@@ -27,6 +27,12 @@
         const ADMIN_AUTH_TOKEN_STORAGE_KEY = 'rayat_admin_token';
         const ADMIN_AUTH_USER_STORAGE_KEY = 'rayat_admin_user';
         const PUBLIC_SENSOR_CACHE_KEY = 'rayat_public_sensor_cache';
+        let sensorConnectionState = {
+            energia: 'offline',
+            acqua: 'offline',
+            terreno: 'offline',
+            clima: 'offline'
+        };
 
         let authToken = null;
         let currentRole = 'guest';
@@ -2602,6 +2608,37 @@
             });
         }
 
+        function resetSensorConnectionState() {
+            sensorConnectionState = {
+                energia: 'offline',
+                acqua: 'offline',
+                terreno: 'offline',
+                clima: 'offline'
+            };
+        }
+
+        function resolveSensorOnlineStatus(reading) {
+            const explicitStatus = String(reading?.online_status || '').trim().toLowerCase();
+            if (explicitStatus === 'online') {
+                return 'online';
+            }
+            if (explicitStatus === 'offline' || explicitStatus === 'never') {
+                return 'offline';
+            }
+
+            const freshnessSource = reading?.last_seen || reading?.timestamp;
+            if (!freshnessSource) {
+                return 'offline';
+            }
+
+            const freshnessDate = new Date(freshnessSource);
+            if (Number.isNaN(freshnessDate.getTime())) {
+                return 'offline';
+            }
+
+            return (Date.now() - freshnessDate.getTime()) <= (10 * 60 * 1000) ? 'online' : 'offline';
+        }
+
 
         // --- Data Simulation for Presentation ---
         let globalHistory = [];
@@ -3417,7 +3454,6 @@
                         const result = await response.json();
                         if (result.success && Array.isArray(result.data)) {
                             const data = result.data;
-                            console.log("DEBUG - Data Received:", data);
                             localStorage.setItem(PUBLIC_SENSOR_CACHE_KEY, JSON.stringify(data));
                             updateSensorData(data, true);
                             dataError = false;
@@ -3434,6 +3470,7 @@
                         return;
                     } catch (e) { /* ignore cache error in demo mode */ }
                 }
+                resetSensorConnectionState();
                 resetLiveSensorDisplayData();
                 render();
                 dataError = false; // Always false for Demo Mode
@@ -3545,17 +3582,25 @@
                 'terreno_ec': { s: 'terreno', key: 'ec' },
                 'terreno_ph': { s: 'terreno', key: 'pH' },
                 'terreno_n': { s: 'terreno', key: 'nitrogen' },
+                'terreno_nitrogen': { s: 'terreno', key: 'nitrogen' },
                 'terreno_p': { s: 'terreno', key: 'phosphorus' },
+                'terreno_phosphorus': { s: 'terreno', key: 'phosphorus' },
                 'terreno_k': { s: 'terreno', key: 'potassium' },
+                'terreno_potassium': { s: 'terreno', key: 'potassium' },
                 'clima_temperature': { s: 'clima', val: true, key: 'temperature' },
                 'clima_humidity': { s: 'clima', key: 'humidity' },
                 'clima_co2': { s: 'clima', key: 'co2' },
+                'clima_wind': { s: 'clima', key: 'windSpeed' },
                 'clima_wind_speed': { s: 'clima', key: 'windSpeed' }
             };
             resetLiveSensorDisplayData();
+            resetSensorConnectionState();
 
             let updated = false;
             apiData.forEach(r => {
+                if (r?.type && sensorConnectionState[r.type] !== 'online') {
+                    sensorConnectionState[r.type] = resolveSensorOnlineStatus(r);
+                }
                 if (!r || r.value === undefined || r.value === null) return;
 
                 if (isOutlier(r.subtype, r.value)) {
@@ -5337,27 +5382,7 @@
 
 
         function renderDemoPage() {
-            const current = sensorData[selectedSensor];
-            const hasMetricValue = (value) => Number.isFinite(parseNumericValue(value));
-            const demoStatusState = (() => {
-                if (dataError || !current || !globalHistory.length) {
-                    return 'offline';
-                }
-
-                if (selectedSensor === 'terreno') {
-                    return sensorData.terreno?.details?.every((metric) => hasMetricValue(metric.value)) ? 'online' : 'offline';
-                }
-
-                if (selectedSensor === 'clima') {
-                    return sensorData.clima?.details?.every((metric) => hasMetricValue(metric.value)) ? 'online' : 'offline';
-                }
-
-                if (selectedSensor === 'acqua' || selectedSensor === 'energia') {
-                    return hasMetricValue(current.valore) ? 'online' : 'offline';
-                }
-
-                return 'offline';
-            })();
+            const demoStatusState = sensorConnectionState[selectedSensor] === 'online' ? 'online' : 'offline';
 
             // RAYAT FIX - demo section refresh cleanup and repositioning
             const renderMonitoringRefreshControl = (variant = 'toolbar') => `
