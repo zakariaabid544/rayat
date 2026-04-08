@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.8';
+        const FRONTEND_ASSET_VERSION = '1.1.9';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -2401,6 +2401,19 @@
             document.documentElement.classList.toggle('rayat-scroll-locked', shouldLockScroll);
             document.body.classList.toggle('rayat-scroll-locked', shouldLockScroll);
             document.body.classList.toggle('rayat-menu-open', shouldLockScroll);
+
+            if (shouldLockScroll) {
+                document.documentElement.style.overflow = 'hidden';
+                document.documentElement.style.setProperty('overscroll-behavior', 'none');
+                document.body.style.overflow = 'hidden';
+                document.body.style.setProperty('overscroll-behavior', 'none');
+                return;
+            }
+
+            document.documentElement.style.removeProperty('overflow');
+            document.documentElement.style.removeProperty('overscroll-behavior');
+            document.body.style.removeProperty('overflow');
+            document.body.style.removeProperty('overscroll-behavior');
         }
 
         // RAYAT FIX - mobile app ready optimization
@@ -6382,8 +6395,13 @@
 
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
+                syncBodyScrollLock();
                 invalidateVisibleMaps();
             }
+        });
+
+        window.addEventListener('pageshow', () => {
+            syncBodyScrollLock();
         });
 
         // RAYAT FIX - mobile app ready optimization
