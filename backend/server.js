@@ -52,6 +52,7 @@ app.use('/api/iot', require('./routes/iot'));
 app.use('/api/admin', require('./routes/admin'));
 
 const adminIndexPath = path.join(__dirname, '../admin/index.html');
+const publicIndexPath = path.join(__dirname, '../index.html');
 
 async function requireProtectedAdminPage(req, res, next) {
     const token = extractAdminSessionToken(req);
@@ -131,9 +132,33 @@ app.get(['/demo/:sensor(acqua|energia|terreno|clima)', '/demo/:sensor(acqua|ener
     res.redirect(302, `/dashboard/${req.params.sensor}`);
 });
 
-// Root → serve the public Rayat site
-app.get(['/', '/login', '/login/', '/register', '/register/', '/demo', '/demo/', '/dashboard', '/dashboard/', '/dashboard/:sensor(acqua|energia|terreno|clima)', '/dashboard/:sensor(acqua|energia|terreno|clima)/', '/profilo', '/profilo/', '/services', '/services/', '/chi-siamo', '/chi-siamo/', '/contatti', '/contatti/', '/privacy', '/privacy/', '/terms', '/terms/', '/reset-password', '/reset-password/'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../index.html'));
+function shouldServePublicApp(req) {
+    if (req.method !== 'GET') {
+        return false;
+    }
+
+    if (
+        req.path.startsWith('/api')
+        || req.path.startsWith('/admin')
+        || req.path.startsWith('/icons')
+    ) {
+        return false;
+    }
+
+    if (path.extname(req.path)) {
+        return false;
+    }
+
+    const acceptHeader = String(req.headers.accept || '');
+    return !acceptHeader || acceptHeader.includes('text/html') || acceptHeader.includes('*/*');
+}
+
+app.get('*', (req, res, next) => {
+    if (!shouldServePublicApp(req)) {
+        return next();
+    }
+
+    return res.sendFile(publicIndexPath);
 });
 
 // API info (moved to /api)

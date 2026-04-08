@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.9';
+        const FRONTEND_ASSET_VERSION = '1.1.10';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -5819,6 +5819,7 @@
             const demoStatusLabel = demoStatusState === 'online'
                 ? t('monitoringOnline')
                 : (demoStatusState === 'offline' ? t('monitoringOffline') : t('refreshingDataAction'));
+            const current = sensorData[selectedSensor] || sensorData.energia;
 
             // RAYAT FIX - demo section refresh cleanup and repositioning
             const renderMonitoringRefreshControl = (variant = 'toolbar') => `
@@ -6424,7 +6425,7 @@
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register(`./sw.js?v=${FRONTEND_ASSET_VERSION}`, { updateViaCache: 'none' })
+                navigator.serviceWorker.register(`/sw.js?v=${FRONTEND_ASSET_VERSION}`, { updateViaCache: 'none' })
                     .then(reg => {
                         reg.update().catch(() => {});
                     })

@@ -521,6 +521,27 @@ async function run() {
 
   const app = express();
   const publicIndexPath = path.resolve(__dirname, '../../index.html');
+  function shouldServePublicApp(req) {
+    if (req.method !== 'GET') {
+      return false;
+    }
+
+    if (
+      req.path.startsWith('/api')
+      || req.path.startsWith('/admin')
+      || req.path.startsWith('/icons')
+    ) {
+      return false;
+    }
+
+    if (path.extname(req.path)) {
+      return false;
+    }
+
+    const acceptHeader = String(req.headers.accept || '');
+    return !acceptHeader || acceptHeader.includes('text/html') || acceptHeader.includes('*/*');
+  }
+
   app.use(express.json());
   app.use('/api/auth', authRouter);
   app.use('/api/admin', adminRouter);
@@ -533,11 +554,15 @@ async function run() {
   app.get(['/demo/:sensor(acqua|energia|terreno|clima)', '/demo/:sensor(acqua|energia|terreno|clima)/'], (req, res) => {
     res.redirect(302, `/dashboard/${req.params.sensor}`);
   });
-  app.get(['/dashboard', '/dashboard/'], (_req, res) => {
+  app.get('*', (req, res, next) => {
+    if (!shouldServePublicApp(req)) {
+      return next();
+    }
+
     res.sendFile(publicIndexPath);
   });
-  app.get(['/dashboard/:sensor(acqua|energia|terreno|clima)', '/dashboard/:sensor(acqua|energia|terreno|clima)/'], (_req, res) => {
-    res.sendFile(publicIndexPath);
+  app.use((req, res) => {
+    res.status(404).json({ error: 'Endpoint non trovato' });
   });
 
   const adminToken = jwt.sign({ id: 1, role: 'super_admin' }, process.env.JWT_SECRET);
@@ -563,6 +588,11 @@ async function run() {
         const energyDashboardHtml = await energyDashboardRes.text();
         assert.ok(energyDashboardHtml.includes('<div id="app"></div>'));
 
+        const contactPageRes = await fetch(`http://127.0.0.1:${port}/contatti`);
+        assert.equal(contactPageRes.status, 200);
+        const contactPageHtml = await contactPageRes.text();
+        assert.ok(contactPageHtml.includes('<div id="app"></div>'));
+
         const legacyDemoRes = await fetch(`http://127.0.0.1:${port}/demo`, {
           redirect: 'manual'
         });
@@ -574,6 +604,9 @@ async function run() {
         });
         assert.equal(legacySensorDemoRes.status, 302);
         assert.equal(legacySensorDemoRes.headers.get('location'), '/dashboard/acqua');
+
+        const missingAssetRes = await fetch(`http://127.0.0.1:${port}/missing.js`);
+        assert.equal(missingAssetRes.status, 404);
 
         const loginRes = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
           method: 'POST',
