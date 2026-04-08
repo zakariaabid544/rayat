@@ -422,33 +422,7 @@ router.get('/public/history', async (req, res) => {
 
         sql += ' ORDER BY timestamp ASC, sensor_subtype ASC';
 
-        let rows = await query(sql, params);
-
-        if (!rows.length) {
-            let fallbackSql = `
-                SELECT
-                    s.type,
-                    s.subtype,
-                    sr.value,
-                    COALESCE((sr.metadata->>'topic')::text, NULL) AS topic,
-                    sr.timestamp
-                FROM sensor_readings sr
-                INNER JOIN sensors s ON s.id = sr.sensor_id
-                WHERE s.type = ?
-                  AND s.enabled = TRUE
-                  AND sr.timestamp >= ?
-                  AND sr.timestamp <= ?
-            `;
-            const fallbackParams = [sensorType, startDate, endDate];
-
-            if (subtype) {
-                fallbackSql += ' AND s.subtype = ?';
-                fallbackParams.push(subtype);
-            }
-
-            fallbackSql += ' ORDER BY sr.timestamp ASC, s.subtype ASC';
-            rows = await query(fallbackSql, fallbackParams);
-        }
+        const rows = await query(sql, params);
 
         res.json({
             success: true,
