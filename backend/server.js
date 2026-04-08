@@ -25,9 +25,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Logger middleware
+// Optional HTTP logger for local debugging only
 app.use((req, res, next) => {
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.RAYAT_HTTP_LOGS === 'true') {
         console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     }
     next();

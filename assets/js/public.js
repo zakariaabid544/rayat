@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.12';
+        const FRONTEND_ASSET_VERSION = '1.1.13';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -446,7 +446,6 @@
         let isSubscriptionModalOpen = false;
         let lastAlarmSyncSignature = '';
         let lastAlarmSyncAt = 0;
-        const dashboardAlertCooldowns = new Map();
 
         function loadStoredCropSelection() {
             const fallback = { value: DEFAULT_CROP_VALUE, custom: '' };
@@ -2185,7 +2184,7 @@
                 return;
             }
 
-            openSensorDashboard('terreno');
+            setViewWithTracking('demo');
         }
 
         function openSensorDashboard(sensorKey = null, options = {}) {
@@ -2928,33 +2927,6 @@
         }
 
 
-        // --- Gauge Bar Rendering Function ---
-        function renderGaugeBar(label, value, min, max, optimalMin, optimalMax, unit, hasMaxOptimal = true) {
-            const percentage = ((value - min) / (max - min)) * 100;
-            const optimalStartPct = ((optimalMin - min) / (max - min)) * 100;
-            const optimalEndPct = hasMaxOptimal ? ((optimalMax - min) / (max - min)) * 100 : 100;
-            const isInOptimal = hasMaxOptimal ? (value >= optimalMin && value <= optimalMax) : (value >= optimalMin);
-
-            return `
-                <div class="mb-3">
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-xs font-semibold text-gray-700">${isInOptimal ? '' : '⚠️'} ${label}</span>
-                        <span class="text-sm font-bold ${isInOptimal ? 'text-green-600' : 'text-red-600'}">${value.toFixed(1)} ${unit}</span>
-                    </div>
-                    <div class="relative h-5 bg-gray-200 rounded-full overflow-hidden shadow-inner">
-                        <div class="absolute h-full bg-gradient-to-r from-blue-300 to-blue-200" style="left: 0%; width: ${optimalStartPct}%"></div>
-                        <div class="absolute h-full bg-gradient-to-r from-green-400 to-green-500" style="left: ${optimalStartPct}%; width: ${optimalEndPct - optimalStartPct}%"></div>
-                        ${hasMaxOptimal ? `<div class="absolute h-full bg-gradient-to-r from-orange-400 to-red-400" style="left: ${optimalEndPct}%; width: ${100 - optimalEndPct}%"></div>` : ''}
-                        <div class="absolute h-full w-0.5 bg-gray-800 shadow-lg transition-all duration-500" style="left: ${Math.min(Math.max(percentage, 0), 100)}%"><div class="absolute -top-0.5 -left-1.5 w-3 h-6 bg-gray-800 rounded-sm shadow-xl border border-white"></div></div>
-                    </div>
-                    <div class="flex justify-between text-[10px] text-gray-500 mt-0.5">
-                        <span>${min}${unit}</span>
-                        <span class="text-green-600 font-semibold">${t('optimalShort')}: ${optimalMin}-${hasMaxOptimal ? optimalMax : '∞'}${unit}</span>
-                        <span>${max}${unit}</span>
-                    </div>
-                </div>`;
-        }
-
         function getLevelClass(level) {
             if (level === 'alert') return 'text-red-600';
             if (level === 'attention') return 'text-amber-600';
@@ -3300,7 +3272,7 @@
                     body: JSON.stringify({ events })
                 });
             } catch (error) {
-                console.warn('Alarm sync skipped:', error);
+                // noop: local UI alerts stay available even if sync is unavailable
             }
         }
 
@@ -4220,22 +4192,6 @@
                 .filter((event) => event.level !== 'normal')
                 .sort((left, right) => ALERT_PRIORITY[right.level] - ALERT_PRIORITY[left.level]);
 
-            activeAlerts
-                .filter((event) => event.level === 'alert')
-                .forEach((event) => {
-                    const cooldownKey = `${event.sensorType}:${event.param}`;
-                    const lastLoggedAt = dashboardAlertCooldowns.get(cooldownKey) || 0;
-                    if ((Date.now() - lastLoggedAt) >= (30 * 60 * 1000)) {
-                        dashboardAlertCooldowns.set(cooldownKey, Date.now());
-                        console.warn(`Immediate alert: ${event.sensorType}.${event.param}`, {
-                            crop: event.crop,
-                            value: event.value,
-                            optimalMin: event.optimalMin,
-                            optimalMax: event.optimalMax
-                        });
-                    }
-                });
-
             syncDashboardAlarmEvents();
         }
 
@@ -4634,7 +4590,7 @@
                             </h1>
                             <p class="rayat-hero-subtitle rayat-fade-in">${t('heroPlatformSub')}</p>
                             <div class="rayat-mobile-actions flex gap-4 justify-center">
-                                <button onclick="openSensorDashboard('terreno')" class="bg-orange-500 hover:bg-orange-600 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-orange-950/20">
+                                <button onclick="setViewWithTracking('demo')" class="bg-orange-500 hover:bg-orange-600 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-orange-950/20">
                                 ${t('tryDemo')}
                                 </button>
                                 <button onclick="setView('servizi')" class="bg-white text-green-800 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-green-950/10">
