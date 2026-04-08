@@ -279,6 +279,22 @@ async function ensureCoreTables(changes) {
 
   if (
     await ensureTable(
+      'notification_log',
+      `CREATE TABLE IF NOT EXISTS notification_log (
+         id BIGSERIAL PRIMARY KEY,
+         notification_type VARCHAR(80) NOT NULL,
+         channel VARCHAR(32) NOT NULL DEFAULT 'email',
+         recipient TEXT NULL,
+         metadata JSONB NULL,
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+       )`
+    )
+  ) {
+    changes.push('notification_log table');
+  }
+
+  if (
+    await ensureTable(
       'password_resets',
       `CREATE TABLE IF NOT EXISTS password_resets (
          id SERIAL PRIMARY KEY,
@@ -572,6 +588,15 @@ async function ensurePlatformSchema() {
     )
   ) {
     changes.push('idx_public_sensor_readings_subtype_timestamp');
+  }
+  if (
+    await ensureIndex(
+      'notification_log',
+      'idx_notification_log_type_channel_created_at',
+      'CREATE INDEX idx_notification_log_type_channel_created_at ON notification_log (notification_type, channel, created_at)'
+    )
+  ) {
+    changes.push('idx_notification_log_type_channel_created_at');
   }
 
   return changes;

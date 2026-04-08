@@ -6,6 +6,7 @@ require('./config/env');
 const { getDatabaseHealth, testConnection, query } = require('./config/database');
 const { ensurePlatformSchema } = require('./utils/platform-schema');
 const { ensureSuperAdmin } = require('./utils/super-admin');
+const { startMissingDataAlertJob } = require('./src/jobs/alertJob');
 const {
     extractAdminSessionToken,
     isPrivilegedAdminRole,
@@ -207,6 +208,12 @@ async function startServer() {
             console.log('========================================');
             console.log('');
         });
+
+        if (dbConnected) {
+            startMissingDataAlertJob();
+        } else {
+            console.warn('[alert-job] Job notifiche non avviato: database non disponibile.');
+        }
 
     } catch (error) {
         console.error('❌ Errore avvio server:', error);
