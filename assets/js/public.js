@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.5';
+        const FRONTEND_ASSET_VERSION = '1.1.6';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 10000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -3292,7 +3292,7 @@
                 grouped.set(key, row);
             });
 
-            return Array.from(grouped.values()).sort((left, right) => left.date - right.date);
+            return Array.from(grouped.values());
         }
 
         function getFilterRange() {

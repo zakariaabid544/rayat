@@ -441,7 +441,7 @@ router.get('/public/history', async (req, res) => {
             params.push(subtype);
         }
 
-        sql += ' ORDER BY timestamp ASC, sensor_subtype ASC';
+        sql += ' ORDER BY timestamp DESC, sensor_subtype ASC';
 
         const rows = await query(sql, params);
 
@@ -661,7 +661,7 @@ router.get('/:type/history', authenticateToken, checkSubscription, async (req, r
             params.push(subtype);
         }
 
-        sql += ' ORDER BY sr.timestamp ASC';
+        sql += ' ORDER BY sr.timestamp DESC';
 
         const history = await query(sql, params);
 
