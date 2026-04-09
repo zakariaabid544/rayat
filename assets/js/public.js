@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.17';
+        const FRONTEND_ASSET_VERSION = '1.1.18';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -3156,13 +3156,18 @@
                         <div class="rayat-home-sensors-shell">
                             <div class="rayat-home-sensors-head">
                                 <h3 class="rayat-home-sensors-title">Sistema completo: Suolo + Clima</h3>
-                                <div class="rayat-home-sensors-statuses">
+                            <div class="rayat-home-sensors-statuses">
                                     ${renderHomepageStatusBadge()}
                                 </div>
                             </div>
                             ${renderHomepageSensorGrid()}
                             <div class="rayat-home-sensors-cta">
-                                <a href="/dashboard" class="rayat-home-demo-cta">Prova la demo</a>
+                                <a href="${getWhatsappHref()}" target="_blank" rel="noopener" onclick="trackEvent('WhatsApp Click')" class="rayat-home-demo-cta rayat-home-demo-cta--whatsapp" aria-label="Contattami su WhatsApp al ${WHATSAPP_DISPLAY_NUMBER}">
+                                    <span class="rayat-home-demo-cta__icon-wrap" aria-hidden="true">${getWhatsappIconSvg('rayat-home-demo-cta__icon')}</span>
+                                    <span class="rayat-home-demo-cta__title">Contattami per info su WhatsApp</span>
+                                    <strong class="rayat-home-demo-cta__number">${WHATSAPP_DISPLAY_NUMBER}</strong>
+                                    <span class="rayat-home-demo-cta__note">Chiama, scrivi o manda un audio</span>
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -3367,6 +3372,10 @@
             terreno_k: 'potassium',
             terreno_potassium: 'potassium'
         };
+        const DEMO_HISTORY_PLACEHOLDERS = {
+            energia: [12.4, 12.6, 12.8, 13.0, 12.9, 13.2, 13.3, 13.1, 12.9, 12.8, 12.7, 12.9],
+            acqua: [3.6, 3.7, 3.9, 4.0, 4.1, 4.0, 3.9, 4.1, 4.2, 4.0, 3.8, 3.9]
+        };
 
         function createHistoryRow(date) {
             return {
@@ -3424,6 +3433,59 @@
             });
 
             return Array.from(grouped.values());
+        }
+
+        function shouldUseDemoPlaceholderHistory(sensorKey = selectedSensor) {
+            return !isAuthenticated() && (sensorKey === 'energia' || sensorKey === 'acqua');
+        }
+
+        function hasRenderableHistoryValue(row, sensorKey = selectedSensor) {
+            if (!row) {
+                return false;
+            }
+
+            if (sensorKey === 'energia') {
+                return Number.isFinite(parseNumericValue(row.energia));
+            }
+
+            if (sensorKey === 'acqua') {
+                return Number.isFinite(parseNumericValue(row.acqua));
+            }
+
+            return true;
+        }
+
+        function buildDemoPlaceholderHistoryRows(sensorKey = selectedSensor) {
+            if (!shouldUseDemoPlaceholderHistory(sensorKey)) {
+                return [];
+            }
+
+            const series = DEMO_HISTORY_PLACEHOLDERS[sensorKey];
+            if (!Array.isArray(series) || !series.length) {
+                return [];
+            }
+
+            const { start, end } = getFilterRange();
+            const startMs = start.getTime();
+            const spanMs = Math.max(end.getTime() - startMs, 0);
+
+            return series.map((value, index) => {
+                const ratio = series.length === 1 ? 1 : index / (series.length - 1);
+                const row = createHistoryRow(new Date(startMs + Math.round(spanMs * ratio)));
+                row[sensorKey] = value;
+                return row;
+            });
+        }
+
+        function resolveHistoryRows(records = [], sensorKey = selectedSensor) {
+            const normalizedRows = normalizeHistoryRows(records);
+            const hasRenderableRows = normalizedRows.some((row) => hasRenderableHistoryValue(row, sensorKey));
+            const usePlaceholder = !hasRenderableRows && shouldUseDemoPlaceholderHistory(sensorKey);
+
+            return {
+                rows: usePlaceholder ? buildDemoPlaceholderHistoryRows(sensorKey) : normalizedRows,
+                usesLiveData: hasRenderableRows
+            };
         }
 
         function getFilterRange() {
@@ -3514,8 +3576,9 @@
                     if (historyState.requestKey !== requestKey) {
                         return false;
                     }
-                    globalHistory = normalizeHistoryRows(Array.isArray(result.data) ? result.data : []);
-                    historyState.usesLiveData = true;
+                    const resolvedHistory = resolveHistoryRows(Array.isArray(result.data) ? result.data : [], selectedSensor);
+                    globalHistory = resolvedHistory.rows;
+                    historyState.usesLiveData = resolvedHistory.usesLiveData;
                     historyState.lastLoadedAt = Date.now();
                     shouldRenderHistory = true;
                 } catch (error) {
@@ -3523,7 +3586,11 @@
                         return false;
                     }
                     historyState.error = true;
-                    if (!historyState.usesLiveData) {
+                    if (shouldUseDemoPlaceholderHistory(selectedSensor)) {
+                        globalHistory = buildDemoPlaceholderHistoryRows(selectedSensor);
+                        historyState.usesLiveData = false;
+                        historyState.lastLoadedAt = Date.now();
+                    } else if (!historyState.usesLiveData) {
                         globalHistory = [];
                     }
                     shouldRenderHistory = true;

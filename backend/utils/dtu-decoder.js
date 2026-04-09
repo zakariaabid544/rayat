@@ -114,18 +114,18 @@ const FRAME_LAYOUTS = {
     3: [
         {
             type: 'terreno',
-            subtype: 'terreno_moisture',
-            name: 'Sensore Umidita Terreno',
-            unit: '%',
-            scale: 0.1
-        },
-        {
-            type: 'terreno',
             subtype: 'terreno_temperature',
             name: 'Sensore Temperatura Terreno',
             unit: '°C',
             scale: 0.1,
             signed: true
+        },
+        {
+            type: 'terreno',
+            subtype: 'terreno_moisture',
+            name: 'Sensore Umidita Terreno',
+            unit: '%',
+            scale: 0.1
         },
         {
             type: 'terreno',

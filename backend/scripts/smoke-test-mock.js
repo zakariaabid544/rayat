@@ -775,8 +775,8 @@ async function run() {
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_temperature' && Number(row.value) === 21.2));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_humidity' && Number(row.value) === 82.1));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_co2' && Number(row.value) === 279));
-        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_temperature' && Number(row.value) === 38.4));
-        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_moisture' && Number(row.value) === 19.6));
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_temperature' && Number(row.value) === 19.6));
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_moisture' && Number(row.value) === 38.4));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_ec' && Number(row.value) === 0.795));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_ph' && Number(row.value) === 6.81));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_n' && Number(row.value) === 105));
@@ -788,7 +788,7 @@ async function run() {
         assert.equal(publicHistoryRes.status, 200);
         const publicHistoryJson = await publicHistoryRes.json();
         assert.equal(publicHistoryJson.success, true);
-        assert.ok(publicHistoryJson.data.some((row) => row.subtype === 'terreno_temperature' && Number(row.value) === 38.4));
+        assert.ok(publicHistoryJson.data.some((row) => row.subtype === 'terreno_temperature' && Number(row.value) === 19.6));
         assert.ok(publicHistoryJson.data.some((row) => row.subtype === 'terreno_ec' && Number(row.value) === 0.795));
 
         const simpleLatestRes = await fetch(`http://127.0.0.1:${port}/api/sensors/simple/latest`);
@@ -798,7 +798,7 @@ async function run() {
         assert.equal(Number(simpleLatestJson.temperature), 21.2);
         assert.equal(Number(simpleLatestJson.humidity), 82.1);
         assert.equal(Number(simpleLatestJson.co2), 279);
-        assert.equal(Number(simpleLatestJson.soil), 19.6);
+        assert.equal(Number(simpleLatestJson.soil), 38.4);
 
         const sensorsRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensors?page=1&pageSize=25`, {
           headers: { Authorization: `Bearer ${reloginJson.token}` }
