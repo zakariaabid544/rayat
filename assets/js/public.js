@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.20';
+        const FRONTEND_ASSET_VERSION = '1.1.21';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -74,10 +74,10 @@
         const DASHBOARD_SENSOR_ROUTE_KEYS = new Set(['energia', 'acqua', 'terreno', 'clima']);
         const HOMEPAGE_REAL_SENSOR_KEYS = ['terreno', 'clima'];
         const HOMEPAGE_TECH_PRODUCTS = [
-            { key: 'energia', icon: '⚡', label: 'RAYAT ENERGIA', featured: true },
-            { key: 'acqua', icon: '💧', label: 'RAYAT ACQUA', featured: false },
-            { key: 'terreno', icon: '🌱', label: 'RAYAT SUOLO 7 IN 1', featured: false },
-            { key: 'clima', icon: '🌡️', label: 'RAYAT CLIMA', featured: false }
+            { key: 'energia', icon: '⚡', labelKey: 'sensorEnName', featured: true },
+            { key: 'acqua', icon: '💧', labelKey: 'sensorWaName', featured: false },
+            { key: 'terreno', icon: '🌱', labelKey: 'sensorSoName', featured: false },
+            { key: 'clima', icon: '🌡️', labelKey: 'sensorClName', featured: false }
         ];
         const GAUGE_MARKER_SAFE_OFFSET_PERCENT = 5;
         const WHATSAPP_CTA_URL = 'https://wa.me/393513203307';
@@ -1311,6 +1311,15 @@
                 heroPlatformSub: 'Monitoraggio IoT avanzato di suolo, clima, acqua ed energia, tutto in un\'unica piattaforma.',
                 tryDemo: 'Prova la Demo', discoverServices: 'Scopri i Servizi', insurance: 'Assicurazione Agricola Rayat Smart Monitoring',
                 ourSensors: 'Tecnologia Rayat', ourReality: 'La Nostra Realtà',
+                homeTechnologyTitle: 'Tecnologia Rayat',
+                homeLiveSensorsTitle: 'Dati reali dai sensori Rayat installati a Taroudant',
+                homeLiveSensorsSubtitle: 'Dati reali da sensori installati in una serra di banane a Taroudant, monitorati insieme a Hassan Araba con oltre 20 anni di esperienza, per analizzare i dati e ottimizzare le decisioni sul campo.',
+                homeLiveSensorsSystemTitle: 'Sistema completo: Suolo + Clima',
+                homeLiveSensorsCtaTitle: 'Contattami su WhatsApp',
+                homeLiveSensorsCtaNote: 'Un click e si apre la chat diretta',
+                homeLiveSensorsCtaAria: 'Apri la chat diretta su WhatsApp',
+                homeStatusOnline: 'Online',
+                homeStatusOffline: 'Offline',
                 liveMonitoringTitle: 'Monitoraggio in tempo reale',
                 liveMonitoringSubtitle: 'Dati live dei sensori Rayat aggiornati automaticamente ogni 60 secondi.',
                 sensorNotInstalled: 'Sensore non installato',
@@ -1452,6 +1461,15 @@
                 heroPlatformSub: 'Advanced IoT monitoring for soil, climate, water and energy, all in one platform.',
                 tryDemo: 'Try Demo', discoverServices: 'Discover Services', insurance: 'Your agricultural insurance - Continuous real-time monitoring',
                 ourSensors: 'Our Sensors', ourReality: 'Our Reality',
+                homeTechnologyTitle: 'Rayat Technology',
+                homeLiveSensorsTitle: 'Real data from Rayat sensors installed in Taroudant',
+                homeLiveSensorsSubtitle: 'Live data from sensors installed in a banana greenhouse in Taroudant, monitored together with Hassan Araba and over 20 years of field experience to analyze readings and improve decisions on the ground.',
+                homeLiveSensorsSystemTitle: 'Complete system: Soil + Climate',
+                homeLiveSensorsCtaTitle: 'Contact me on WhatsApp',
+                homeLiveSensorsCtaNote: 'One click opens the direct chat',
+                homeLiveSensorsCtaAria: 'Open the direct WhatsApp chat',
+                homeStatusOnline: 'Online',
+                homeStatusOffline: 'Offline',
                 liveMonitoringTitle: 'Real-time monitoring',
                 liveMonitoringSubtitle: 'Live Rayat sensor data refreshed automatically every 60 seconds.',
                 sensorNotInstalled: 'Sensor not installed',
@@ -1464,7 +1482,7 @@
                 innovation: 'Innovation', innovationDesc: 'Advanced technologies for the best results',
                 sustainability: 'Sustainability', sustainabilityDesc: 'Responsible agriculture',
                 community: 'Community', communityDesc: 'Farmer support forum',
-                sensorWaName: 'RAYAT ACQUA', sensorWaDesc: 'Water Basin Level & Needs Monitoring',
+                sensorWaName: 'RAYAT WATER', sensorWaDesc: 'Water Basin Level & Needs Monitoring',
                 hectaresLabel: 'Field Area (Hectares)', cropLabel: 'Crop Type',
                 need: 'Need', available: 'Available', ton: 'Tons', ha: 'Ha',
                 statusOk: 'SYSTEM SAFE', statusAlert: 'RESOURCE ALERT',
@@ -1479,11 +1497,11 @@
                 rememberMe: 'Remember me', showPassword: 'Show password', hidePassword: 'Hide password',
                 loginNoAccount: 'Don\'t have an account?', loginRegisterNow: 'Register now 🌾',
                 customSolutionsTitle: 'Custom Solutions', customSolutionsDesc: 'You don\'t need all our sensors!', contactUs: 'Contact Us for Advice', features: 'Features:',
-                sensorEnName: 'RAYAT ENERGIA', sensorEnDesc: 'Monitor pump consumption and faults', sensorEnF1: 'Life-saving alarm', sensorEnF2: 'Schedule optimization', sensorEnF3: 'Fault detection',
+                sensorEnName: 'RAYAT ENERGY', sensorEnDesc: 'Monitor pump consumption and faults', sensorEnF1: 'Life-saving alarm', sensorEnF2: 'Schedule optimization', sensorEnF3: 'Fault detection',
                 sensorWaF1: 'Water Level', sensorWaF2: 'Low Level Alarm', sensorWaF3: 'Reservoir History',
-                sensorSoName: 'RAYAT SUOLO 7 IN 1', sensorSoDesc: 'Complete analysis: Moisture, pH, NPK - Rayat Smart Monitoring',
+                sensorSoName: 'RAYAT SOIL 7 IN 1', sensorSoDesc: 'Complete analysis: Moisture, pH, NPK - Rayat Smart Monitoring',
                 sensorSoF1: 'Soil Moisture', sensorSoF2: 'Soil Temperature', sensorSoF3: 'Electrical Conductivity', sensorSoF4: 'pH', sensorSoF5: 'Nitrogen', sensorSoF6: 'Phosphorus', sensorSoF7: 'Potassium',
-                sensorClName: 'RAYAT CLIMA', sensorClDesc: 'Climate Monitoring - Rayat Smart Monitoring', sensorClF1: 'Frost SMS alert', sensorClF2: 'Evaporation forecast', sensorClF3: 'Wind speed', sensorClF4: 'Solar shield for precise readings', sensorClF5: 'Resistance to extreme weather conditions', sensorClF6: 'Climate', sensorClDetails: 'Air Temperature, Air Humidity and CO2 Monitoring.',
+                sensorClName: 'RAYAT CLIMATE', sensorClDesc: 'Climate Monitoring - Rayat Smart Monitoring', sensorClF1: 'Frost SMS alert', sensorClF2: 'Evaporation forecast', sensorClF3: 'Wind speed', sensorClF4: 'Solar shield for precise readings', sensorClF5: 'Resistance to extreme weather conditions', sensorClF6: 'Climate', sensorClDetails: 'Air Temperature, Air Humidity and CO2 Monitoring.',
                 tempAmbient: 'Temperature Ambient', relHumidity: 'Relative Humidity',
                 demoDashboard: 'Professional Demo Version', demoDesc: 'Explore real-time sensor data', history: 'History (Last 30 Days)', details: 'Details', weeklyAvg: 'Weekly Average', maxPeak: 'Max Peak',
                 generalStatus: 'General Status', statusNormal: 'Normal', statusAttention: 'Attention', statusGood: 'Good', statusHot: 'Hot', statusCritical: 'Critical', statusLow: 'Low', statusExcellent: 'Excellent',
@@ -1591,6 +1609,15 @@
                 heroPlatformSub: 'Surveillance IoT avancee du sol, du climat, de l\'eau et de l\'energie, dans une seule plateforme.',
                 tryDemo: 'Tester la Démo', discoverServices: 'Nos Services', insurance: 'Assurance Agricole Rayat Smart Monitoring',
                 ourSensors: 'Technologie Rayat', ourReality: 'Notre Réalité',
+                homeTechnologyTitle: 'Technologie Rayat',
+                homeLiveSensorsTitle: 'Données réelles des capteurs Rayat installés à Taroudant',
+                homeLiveSensorsSubtitle: 'Données réelles issues de capteurs installés dans une serre de bananes à Taroudant, suivies avec Hassan Araba et plus de 20 ans d\'expérience pour analyser les mesures et optimiser les décisions sur le terrain.',
+                homeLiveSensorsSystemTitle: 'Système complet : Sol + Climat',
+                homeLiveSensorsCtaTitle: 'Contactez-moi sur WhatsApp',
+                homeLiveSensorsCtaNote: 'Un clic ouvre la discussion directe',
+                homeLiveSensorsCtaAria: 'Ouvrir la discussion directe sur WhatsApp',
+                homeStatusOnline: 'En ligne',
+                homeStatusOffline: 'Hors ligne',
                 liveMonitoringTitle: 'Surveillance en temps réel',
                 liveMonitoringSubtitle: 'Données capteurs Rayat mises à jour automatiquement toutes les 60 secondes.',
                 sensorNotInstalled: 'Capteur non installé',
@@ -1603,7 +1630,7 @@
                 innovation: 'Innovation', innovationDesc: 'Technologies avancées pour l\'agriculture de demain.',
                 sustainability: 'Durabilité', sustainabilityDesc: 'Gestion responsable et économie d\'eau.',
                 community: 'Communauté', communityDesc: 'Support entre agriculteurs professionnels.',
-                sensorWaName: 'RAYAT ACQUA', sensorWaDesc: 'Bassin & Besoin en Eau',
+                sensorWaName: 'RAYAT EAU', sensorWaDesc: 'Bassin & Besoin en Eau',
                 hectaresLabel: 'Surface (Hectares)', cropLabel: 'Type de Culture',
                 need: 'Besoin', available: 'Disponibilité', ton: 'Tonnes', ha: 'Ha',
                 statusOk: 'RÉSERVE OPTIMALE', statusAlert: 'ALERTE RESSOURCES',
@@ -1618,11 +1645,11 @@
                 rememberMe: 'Se souvenir de moi', showPassword: 'Afficher le mot de passe', hidePassword: 'Masquer le mot de passe',
                 loginNoAccount: 'Vous n\'avez pas de compte ?', loginRegisterNow: 'Inscrivez-vous maintenant 🌾',
                 customSolutionsTitle: 'Solutions Personnalisées', customSolutionsDesc: 'Vous n\'avez pas besoin de tous nos capteurs !', contactUs: 'Contactez-nous pour Conseil', features: 'Fonctionnalités :',
-                sensorEnName: 'RAYAT ENERGIA', sensorEnDesc: 'Surveillance conso pompes et pannes', sensorEnF1: 'Alarme vitale', sensorEnF2: 'Optimisation horaires', sensorEnF3: 'Détection pannes',
+                sensorEnName: 'RAYAT ÉNERGIE', sensorEnDesc: 'Surveillance conso pompes et pannes', sensorEnF1: 'Alarme vitale', sensorEnF2: 'Optimisation horaires', sensorEnF3: 'Détection pannes',
                 sensorWaF1: 'Niveau d\'eau', sensorWaF2: 'Alarme puits vide', sensorWaF3: 'Historique nappe',
-                sensorSoName: 'RAYAT SUOLO 7 IN 1', sensorSoDesc: 'Analyse complète : Humidité, pH, NPK',
+                sensorSoName: 'RAYAT SOL 7 EN 1', sensorSoDesc: 'Analyse complète : Humidité, pH, NPK',
                 sensorSoF1: 'Humidité du sol', sensorSoF2: 'Température du sol', sensorSoF3: 'Conductivité électrique', sensorSoF4: 'pH', sensorSoF5: 'Azote', sensorSoF6: 'Phosphore', sensorSoF7: 'Potassium',
-                sensorClName: 'RAYAT CLIMA', sensorClDesc: 'Surveillance du Climat - Rayat Smart Monitoring', sensorClF1: 'Alerte gel SMS', sensorClF2: 'Prévision évaporation', sensorClF3: 'Vitesse vent', sensorClF4: 'Écran solaire pour des lectures précises', sensorClF5: 'Résistance aux conditions météorologiques extrêmes', sensorClF6: 'Climat', sensorClDetails: 'Surveillance de la Température, Humidité et CO2.',
+                sensorClName: 'RAYAT CLIMAT', sensorClDesc: 'Surveillance du Climat - Rayat Smart Monitoring', sensorClF1: 'Alerte gel SMS', sensorClF2: 'Prévision évaporation', sensorClF3: 'Vitesse vent', sensorClF4: 'Écran solaire pour des lectures précises', sensorClF5: 'Résistance aux conditions météorologiques extrêmes', sensorClF6: 'Climat', sensorClDetails: 'Surveillance de la Température, Humidité et CO2.',
                 tempAmbient: 'Température Ambiante', relHumidity: 'Humidité Relative',
                 demoDashboard: 'Version Démo Professionnelle', demoDesc: 'Explorez les données en temps réel', history: 'Historique (30 derniers jours)', details: 'Détails', weeklyAvg: 'Moyenne Hebdo', maxPeak: 'Pic Max',
                 generalStatus: 'État Général', statusNormal: 'Normal', statusAttention: 'Attention', statusGood: 'Bon', statusHot: 'Chaud', statusCritical: 'Critique', statusLow: 'Bas', statusExcellent: 'Excellent',
@@ -1730,6 +1757,15 @@
                 heroPlatformSub: 'مراقبة IoT متقدمة للتربة والمناخ والمياه والطاقة في منصة واحدة.',
                 tryDemo: 'تجريب النسخة', discoverServices: 'خدماتنا', insurance: 'تأمينك الزراعي مع رايات',
                 ourSensors: 'تكنولوجيا رايات', ourReality: 'واقعنا',
+                homeTechnologyTitle: 'تكنولوجيا رايات',
+                homeLiveSensorsTitle: 'بيانات حقيقية من حساسات رايات المركبة في تارودانت',
+                homeLiveSensorsSubtitle: 'بيانات حقيقية من حساسات مركبة داخل دفيئة موز في تارودانت، تتم متابعتها مع حسن عرابة بخبرة تتجاوز 20 سنة، لتحليل القراءات وتحسين القرارات الميدانية.',
+                homeLiveSensorsSystemTitle: 'نظام متكامل: التربة + المناخ',
+                homeLiveSensorsCtaTitle: 'تواصل معي عبر واتساب',
+                homeLiveSensorsCtaNote: 'ضغطة واحدة تفتح المحادثة المباشرة',
+                homeLiveSensorsCtaAria: 'افتح المحادثة المباشرة على واتساب',
+                homeStatusOnline: 'متصل',
+                homeStatusOffline: 'غير متصل',
                 liveMonitoringTitle: 'مراقبة في الوقت الحقيقي',
                 liveMonitoringSubtitle: 'بيانات حساسات رايات الحية تُحدَّث تلقائيًا كل 60 ثانية.',
                 sensorNotInstalled: 'المستشعر غير مثبت',
@@ -1742,7 +1778,7 @@
                 innovation: 'ابتكار', innovationDesc: 'تقنيات متقدمة لمستقبل الزراعة.',
                 sustainability: 'استدامة', sustainabilityDesc: 'إدارة مسؤولة وتوفير المياه.',
                 community: 'مجتمع', communityDesc: 'دعم متبادل بين المزارعين المحترفين.',
-                sensorWaName: 'RAYAT ACQUA', sensorWaDesc: 'مستوى الحوض والاحتياجات',
+                sensorWaName: 'رايات الماء', sensorWaDesc: 'مستوى الحوض والاحتياجات',
                 hectaresLabel: 'المساحة (هكتار)', cropLabel: 'نوع المحصول',
                 need: 'الاحتياج', available: 'المتوفر', ton: 'طن', ha: 'هكتار',
                 statusOk: 'احتياطي جيد', statusAlert: 'تنبيه الموارد',
@@ -1757,11 +1793,11 @@
                 rememberMe: 'تذكرني', showPassword: 'إظهار كلمة المرور', hidePassword: 'إخفاء كلمة المرور',
                 loginNoAccount: 'ليس لديك حساب؟', loginRegisterNow: 'سجل الآن 🌾',
                 customSolutionsTitle: 'حلول مخصصة', customSolutionsDesc: 'لا تحتاج لجميع أجهزتنا!', contactUs: 'اتصل بنا للاستشارة', features: 'الميزات:',
-                sensorEnName: 'RAYAT ENERGIA', sensorEnDesc: 'مراقبة استهلاك المضخات والأعطال', sensorEnF1: 'إنذار منقذ للحياة', sensorEnF2: 'تحسين الجداول', sensorEnF3: 'كشف الأعطال',
+                sensorEnName: 'رايات الطاقة', sensorEnDesc: 'مراقبة استهلاك المضخات والأعطال', sensorEnF1: 'إنذار منقذ للحياة', sensorEnF2: 'تحسين الجداول', sensorEnF3: 'كشف الأعطال',
                 sensorWaF1: 'مستوى الماء', sensorWaF2: 'إنذار بئر فارغ', sensorWaF3: 'تاريخ المياه الجوفية',
-                sensorSoName: 'RAYAT SUOLO 7 IN 1', sensorSoDesc: 'تحليل شامل: رطوبة، pH، NPK',
+                sensorSoName: 'رايات التربة 7 في 1', sensorSoDesc: 'تحليل شامل: رطوبة، pH، NPK',
                 sensorSoF1: 'رطوبة التربة', sensorSoF2: 'درجة حرارة التربة', sensorSoF3: 'التوصيل الكهربائي', sensorSoF4: 'pH', sensorSoF5: 'النيتروجين', sensorSoF6: 'الفوسفور', sensorSoF7: 'البوتاسيوم',
-                sensorClName: 'RAYAT CLIMA', sensorClDesc: 'حماية من الصقيع والحرارة', sensorClF1: 'تنبيه صقيع SMS', sensorClF2: 'توقعات التبخر', sensorClF3: 'سرعة الرياح', sensorClF4: 'درع شمسي لقراءات دقيقة', sensorClF5: 'مقاومة للظروف الجوية القاسية', sensorClF6: 'المناخ', sensorClDetails: 'مستشعر احترافي لدرجة الحرارة والرطوبة مع حماية من الأشعة فوق البنفسجية وعزل كامل للماء.',
+                sensorClName: 'رايات المناخ', sensorClDesc: 'حماية من الصقيع والحرارة', sensorClF1: 'تنبيه صقيع SMS', sensorClF2: 'توقعات التبخر', sensorClF3: 'سرعة الرياح', sensorClF4: 'درع شمسي لقراءات دقيقة', sensorClF5: 'مقاومة للظروف الجوية القاسية', sensorClF6: 'المناخ', sensorClDetails: 'مستشعر احترافي لدرجة الحرارة والرطوبة مع حماية من الأشعة فوق البنفسجية وعزل كامل للماء.',
                 tempAmbient: 'درجة الحرارة المحيطة', relHumidity: 'الرطوبة النسبية',
                 demoDashboard: 'نسخة تجريبية احترافية', demoDesc: 'استكشف بيانات المستشعر في الوقت الفعلي', history: 'تاريخ (آخر 30 يومًا)', details: 'تفاصيل', weeklyAvg: 'متوسط أسبوعي', maxPeak: 'أقصى ذروة',
                 generalStatus: 'الحالة العامة', statusNormal: 'عادي', statusAttention: 'انتباه', statusGood: 'جيد', statusHot: 'حار', statusCritical: 'حرج', statusLow: 'منخفض', statusExcellent: 'ممتاز',
@@ -1857,6 +1893,15 @@
                 tryDemo: 'ⴰⵔⴰⵎ ⴷⵉⵎⵓ',
                 discoverServices: 'ⵥⵕ ⵉⵎⴰⵣⵣⴰⵍⵏ',
                 ourSensors: 'ⵉⵎⴰⵙⵙⵏ ⵏⵏⵖ <span class="text-xs text-gray-500 block">Imassn</span>',
+                homeTechnologyTitle: 'ⵜⴰⴽⵏⵓⵍⵓⵊⵉⵜ Rayat',
+                homeLiveSensorsTitle: 'ⵉⵙⴼⴽⴰ ⵏ Rayat ⵉⵜⵜⵓⵙⴱⴷⴷⵏ ⴳ Taroudant',
+                homeLiveSensorsSubtitle: 'ⵉⵙⴼⴽⴰ ⵉⵍⵉⵏ ⵙⴳ ⵉⵎⴰⵙⵙⵏ ⵉⵜⵜⵓⵙⴱⴷⴷⵏ ⴳ ⵜⴰⵙⵔⴳⴰ ⵏ ⵜⵉⴳⴰⵢⵢⴰ ⴳ Taroudant, ⴰⴽⴷ Hassan Araba d ugar n 20 n yiseggasen n tmusni iwakken ad nsefrak isfka d tignatin n wakal.',
+                homeLiveSensorsSystemTitle: 'ⴰⵏⴰⴳⵔⴰⵡ ⵉⴽⵎⵍⵏ: ⴰⴽⴰⵍ + ⴰⵏⵣⵡⵉ',
+                homeLiveSensorsCtaTitle: 'ⴰⵎⵢⴰⵡⴰⴹ ⴷⵉ ⵙ WhatsApp',
+                homeLiveSensorsCtaNote: 'ⵢⴰⵏ ⵓⵙⵉⵜ ⵉⵔⵣⵎ ⴰⵎⵙⴰⵡⴰⴹ ⵓⵙⵔⵉⴷ',
+                homeLiveSensorsCtaAria: 'ⵕⵥⵎ ⴰⵎⵙⴰⵡⴰⴹ ⵓⵙⵔⵉⴷ ⵙ WhatsApp',
+                homeStatusOnline: 'Online',
+                homeStatusOffline: 'Offline',
                 liveMonitoringTitle: 'ⴰⵍⵖⵓ ⵏ ⵜⵎⴰⵢⵏⵓⵜ',
                 liveMonitoringSubtitle: 'ⵉⵙⴼⴽⴰ ⵏ Rayat ⵙ ⵜⵓⵙⵙⵏⴰ ⵏ 60 ⵏ ⵜⵉⵙⵉⵏ.',
                 sensorNotInstalled: 'ⴰⵎⴰⵙⵙⴰⵏ ⵓⵔ ⵉⵜⵜⵓⵙⴱⴷⴷ',
@@ -1910,17 +1955,17 @@
                 customSolutionsDesc: 'Vous n\'avez pas besoin de tous nos capteurs !',
                 contactUs: 'Contactez-nous pour Conseil',
                 features: 'ⵜⵉⵎⵙⴰⵍ:',
-                sensorEnName: 'RAYAT ENERGIA',
+                sensorEnName: 'RAYAT ENERGY',
                 sensorEnDesc: 'Surveillance conso pompes et pannes',
                 sensorEnF1: 'Alarme vitale',
                 sensorEnF2: 'Optimisation horaires',
                 sensorEnF3: 'Détection pannes',
-                sensorWaName: 'RAYAT ACQUA',
+                sensorWaName: 'RAYAT WATER',
                 sensorWaDesc: 'Surveillance du Bassin et Besoin en Eau',
                 sensorWaF1: 'Niveau d\'eau',
                 sensorWaF2: 'Alarme puits vide',
                 sensorWaF3: 'Historique nappe',
-                sensorSoName: 'RAYAT SUOLO 7 IN 1',
+                sensorSoName: 'RAYAT SOIL 7 IN 1',
                 sensorSoDesc: 'Analyse complète : Humidité, pH, NPK',
                 sensorSoF1: 'ⵜⴰⵎⵉⴷⵉ',
                 sensorSoF2: 'ⵜⴰⵙⴽⵯⴼⵍⵜ',
@@ -1929,7 +1974,7 @@
                 sensorSoF5: 'Azote',
                 sensorSoF6: 'Phosphore',
                 sensorSoF7: 'Potassium',
-                sensorClName: 'RAYAT CLIMA',
+                sensorClName: 'RAYAT CLIMATE',
                 sensorClDesc: 'ⵜⴰⴳⴳⴰ ⵏ ⴰⵏⵣⵡⵉ - Rayat Smart Monitoring',
                 sensorClF1: 'Alerte gel SMS',
                 sensorClF2: 'Prévision évaporation',
@@ -3174,7 +3219,7 @@
 
             return {
                 className: isOnline ? 'is-online' : 'is-offline',
-                label: isOnline ? 'Online' : 'Offline'
+                label: isOnline ? t('homeStatusOnline') : t('homeStatusOffline')
             };
         }
 
@@ -3203,17 +3248,17 @@
                 <section class="rayat-home-technology-section">
                     <div class="container mx-auto px-4">
                         <div class="rayat-home-technology-shell">
-                            <h2 class="section-title-main rayat-home-technology-title">Tecnologia Rayat</h2>
+                            <h2 class="section-title-main rayat-home-technology-title">${t('homeTechnologyTitle')}</h2>
                             <div class="rayat-home-technology-grid">
                                 ${HOMEPAGE_TECH_PRODUCTS.map((product) => `
                                     <button
                                         type="button"
                                         onclick="openSensorDashboard('${product.key}')"
                                         class="rayat-home-technology-card ${product.featured ? 'is-featured' : ''}"
-                                        aria-label="${product.label}"
+                                        aria-label="${escapeHtml(t(product.labelKey))}"
                                     >
                                         <div class="rayat-home-technology-card__icon" aria-hidden="true">${product.icon}</div>
-                                        <p class="rayat-home-technology-card__label">${product.label}</p>
+                                        <p class="rayat-home-technology-card__label">${t(product.labelKey)}</p>
                                     </button>
                                 `).join('')}
                             </div>
@@ -3228,22 +3273,22 @@
                 <section class="rayat-home-sensors-section">
                     <div class="container mx-auto px-4">
                         <div class="rayat-home-sensors-intro">
-                            <h2 class="section-title-main rayat-home-sensors-intro__title">Dati reali dai sensori Rayat installati a Taroudant</h2>
-                            <p class="section-subtitle-main rayat-home-sensors-intro__subtitle">Dati reali da sensori installati in una serra di banane a Taroudant, monitorati insieme a Hassan Araba con oltre 20 anni di esperienza, per analizzare i dati e ottimizzare le decisioni sul campo.</p>
+                            <h2 class="section-title-main rayat-home-sensors-intro__title">${t('homeLiveSensorsTitle')}</h2>
+                            <p class="section-subtitle-main rayat-home-sensors-intro__subtitle">${t('homeLiveSensorsSubtitle')}</p>
                         </div>
                         <div class="rayat-home-sensors-shell">
                             <div class="rayat-home-sensors-head">
-                                <h3 class="rayat-home-sensors-title">Sistema completo: Suolo + Clima</h3>
+                                <h3 class="rayat-home-sensors-title">${t('homeLiveSensorsSystemTitle')}</h3>
                             <div class="rayat-home-sensors-statuses">
                                     ${renderHomepageStatusBadge()}
                                 </div>
                             </div>
                             ${renderHomepageSensorGrid()}
                             <div class="rayat-home-sensors-cta">
-                                <a href="${getWhatsappHref()}" target="_blank" rel="noopener" onclick="trackEvent('WhatsApp Click')" class="rayat-home-demo-cta rayat-home-demo-cta--whatsapp" aria-label="Apri la chat diretta su WhatsApp">
+                                <a href="${getWhatsappHref()}" target="_blank" rel="noopener" onclick="trackEvent('WhatsApp Click')" class="rayat-home-demo-cta rayat-home-demo-cta--whatsapp" aria-label="${escapeHtml(t('homeLiveSensorsCtaAria'))}">
                                     <span class="rayat-home-demo-cta__icon-wrap" aria-hidden="true">${getWhatsappIconSvg('rayat-home-demo-cta__icon')}</span>
-                                    <span class="rayat-home-demo-cta__title">Contattami su WhatsApp</span>
-                                    <span class="rayat-home-demo-cta__note">Un click e si apre la chat diretta</span>
+                                    <span class="rayat-home-demo-cta__title">${t('homeLiveSensorsCtaTitle')}</span>
+                                    <span class="rayat-home-demo-cta__note">${t('homeLiveSensorsCtaNote')}</span>
                                 </a>
                             </div>
                         </div>
