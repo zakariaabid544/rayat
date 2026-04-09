@@ -1200,6 +1200,33 @@
             border-bottom: 1px solid rgba(226, 232, 240, 0.9);
         }
 
+        .rayat-home-sensors-intro {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.9rem;
+            margin: 0 auto 2rem;
+            max-width: 680px;
+            text-align: center;
+        }
+
+        .rayat-home-sensors-intro__title {
+            margin: 0;
+            font-size: clamp(1.75rem, 3vw, 2rem);
+            font-weight: 700;
+            line-height: 1.2;
+            color: #0f172a;
+            text-wrap: balance;
+        }
+
+        .rayat-home-sensors-intro__subtitle {
+            margin: 0;
+            font-size: 1rem;
+            line-height: 1.6;
+            color: #475569;
+            text-wrap: pretty;
+        }
+
         .rayat-home-sensors-shell {
             overflow-x: hidden;
             border-radius: 2.5rem;
@@ -1212,66 +1239,72 @@
         .rayat-home-sensors-head {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            align-items: center;
+            gap: 0.85rem;
             margin-bottom: 1.5rem;
+            text-align: center;
         }
 
         .rayat-home-sensors-title {
             margin: 0;
-            font-size: clamp(1.5rem, 3vw, 2.75rem);
-            font-weight: 900;
-            line-height: 1.05;
-            letter-spacing: -0.04em;
-            color: #0f172a;
-            text-wrap: balance;
+            font-size: 20px;
+            font-weight: 600;
+            line-height: 1.35;
+            color: #1e293b;
         }
 
         .rayat-home-sensors-statuses {
             display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem;
+            justify-content: center;
         }
 
         .rayat-home-status-badge {
             display: inline-flex;
             align-items: center;
-            gap: 0.65rem;
-            min-width: 0;
+            justify-content: center;
+            gap: 0.7rem;
             border-radius: 999px;
-            border: 1px solid rgba(187, 247, 208, 0.95);
-            background: #f0fdf4;
-            padding: 0.8rem 1rem;
+            border: 1px solid rgba(34, 197, 94, 0.18);
+            background: #ffffff;
+            padding: 0.78rem 1.15rem;
             color: #166534;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
         }
 
         .rayat-home-status-badge.is-offline {
-            border-color: rgba(252, 165, 165, 0.95);
-            background: #fef2f2;
+            border-color: rgba(248, 113, 113, 0.24);
+            background: #fff7f7;
             color: #b91c1c;
         }
 
-        .rayat-home-status-badge.is-loading {
-            border-color: rgba(203, 213, 225, 0.95);
-            background: #f8fafc;
-            color: #475569;
+        @keyframes rayatHomeStatusPulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.26);
+            }
+
+            50% {
+                box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.08);
+            }
         }
 
         .rayat-home-status-badge__dot {
-            width: 10px;
-            height: 10px;
-            flex: 0 0 10px;
+            width: 11px;
+            height: 11px;
+            flex: 0 0 11px;
             border-radius: 999px;
-            background: currentColor;
-            opacity: 0.9;
+            background: #22c55e;
+            animation: rayatHomeStatusPulse 1.8s ease-in-out infinite;
         }
 
-        .rayat-home-status-badge__label,
+        .rayat-home-status-badge.is-offline .rayat-home-status-badge__dot {
+            background: #ef4444;
+            animation: none;
+        }
+
         .rayat-home-status-badge__state {
-            font-size: 0.82rem;
-            font-weight: 900;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            line-height: 1.1;
+            font-size: 0.95rem;
+            font-weight: 700;
+            line-height: 1;
         }
 
         .rayat-home-sensor-grid {
@@ -1281,64 +1314,9 @@
             overflow-x: hidden;
         }
 
-        .rayat-home-metric-card {
+        .rayat-home-sensor-grid .rayat-metric-card {
             min-width: 0;
-            border-radius: 1.6rem;
-            border: 1px solid rgba(226, 232, 240, 0.95);
-            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-            padding: 1rem;
-            box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
-        }
-
-        .rayat-home-metric-card__head {
-            margin-bottom: 0.75rem;
-        }
-
-        .rayat-home-metric-card__title {
-            margin: 0;
-            font-size: 0.8rem;
-            font-weight: 900;
-            letter-spacing: 0.14em;
-            line-height: 1.35;
-            text-transform: uppercase;
-            color: #475569;
-            text-wrap: balance;
-        }
-
-        .rayat-home-metric-card__value-row {
-            display: flex;
-            align-items: flex-end;
-            gap: 0.4rem;
-            min-height: 3.5rem;
-            margin-bottom: 0.85rem;
-        }
-
-        .rayat-home-metric-card__value {
-            font-size: clamp(1.8rem, 3vw, 2.5rem);
-            font-weight: 900;
-            line-height: 0.95;
-            color: #0f172a;
-        }
-
-        .rayat-home-metric-card__unit {
-            font-size: 0.82rem;
-            font-weight: 800;
-            line-height: 1.2;
-            text-transform: uppercase;
-            color: #64748b;
-        }
-
-        .rayat-home-metric-card__gauge {
-            margin-bottom: 0.75rem;
-        }
-
-        .rayat-home-metric-card__meta {
-            margin: 0;
-            min-height: 2.6rem;
-            font-size: 0.83rem;
-            font-weight: 700;
-            line-height: 1.45;
-            color: #64748b;
+            height: 100%;
         }
 
         .rayat-home-sensors-cta {
@@ -2173,8 +2151,21 @@
                 padding: 1rem;
             }
 
+            .rayat-home-sensors-intro {
+                margin-bottom: 1.5rem;
+                gap: 0.75rem;
+            }
+
+            .rayat-home-sensors-intro__title {
+                font-size: 1.75rem;
+            }
+
+            .rayat-home-sensors-intro__subtitle {
+                font-size: 0.98rem;
+            }
+
             .rayat-home-sensors-title {
-                font-size: 1.45rem;
+                font-size: 20px;
             }
 
             .rayat-home-sensor-grid {
@@ -2182,22 +2173,8 @@
                 gap: 0.75rem;
             }
 
-            .rayat-home-metric-card {
-                padding: 0.9rem;
-            }
-
-            .rayat-home-metric-card__title {
-                font-size: 0.73rem;
-                letter-spacing: 0.1em;
-            }
-
-            .rayat-home-metric-card__value {
-                font-size: 1.75rem;
-            }
-
-            .rayat-home-metric-card__meta {
-                min-height: 2.3rem;
-                font-size: 0.78rem;
+            .rayat-home-status-badge {
+                width: 100%;
             }
 
             .rayat-home-demo-cta {

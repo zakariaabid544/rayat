@@ -3084,64 +3084,31 @@
             return sensor.details.filter((metric) => isHomepageMetricInstalled(sensorKey, metric));
         }
 
-        function renderHomepageStatusBadge(sensorKey) {
-            const statusMeta = getSensorConnectionMeta(sensorKey);
-            const badgeLabel = sensorKey === 'terreno' ? 'Suolo' : 'Clima';
-            const statusLabel = statusMeta.state === 'online'
-                ? 'Online'
-                : (statusMeta.state === 'offline' ? 'Offline' : 'In aggiornamento');
+        function getHomepageSectionStatus() {
+            const states = HOMEPAGE_REAL_SENSOR_KEYS.map((sensorKey) => getSensorConnectionMeta(sensorKey).state);
+            const isOnline = states.length > 0 && states.every((state) => state === 'online');
+
+            return {
+                className: isOnline ? 'is-online' : 'is-offline',
+                label: isOnline ? 'Online' : 'Offline'
+            };
+        }
+
+        function renderHomepageStatusBadge() {
+            const statusMeta = getHomepageSectionStatus();
 
             return `
                 <span class="rayat-home-status-badge ${statusMeta.className}">
                     <span class="rayat-home-status-badge__dot" aria-hidden="true"></span>
-                    <span class="rayat-home-status-badge__label">${badgeLabel}</span>
-                    <span class="rayat-home-status-badge__state">${statusLabel}</span>
+                    <span class="rayat-home-status-badge__state">${statusMeta.label}</span>
                 </span>
-            `;
-        }
-
-        function renderHomepageMetricCard(sensorKey, group, metric) {
-            if (!isHomepageMetricInstalled(sensorKey, metric)) {
-                return '';
-            }
-
-            const normalizedValue = normalizeMetricValue(group, metric.key, metric.value);
-            const range = getRangeForMetric(group, metric.key);
-            const unit = getMetricUnit(group, metric.key, metric.unit || metric.unita || '');
-            const gauge = range ? getGaugeMeta(group, metric.key, range) : null;
-            const gaugeMarkerPercent = gauge ? getGaugeMarkerPercent(normalizedValue, gauge.min, gauge.max) : null;
-            const hasValue = Number.isFinite(normalizedValue);
-            const rangeLabel = range
-                ? buildOptimalRangeLabel(range, group === 'climate' ? 'climate' : 'range')
-                : t('refreshingDataAction');
-
-            return `
-                <article class="rayat-home-metric-card ${hasValue ? 'is-live' : 'is-loading'}" data-home-sensor="${sensorKey}" data-metric-key="${metric.key}">
-                    <div class="rayat-home-metric-card__head">
-                        <p class="rayat-home-metric-card__title">${t(metric.label)}</p>
-                    </div>
-                    <div class="rayat-home-metric-card__value-row">
-                        <span class="rayat-home-metric-card__value">${hasValue ? formatMetricValue(normalizedValue) : '--'}</span>
-                        <span class="rayat-home-metric-card__unit">${unit || ''}</span>
-                    </div>
-                    ${gauge ? `
-                        <div class="rayat-home-metric-card__gauge">
-                            <div class="rayat-range-track-shell">
-                                <div class="rayat-range-track" style="background:${gauge.gradient};">
-                                    ${hasValue && gaugeMarkerPercent !== null ? `<div class="rayat-range-pointer" style="left:${gaugeMarkerPercent}%;" aria-hidden="true"></div>` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    ` : ''}
-                    <p class="rayat-home-metric-card__meta">${hasValue ? rangeLabel : t('refreshingDataAction')}</p>
-                </article>
             `;
         }
 
         function renderHomepageSensorGrid() {
             const cards = HOMEPAGE_REAL_SENSOR_KEYS.flatMap((sensorKey) => {
                 const group = sensorKey === 'terreno' ? 'soil' : 'climate';
-                return getHomepageMetrics(sensorKey).map((metric) => renderHomepageMetricCard(sensorKey, group, metric));
+                return getHomepageMetrics(sensorKey).map((metric) => renderMetricCard(group, metric));
             }).join('');
 
             return `<div class="rayat-home-sensor-grid">${cards}</div>`;
@@ -3151,11 +3118,15 @@
             return `
                 <section class="rayat-home-sensors-section">
                     <div class="container mx-auto px-4">
+                        <div class="rayat-home-sensors-intro">
+                            <h2 class="rayat-home-sensors-intro__title">Dati reali dai sensori Rayat installati a Taroudant</h2>
+                            <p class="rayat-home-sensors-intro__subtitle">Dati reali da sensori installati in una serra di banane a Taroudant, monitorati insieme a Hassan Araba con oltre 20 anni di esperienza, per analizzare i dati e ottimizzare le decisioni sul campo.</p>
+                        </div>
                         <div class="rayat-home-sensors-shell">
                             <div class="rayat-home-sensors-head">
-                                <h2 class="rayat-home-sensors-title">Sistema completo: Suolo + Clima</h2>
+                                <p class="rayat-home-sensors-title">Sistema completo: Suolo + Clima</p>
                                 <div class="rayat-home-sensors-statuses">
-                                    ${HOMEPAGE_REAL_SENSOR_KEYS.map((sensorKey) => renderHomepageStatusBadge(sensorKey)).join('')}
+                                    ${renderHomepageStatusBadge()}
                                 </div>
                             </div>
                             ${renderHomepageSensorGrid()}
