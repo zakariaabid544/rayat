@@ -73,6 +73,79 @@ function normalizeKey(value) {
         .replace(/[^a-z0-9_/-]+/g, '_');
 }
 
+function parseNumericValue(value) {
+    const numeric = Number.parseFloat(value);
+    return Number.isFinite(numeric) ? numeric : null;
+}
+
+function shouldSwapSoilPair(soilTemperature, soilMoisture) {
+    const temperature = parseNumericValue(soilTemperature);
+    const moisture = parseNumericValue(soilMoisture);
+
+    if (!Number.isFinite(temperature) || !Number.isFinite(moisture)) {
+        return false;
+    }
+
+    // Hotfix difensivo per la pipeline live: quando i due valori arrivano invertiti
+    // vediamo coppie come 38.6°C / 19%. In quel caso li scambiamo.
+    return temperature > 35 && moisture < 25;
+}
+
+function getSoilPairGroupKey(reading, includeTimestamp = true) {
+    return [
+        cleanString(reading?.device_id || reading?.deviceId),
+        cleanString(reading?.topic),
+        includeTimestamp ? cleanString(reading?.timestamp) : '',
+        cleanString(reading?.type)
+    ].join('::');
+}
+
+function normalizeSoilReadingPairs(readings = [], options = {}) {
+    const includeTimestamp = options.includeTimestamp !== false;
+    const normalized = readings.map((reading) => (reading && typeof reading === 'object' ? { ...reading } : reading));
+    const groups = new Map();
+
+    normalized.forEach((reading, index) => {
+        if (!reading || reading.type !== 'terreno') {
+            return;
+        }
+
+        if (reading.subtype !== 'terreno_temperature' && reading.subtype !== 'terreno_moisture') {
+            return;
+        }
+
+        const key = getSoilPairGroupKey(reading, includeTimestamp);
+        const group = groups.get(key) || { temperatureIndex: null, moistureIndex: null };
+
+        if (reading.subtype === 'terreno_temperature') {
+            group.temperatureIndex = index;
+        } else {
+            group.moistureIndex = index;
+        }
+
+        groups.set(key, group);
+    });
+
+    groups.forEach(({ temperatureIndex, moistureIndex }) => {
+        if (!Number.isInteger(temperatureIndex) || !Number.isInteger(moistureIndex)) {
+            return;
+        }
+
+        const temperatureReading = normalized[temperatureIndex];
+        const moistureReading = normalized[moistureIndex];
+
+        if (!shouldSwapSoilPair(temperatureReading?.value, moistureReading?.value)) {
+            return;
+        }
+
+        const originalTemperature = temperatureReading.value;
+        temperatureReading.value = moistureReading.value;
+        moistureReading.value = originalTemperature;
+    });
+
+    return normalized;
+}
+
 function inferTypeFromSubtype(subtype) {
     const normalized = normalizeKey(subtype);
     if (!normalized) {
@@ -400,10 +473,11 @@ router.get('/public/latest', async (_req, res) => {
              FROM public_sensor_latest
              ORDER BY sensor_type ASC, sensor_subtype ASC`
         );
+        const normalizedRows = normalizeSoilReadingPairs(rows, { includeTimestamp: true });
 
         res.json({
             success: true,
-            data: rows
+            data: normalizedRows
         });
     } catch (error) {
         console.error('Get public latest sensors error:', error);
@@ -444,10 +518,11 @@ router.get('/public/history', async (req, res) => {
         sql += ' ORDER BY timestamp DESC, sensor_subtype ASC';
 
         const rows = await query(sql, params);
+        const normalizedRows = normalizeSoilReadingPairs(rows, { includeTimestamp: true });
 
         res.json({
             success: true,
-            data: rows.map((row) => ({
+            data: normalizedRows.map((row) => ({
                 type: row.type,
                 subtype: row.subtype,
                 value: parseFloat(row.value),
@@ -558,7 +633,7 @@ router.get('/latest', authenticateToken, checkSubscription, async (req, res) => 
   ORDER BY s.type, s.subtype
 `;
 
-        const readings = await query(sql, [userId]);
+        const readings = normalizeSoilReadingPairs(await query(sql, [userId]), { includeTimestamp: true });
 
         // Raggruppa per tipo di sensore per frontend
         const grouped = {
@@ -621,7 +696,7 @@ router.get('/:type/latest', authenticateToken, checkSubscription, async (req, re
         AND s.enabled = TRUE
     `;
 
-        const readings = await query(sql, [userId, sensorType]);
+        const readings = normalizeSoilReadingPairs(await query(sql, [userId, sensorType]), { includeTimestamp: true });
         res.json({ success: true, data: readings });
 
     } catch (error) {
@@ -663,7 +738,7 @@ router.get('/:type/history', authenticateToken, checkSubscription, async (req, r
 
         sql += ' ORDER BY sr.timestamp DESC';
 
-        const history = await query(sql, params);
+        const history = normalizeSoilReadingPairs(await query(sql, params), { includeTimestamp: true });
 
         // Formatta per grafico frontend
         const chartData = history.map(h => ({

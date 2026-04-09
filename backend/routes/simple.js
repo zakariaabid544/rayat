@@ -2,6 +2,22 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 
+function parseNumericValue(value) {
+    const numeric = Number.parseFloat(value);
+    return Number.isFinite(numeric) ? numeric : null;
+}
+
+function shouldSwapSoilPair(soilTemperature, soilMoisture) {
+    const temperature = parseNumericValue(soilTemperature);
+    const moisture = parseNumericValue(soilMoisture);
+
+    if (!Number.isFinite(temperature) || !Number.isFinite(moisture)) {
+        return false;
+    }
+
+    return temperature > 35 && moisture < 25;
+}
+
 // GET /api/sensors/latest - Formato semplificato per compatibilità
 router.get('/latest', async (req, res) => {
     try {
@@ -69,6 +85,12 @@ router.get('/latest', async (req, res) => {
                     result.energy = parseFloat(value);
                     break;
             }
+        }
+
+        const soilTemperature = parseNumericValue(readingMap.get('terreno_temperature'));
+        const soilMoisture = parseNumericValue(readingMap.get('terreno_moisture'));
+        if (shouldSwapSoilPair(soilTemperature, soilMoisture)) {
+            result.soil = soilTemperature;
         }
 
         res.json(result);

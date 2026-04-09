@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.19';
+        const FRONTEND_ASSET_VERSION = '1.1.20';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -514,6 +514,84 @@
         function parseNumericValue(value) {
             const numeric = Number.parseFloat(value);
             return Number.isFinite(numeric) ? numeric : null;
+        }
+
+        function shouldSwapSoilPair(soilTemperature, soilMoisture) {
+            const temperature = parseNumericValue(soilTemperature);
+            const moisture = parseNumericValue(soilMoisture);
+
+            if (!Number.isFinite(temperature) || !Number.isFinite(moisture)) {
+                return false;
+            }
+
+            return temperature > 35 && moisture < 25;
+        }
+
+        function getSoilReadingGroupKey(reading, includeTimestamp = true) {
+            return [
+                String(reading?.device_id || reading?.deviceId || '').trim(),
+                String(reading?.topic || '').trim(),
+                includeTimestamp ? String(reading?.timestamp || '').trim() : '',
+                String(reading?.type || '').trim()
+            ].join('::');
+        }
+
+        function normalizeSoilApiPayloadRows(records = [], options = {}) {
+            const includeTimestamp = options.includeTimestamp !== false;
+            const normalized = records.map((reading) => (reading && typeof reading === 'object' ? { ...reading } : reading));
+            const groups = new Map();
+
+            normalized.forEach((reading, index) => {
+                if (!reading || reading.type !== 'terreno') {
+                    return;
+                }
+
+                if (reading.subtype !== 'terreno_temperature' && reading.subtype !== 'terreno_moisture') {
+                    return;
+                }
+
+                const key = getSoilReadingGroupKey(reading, includeTimestamp);
+                const group = groups.get(key) || { temperatureIndex: null, moistureIndex: null };
+
+                if (reading.subtype === 'terreno_temperature') {
+                    group.temperatureIndex = index;
+                } else {
+                    group.moistureIndex = index;
+                }
+
+                groups.set(key, group);
+            });
+
+            groups.forEach(({ temperatureIndex, moistureIndex }) => {
+                if (!Number.isInteger(temperatureIndex) || !Number.isInteger(moistureIndex)) {
+                    return;
+                }
+
+                const temperatureReading = normalized[temperatureIndex];
+                const moistureReading = normalized[moistureIndex];
+
+                if (!shouldSwapSoilPair(temperatureReading?.value, moistureReading?.value)) {
+                    return;
+                }
+
+                const originalTemperature = temperatureReading.value;
+                temperatureReading.value = moistureReading.value;
+                moistureReading.value = originalTemperature;
+            });
+
+            return normalized;
+        }
+
+        function normalizeSoilHistoryRow(row) {
+            if (!row || !shouldSwapSoilPair(row.temperature, row.terreno)) {
+                return row;
+            }
+
+            return {
+                ...row,
+                temperature: row.terreno,
+                terreno: row.temperature
+            };
         }
 
         function formatMetricValue(value) {
@@ -3431,7 +3509,7 @@
                 grouped.set(key, row);
             });
 
-            return Array.from(grouped.values());
+            return Array.from(grouped.values()).map((row) => normalizeSoilHistoryRow(row));
         }
 
         function shouldUseDemoPlaceholderHistory(sensorKey = selectedSensor) {
@@ -4202,8 +4280,9 @@
 
         function updateSensorData(apiData, fromCache = false) {
             if (!apiData || !Array.isArray(apiData)) return;
-            latestAssignedSensors = buildProfileSensorSnapshot(apiData);
-            const nextPayloadSignature = buildSensorPayloadSignature(apiData);
+            const normalizedApiData = normalizeSoilApiPayloadRows(apiData, { includeTimestamp: true });
+            latestAssignedSensors = buildProfileSensorSnapshot(normalizedApiData);
+            const nextPayloadSignature = buildSensorPayloadSignature(normalizedApiData);
 
             const typeMap = {
                 'energia_consumption': { s: 'energia', val: true },
@@ -4228,7 +4307,7 @@
             resetSensorConnectionState();
 
             let updated = false;
-            apiData.forEach(r => {
+            normalizedApiData.forEach(r => {
                 if (r?.type && sensorConnectionState[r.type] !== 'online') {
                     sensorConnectionState[r.type] = resolveSensorOnlineStatus(r);
                 }
