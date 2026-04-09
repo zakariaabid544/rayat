@@ -812,23 +812,6 @@
             text-align: center;
         }
 
-        .rayat-hero-title.rayat-hero-title--homepage {
-            display: block;
-            max-width: 12ch;
-            font-size: clamp(2.2rem, 5vw, 4.9rem);
-            line-height: 1.04;
-            letter-spacing: -0.05em;
-            text-wrap: balance;
-        }
-
-        .rayat-hero-subtitle.rayat-hero-subtitle--homepage {
-            max-width: 860px;
-            width: min(100%, 860px);
-            font-size: clamp(1rem, 2vw, 1.35rem);
-            line-height: 1.7;
-            color: rgba(255, 255, 255, 0.9);
-        }
-
         .rayat-hero-kicker {
             display: inline-flex;
             align-items: center;
@@ -2115,11 +2098,6 @@
                 gap: 0.28rem;
             }
 
-            .rayat-hero-title--homepage {
-                max-width: 100%;
-                font-size: clamp(2rem, 8vw, 2.9rem);
-            }
-
             .rayat-hero-title-line--primary,
             .rayat-hero-title-line--secondary,
             .rayat-hero-title-line--accent {
@@ -2130,12 +2108,6 @@
                 font-size: 17px;
                 width: min(100%, 90%);
                 line-height: 1.55;
-            }
-
-            .rayat-hero-subtitle--homepage {
-                width: 100%;
-                font-size: 1rem;
-                line-height: 1.7;
             }
 
             .rayat-demo-shell {

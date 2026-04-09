@@ -4600,12 +4600,26 @@
                 ${renderHeader(!!user)}
                 
                 <section class="rayat-hero">
+                    <div class="rayat-hero-orb rayat-hero-orb--one"></div>
+                    <div class="rayat-hero-orb rayat-hero-orb--two"></div>
                     <div class="container mx-auto px-4">
                         <div class="rayat-hero-shell">
-                            <h1 class="rayat-hero-title rayat-hero-title--homepage rayat-fade-up">
-                                Dati reali dai sensori Rayat installati a Taroudant
+                            <div class="rayat-hero-kicker">${t('heroEyebrow')}</div>
+                            <!-- RAYAT FIX - forza il titolo hero su tre righe controllate -->
+                            <h1 class="rayat-hero-title rayat-fade-up">
+                                <span class="rayat-hero-title-line rayat-hero-title-line--primary">${t('heroTitleLine1')}</span>
+                                <span class="rayat-hero-title-line rayat-hero-title-line--secondary">${t('heroTitleLine2')}</span>
+                                <span class="rayat-hero-title-line rayat-hero-title-line--accent rayat-hero-accent">${t('heroTitleAccent')}</span>
                             </h1>
-                            <p class="rayat-hero-subtitle rayat-hero-subtitle--homepage rayat-fade-in">Dati reali da sensori installati in una serra di banane a Taroudant, monitorati insieme a Hassan Araba con oltre 20 anni di esperienza, per analizzare i dati e ottimizzare le decisioni sul campo.</p>
+                            <p class="rayat-hero-subtitle rayat-fade-in">${t('heroPlatformSub')}</p>
+                            <div class="rayat-mobile-actions flex gap-4 justify-center">
+                                <button onclick="setViewWithTracking('demo')" class="bg-orange-500 hover:bg-orange-600 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-orange-950/20">
+                                ${t('tryDemo')}
+                                </button>
+                                <button onclick="setView('servizi')" class="bg-white text-green-800 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-green-950/10">
+                                ${t('discoverServices')}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </section>
