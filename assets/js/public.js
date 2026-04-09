@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.15';
+        const FRONTEND_ASSET_VERSION = '1.1.16';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -79,6 +79,19 @@
             { icon: '🌱', label: 'RAYAT SUOLO 7 IN 1', featured: false },
             { icon: '🌡️', label: 'RAYAT CLIMA', featured: false }
         ];
+        const DEMO_FALLBACK = {
+            energia: [
+                { name: 'Consommation', value: 4.2, unit: 'kWh', status: 'Normal', min: 0, max: 10, ideal_min: 2, ideal_max: 6, label: 'Plage ideale Serre: 2 – 6 kWh' },
+                { name: 'Tension', value: 220, unit: 'V', status: 'Normal', min: 190, max: 250, ideal_min: 210, ideal_max: 230, label: 'Plage ideale Serre: 210 – 230 V' },
+                { name: 'Courant', value: 18.5, unit: 'A', status: 'Attention', min: 0, max: 32, ideal_min: 10, ideal_max: 20, label: 'Plage ideale Serre: 10 – 20 A' }
+            ],
+            acqua: [
+                { name: 'pH Eau', value: 6.9, unit: 'pH', status: 'Normal', min: 4.0, max: 9.0, ideal_min: 6.0, ideal_max: 7.5, label: 'Plage ideale Banane: 6.0 – 7.5' },
+                { name: 'EC Eau', value: 1.8, unit: 'mS/cm', status: 'Attention', min: 0.0, max: 4.0, ideal_min: 1.0, ideal_max: 2.5, label: 'Plage ideale Banane: 1.0 – 2.5 mS/cm' },
+                { name: 'Température Eau', value: 22, unit: '°C', status: 'Normal', min: 10, max: 40, ideal_min: 18, ideal_max: 26, label: 'Plage ideale Banane: 18 – 26 °C' },
+                { name: 'Débit', value: 2.4, unit: 'L/min', status: 'Normal', min: 0, max: 10, ideal_min: 1.5, ideal_max: 4.0, label: 'Plage ideale Serre: 1.5 – 4.0 L/min' }
+            ]
+        };
         const GAUGE_MARKER_SAFE_OFFSET_PERCENT = 5;
         const WHATSAPP_CTA_URL = 'https://wa.me/393513203307';
         const WHATSAPP_DISPLAY_NUMBER = '+39 351 320 3307';
@@ -668,6 +681,35 @@
             };
         }
 
+        function getGaugeMetaFromBounds(bounds, range) {
+            if (!bounds || !range || !Number.isFinite(bounds.min) || !Number.isFinite(bounds.max) || bounds.max <= bounds.min) {
+                return null;
+            }
+
+            const beforeSpan = Math.max(range.min - bounds.min, 0);
+            const afterSpan = Math.max(bounds.max - range.max, 0);
+            const lowerCritical = Math.max(bounds.min, range.min - (beforeSpan / 2));
+            const upperCritical = Math.min(bounds.max, range.max + (afterSpan / 2));
+            const clamp = (value) => Math.max(bounds.min, Math.min(bounds.max, value));
+            const toPct = (value) => ((clamp(value) - bounds.min) / (bounds.max - bounds.min)) * 100;
+
+            return {
+                min: bounds.min,
+                max: bounds.max,
+                gradient: `linear-gradient(to right,
+                    #ef4444 0%,
+                    #ef4444 ${toPct(lowerCritical)}%,
+                    #f59e0b ${toPct(lowerCritical)}%,
+                    #f59e0b ${toPct(range.min)}%,
+                    #22c55e ${toPct(range.min)}%,
+                    #22c55e ${toPct(range.max)}%,
+                    #f59e0b ${toPct(range.max)}%,
+                    #f59e0b ${toPct(upperCritical)}%,
+                    #ef4444 ${toPct(upperCritical)}%,
+                    #ef4444 100%)`
+            };
+        }
+
         function getGaugeMarkerPercent(value, min, max) {
             const numericValue = parseNumericValue(value);
             if (!Number.isFinite(numericValue) || !Number.isFinite(min) || !Number.isFinite(max) || max === min) {
@@ -687,6 +729,90 @@
             const unitSuffix = range.unit ? ` ${range.unit}` : '';
             const prefix = mode === 'climate' ? t('optimalFor') : t('optimalRangeFor');
             return `${prefix} ${getSelectedCropLabel()}: ${formatMetricValue(range.min)} – ${formatMetricValue(range.max)}${unitSuffix}`;
+        }
+
+        function getExplicitMetricState(status = '') {
+            const normalizedStatus = String(status).trim().toLowerCase();
+            if (normalizedStatus === 'alerte' || normalizedStatus === 'alert') {
+                return {
+                    level: 'alert',
+                    badge: 'Alerte',
+                    label: 'Alerte',
+                    cssModifier: 'rayat-metric-card--alert',
+                    borderColor: 'rgba(239, 68, 68, 0.28)',
+                    accentColor: '#ef4444'
+                };
+            }
+
+            if (normalizedStatus === 'attention') {
+                return {
+                    level: 'attention',
+                    badge: 'Attention',
+                    label: 'Attention',
+                    cssModifier: 'rayat-metric-card--attention',
+                    borderColor: 'rgba(245, 158, 11, 0.28)',
+                    accentColor: '#f59e0b'
+                };
+            }
+
+            return {
+                level: 'normal',
+                badge: '',
+                label: 'Normal',
+                cssModifier: '',
+                borderColor: 'rgba(34, 197, 94, 0.14)',
+                accentColor: '#22c55e'
+            };
+        }
+
+        function normalizeDemoMetricKey(name = '') {
+            return String(name)
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '');
+        }
+
+        function getDemoFallbackMetricDefinitions(sensorKey) {
+            const sensorFallback = DEMO_FALLBACK[sensorKey];
+            if (!Array.isArray(sensorFallback)) {
+                return [];
+            }
+
+            const iconMap = {
+                energia: {
+                    Consommation: '⚡',
+                    Tension: '🔌',
+                    Courant: '🔋'
+                },
+                acqua: {
+                    'pH Eau': '🧪',
+                    'EC Eau': '⚡',
+                    'Température Eau': '🌡️',
+                    'Débit': '💧'
+                }
+            };
+
+            return sensorFallback.map((metric) => ({
+                key: normalizeDemoMetricKey(metric.name),
+                labelLiteral: metric.name,
+                value: metric.value,
+                unit: metric.unit,
+                icon: iconMap[sensorKey]?.[metric.name] || sensorData[sensorKey]?.icon || '📟',
+                customRange: {
+                    min: metric.ideal_min,
+                    max: metric.ideal_max,
+                    unit: metric.unit
+                },
+                gaugeBounds: {
+                    min: metric.min,
+                    max: metric.max
+                },
+                rangeLabelLiteral: metric.label,
+                stateOverride: getExplicitMetricState(metric.status),
+                demoBadge: true
+            }));
         }
 
         // RAYAT FIX - popup subscription / new customers / email
@@ -793,7 +919,7 @@
                             <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white text-[#25D366] shadow-lg mb-6">
                                 ${getWhatsappIconSvg('w-8 h-8')}
                             </div>
-                            <h3 class="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-4">${t('whatsappSectionTitle')}</h3>
+                            <h3 class="section-title-main">${t('whatsappSectionTitle')}</h3>
                             <p class="text-base md:text-lg text-slate-700 leading-relaxed max-w-2xl mx-auto">${t('whatsappSectionText')}</p>
                             <a href="${getWhatsappHref()}" target="_blank" rel="noopener" onclick="trackEvent('WhatsApp Click')" class="inline-flex items-center justify-center gap-3 mt-8 bg-[#25D366] hover:bg-[#1ebd5a] text-white font-black px-8 py-4 rounded-2xl transition shadow-lg shadow-green-500/25 min-h-[56px]">
                                 ${getWhatsappIconSvg('w-6 h-6')}
@@ -2983,12 +3109,14 @@
 
         function renderMetricCard(group, metric, options = {}) {
             const normalizedValue = normalizeMetricValue(group, metric.key, metric.value);
-            const range = getRangeForMetric(group, metric.key);
-            const unit = getMetricUnit(group, metric.key, metric.unit || metric.unita || '');
-            const state = getMetricState(normalizedValue, range);
-            const gauge = range ? getGaugeMeta(group, metric.key, range) : null;
+            const range = metric.customRange || getRangeForMetric(group, metric.key);
+            const unit = range?.unit || getMetricUnit(group, metric.key, metric.unit || metric.unita || '');
+            const state = metric.stateOverride || getMetricState(normalizedValue, range);
+            const gauge = metric.gaugeBounds
+                ? getGaugeMetaFromBounds(metric.gaugeBounds, range)
+                : (range ? getGaugeMeta(group, metric.key, range) : null);
             const gaugeMarkerPercent = gauge ? getGaugeMarkerPercent(normalizedValue, gauge.min, gauge.max) : null;
-            const rangeLabel = buildOptimalRangeLabel(range, group === 'climate' ? 'climate' : 'range');
+            const rangeLabel = metric.rangeLabelLiteral || buildOptimalRangeLabel(range, group === 'climate' ? 'climate' : 'range');
             const metricInstalled = metric.installed !== false && Number.isFinite(normalizedValue);
             const mobileOrderMap = {
                 temperature: 1,
@@ -3006,7 +3134,17 @@
             const mobileOrderClass = mobileOrderMap[metric.key] ? `rayat-metric-card--mobile-order-${mobileOrderMap[metric.key]}` : '';
             const cardModifierClass = metricInstalled ? state.cssModifier : 'rayat-metric-card--inactive';
             const stateClass = metricInstalled ? getLevelClass(state.level) : 'text-slate-500';
-            const stateLabel = metricInstalled ? state.label : t('sensorNotInstalled');
+            const stateLabel = metricInstalled ? escapeHtml(state.label) : t('sensorNotInstalled');
+            const titleLabel = metric.labelLiteral ? escapeHtml(metric.labelLiteral) : t(metric.label);
+            const badges = [];
+
+            if (metricInstalled && state.badge) {
+                badges.push(`<span class="rayat-alert-badge ${state.level === 'alert' ? 'rayat-alert-badge--alert' : 'rayat-alert-badge--attention'}">${escapeHtml(state.badge)}</span>`);
+            }
+
+            if (metric.demoBadge) {
+                badges.push('<span class="rayat-alert-badge rayat-alert-badge--demo">Demo</span>');
+            }
 
             return `
                 <article class="rayat-metric-card ${cardModifierClass} ${mobileOrderClass}" data-metric-key="${metric.key}">
@@ -3014,16 +3152,16 @@
                         <div class="rayat-metric-card-header-main">
                             <span class="rayat-metric-card-icon">${metric.icon}</span>
                             <div class="rayat-metric-card-copy">
-                                <p class="rayat-metric-card-title">${t(metric.label)}</p>
+                                <p class="rayat-metric-card-title">${titleLabel}</p>
                                 <p class="rayat-metric-card-state ${stateClass}">${stateLabel}</p>
                             </div>
                         </div>
-                        ${metricInstalled && state.badge ? `<span class="rayat-alert-badge ${state.level === 'alert' ? 'rayat-alert-badge--alert' : 'rayat-alert-badge--attention'}">${state.badge}</span>` : ''}
+                        ${badges.length ? `<div class="rayat-metric-card-badges">${badges.join('')}</div>` : ''}
                     </div>
                     <div class="flex items-end gap-2 mb-5">
                         ${metricInstalled ? `
                             <span class="text-5xl font-black text-slate-900 leading-none">${formatMetricValue(normalizedValue)}</span>
-                            <span class="text-sm font-bold text-slate-400 uppercase">${unit}</span>
+                            <span class="text-sm font-bold text-slate-400 uppercase">${escapeHtml(unit)}</span>
                         ` : `
                             <span class="rayat-metric-card-placeholder">${t('sensorNotInstalled')}</span>
                         `}
@@ -3035,11 +3173,11 @@
                             </div>
                         </div>
                         <div class="flex justify-between text-[11px] font-semibold text-slate-400 mt-3">
-                            <span>${formatMetricValue(gauge.min)}${unit ? ` ${unit}` : ''}</span>
-                            <span>${formatMetricValue(gauge.max)}${unit ? ` ${unit}` : ''}</span>
+                            <span>${formatMetricValue(gauge.min)}${unit ? ` ${escapeHtml(unit)}` : ''}</span>
+                            <span>${formatMetricValue(gauge.max)}${unit ? ` ${escapeHtml(unit)}` : ''}</span>
                         </div>
                     ` : ''}
-                    <p class="rayat-metric-card-range ${state.level === 'normal' ? 'text-slate-600' : getLevelClass(state.level)}">${rangeLabel}</p>
+                    <p class="rayat-metric-card-range ${state.level === 'normal' ? 'text-slate-600' : getLevelClass(state.level)}">${escapeHtml(rangeLabel)}</p>
                 </article>
             `;
         }
@@ -3067,6 +3205,20 @@
                 : (sensorKey === 'clima' ? 'rayat-sensor-card-grid--climate' : '');
 
             return `<div class="rayat-sensor-card-grid ${variantClass} ${className}">${rows}</div>`;
+        }
+
+        function renderDemoFallbackMetricGrid(sensorKey, className = '') {
+            const sensor = sensorData[sensorKey];
+            if (Array.isArray(sensor?.details) && sensor.details.length) {
+                return '';
+            }
+
+            const metrics = getDemoFallbackMetricDefinitions(sensorKey);
+            if (!metrics.length) {
+                return '';
+            }
+
+            return `<div class="rayat-sensor-card-grid ${className}">${metrics.map((metric) => renderMetricCard('demo', metric)).join('')}</div>`;
         }
 
         function isHomepageMetricInstalled(sensorKey, metric) {
@@ -3125,10 +3277,10 @@
                 <section class="rayat-home-technology-section">
                     <div class="container mx-auto px-4">
                         <div class="rayat-home-technology-shell">
-                            <h2 class="rayat-home-technology-title">Tecnologia Rayat</h2>
+                            <h2 class="section-title-main rayat-home-technology-title">Tecnologia Rayat</h2>
                             <div class="rayat-home-technology-grid">
                                 ${HOMEPAGE_TECH_PRODUCTS.map((product) => `
-                                    <article class="rayat-home-technology-card ${product.featured ? 'is-featured' : ''}">
+                                    <article class="rayat-metric-card rayat-home-technology-card ${product.featured ? 'is-featured' : ''}">
                                         <div class="rayat-home-technology-card__icon" aria-hidden="true">${product.icon}</div>
                                         <p class="rayat-home-technology-card__label">${product.label}</p>
                                     </article>
@@ -3145,12 +3297,12 @@
                 <section class="rayat-home-sensors-section">
                     <div class="container mx-auto px-4">
                         <div class="rayat-home-sensors-intro">
-                            <h2 class="rayat-home-sensors-intro__title">Dati reali dai sensori Rayat installati a Taroudant</h2>
+                            <h2 class="section-title-main rayat-home-sensors-intro__title">Dati reali dai sensori Rayat installati a Taroudant</h2>
                             <p class="rayat-home-sensors-intro__subtitle">Dati reali da sensori installati in una serra di banane a Taroudant, monitorati insieme a Hassan Araba con oltre 20 anni di esperienza, per analizzare i dati e ottimizzare le decisioni sul campo.</p>
                         </div>
                         <div class="rayat-home-sensors-shell">
                             <div class="rayat-home-sensors-head">
-                                <p class="rayat-home-sensors-title">Sistema completo: Suolo + Clima</p>
+                                <h3 class="section-title-main rayat-home-sensors-title">Sistema completo: Suolo + Clima</h3>
                                 <div class="rayat-home-sensors-statuses">
                                     ${renderHomepageStatusBadge()}
                                 </div>
@@ -4625,7 +4777,7 @@
                 ${renderHomeLiveSensorsSection()}
                 <section class="py-16 bg-gradient-to-b from-white to-green-50" id="chi-siamo-section">
                     <div class="container mx-auto px-4">
-                        <h3 class="text-4xl font-bold text-center mb-4 text-green-800">${t('aboutUs')}</h3>
+                        <h3 class="section-title-main">${t('aboutUs')}</h3>
                         <p class="text-xl text-center text-gray-600 mb-12">${t('ourReality')}</p>
                         
                         <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl p-8 md:p-12 mb-12">
@@ -4663,7 +4815,7 @@
                     <div class="container mx-auto px-4">
                         <div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-6">
                             <div>
-                                <h3 class="text-3xl font-black text-green-800 uppercase tracking-tighter mb-2">${t('mapTitle')}</h3>
+                                <h3 class="section-title-main">${t('mapTitle')}</h3>
                                 <p class="text-gray-600 font-medium">${t('mapSub')}</p>
                             </div>
                             <!-- Live Stats -->
@@ -6014,7 +6166,37 @@
                 ${renderActiveAlertFeed('clima')}`;
             };
 
+            const renderEnergy = () => {
+                const fallbackGrid = renderDemoFallbackMetricGrid('energia', 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-12');
+                if (fallbackGrid) {
+                    return `
+                    ${renderDemoSectionHeading(t('sensorEnName'))}
+                    ${fallbackGrid}
+                    ${renderActiveAlertFeed('energia')}`;
+                }
+
+                return `
+                ${renderDemoSectionHeading(t(current.nome))}
+                <div class="flex flex-col md:flex-row items-center justify-between mb-16">
+                    <div class="flex items-center justify-center">
+                        <div class="text-[10rem] transform -rotate-12 transition-transform hover:rotate-0 duration-700">${current.icon}</div>
+                    </div>
+                    <div class="text-center md:text-right mt-12 md:mt-0">
+                        <div class="text-[10rem] md:text-[12rem] font-black text-slate-900 tracking-tighter leading-none">${formatMetricValue(current.valore)}<span class="text-4xl text-slate-300 ml-4 uppercase font-black">${current.unita}</span></div>
+                    </div>
+                </div>
+                ${renderActiveAlertFeed('energia')}`;
+            };
+
             const renderWater = () => {
+                const fallbackGrid = renderDemoFallbackMetricGrid('acqua', 'grid grid-cols-1 md:grid-cols-2 gap-6 mb-12');
+                if (fallbackGrid) {
+                    return `
+                    ${renderDemoSectionHeading(t('sensorWaName'))}
+                    ${fallbackGrid}
+                    ${renderActiveAlertFeed('acqua')}`;
+                }
+
                 let numDays = 1;
                 if (filterState.period === '7d') numDays = 7;
                 else if (filterState.period === '30d') numDays = 30;
@@ -6101,18 +6283,7 @@
                         <div class="absolute top-0 right-0 w-64 h-64 bg-green-50 rounded-full -mr-32 -mt-32 opacity-50"></div>
                         ${/* Demo Mode: Error overlay removed */ ''}
                         <div class="relative z-10">
-                            ${selectedSensor === 'acqua' ? renderWater() : (selectedSensor === 'terreno' ? render7in1() : (selectedSensor === 'clima' ? renderClimate() : `
-                                    ${renderDemoSectionHeading(t(current.nome))}
-                                    <div class="flex flex-col md:flex-row items-center justify-between mb-16">
-                                    <div class="flex items-center justify-center">
-                                            <div class="text-[10rem] transform -rotate-12 transition-transform hover:rotate-0 duration-700">${current.icon}</div>
-                                        </div>
-                                        <div class="text-center md:text-right mt-12 md:mt-0">
-                                            <div class="text-[10rem] md:text-[12rem] font-black text-slate-900 tracking-tighter leading-none">${formatMetricValue(current.valore)}<span class="text-4xl text-slate-300 ml-4 uppercase font-black">${current.unita}</span></div>
-                                        </div>
-                                    </div>
-                                    ${renderActiveAlertFeed('energia')}
-                                `))}
+                            ${selectedSensor === 'acqua' ? renderWater() : (selectedSensor === 'terreno' ? render7in1() : (selectedSensor === 'clima' ? renderClimate() : renderEnergy()))}
                         </div>
                     </div>
 
