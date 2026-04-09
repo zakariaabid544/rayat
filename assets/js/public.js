@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.18';
+        const FRONTEND_ASSET_VERSION = '1.1.19';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -3162,11 +3162,10 @@
                             </div>
                             ${renderHomepageSensorGrid()}
                             <div class="rayat-home-sensors-cta">
-                                <a href="${getWhatsappHref()}" target="_blank" rel="noopener" onclick="trackEvent('WhatsApp Click')" class="rayat-home-demo-cta rayat-home-demo-cta--whatsapp" aria-label="Contattami su WhatsApp al ${WHATSAPP_DISPLAY_NUMBER}">
+                                <a href="${getWhatsappHref()}" target="_blank" rel="noopener" onclick="trackEvent('WhatsApp Click')" class="rayat-home-demo-cta rayat-home-demo-cta--whatsapp" aria-label="Apri la chat diretta su WhatsApp">
                                     <span class="rayat-home-demo-cta__icon-wrap" aria-hidden="true">${getWhatsappIconSvg('rayat-home-demo-cta__icon')}</span>
-                                    <span class="rayat-home-demo-cta__title">Contattami per info su WhatsApp</span>
-                                    <strong class="rayat-home-demo-cta__number">${WHATSAPP_DISPLAY_NUMBER}</strong>
-                                    <span class="rayat-home-demo-cta__note">Chiama, scrivi o manda un audio</span>
+                                    <span class="rayat-home-demo-cta__title">Contattami su WhatsApp</span>
+                                    <span class="rayat-home-demo-cta__note">Un click e si apre la chat diretta</span>
                                 </a>
                             </div>
                         </div>
