@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.14';
+        const FRONTEND_ASSET_VERSION = '1.1.15';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -73,6 +73,12 @@
         };
         const DASHBOARD_SENSOR_ROUTE_KEYS = new Set(['energia', 'acqua', 'terreno', 'clima']);
         const HOMEPAGE_REAL_SENSOR_KEYS = ['terreno', 'clima'];
+        const HOMEPAGE_TECH_PRODUCTS = [
+            { icon: '⚡', label: 'RAYAT ENERGIA', featured: true },
+            { icon: '💧', label: 'RAYAT ACQUA', featured: false },
+            { icon: '🌱', label: 'RAYAT SUOLO 7 IN 1', featured: false },
+            { icon: '🌡️', label: 'RAYAT CLIMA', featured: false }
+        ];
         const GAUGE_MARKER_SAFE_OFFSET_PERCENT = 5;
         const WHATSAPP_CTA_URL = 'https://wa.me/393513203307';
         const WHATSAPP_DISPLAY_NUMBER = '+39 351 320 3307';
@@ -3114,6 +3120,26 @@
             return `<div class="rayat-home-sensor-grid">${cards}</div>`;
         }
 
+        function renderHomeTechnologySection() {
+            return `
+                <section class="rayat-home-technology-section">
+                    <div class="container mx-auto px-4">
+                        <div class="rayat-home-technology-shell">
+                            <h2 class="rayat-home-technology-title">Tecnologia Rayat</h2>
+                            <div class="rayat-home-technology-grid">
+                                ${HOMEPAGE_TECH_PRODUCTS.map((product) => `
+                                    <article class="rayat-home-technology-card ${product.featured ? 'is-featured' : ''}">
+                                        <div class="rayat-home-technology-card__icon" aria-hidden="true">${product.icon}</div>
+                                        <p class="rayat-home-technology-card__label">${product.label}</p>
+                                    </article>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            `;
+        }
+
         function renderHomeLiveSensorsSection() {
             return `
                 <section class="rayat-home-sensors-section">
@@ -4595,6 +4621,7 @@
                     </div>
                 </section>
 
+                ${renderHomeTechnologySection()}
                 ${renderHomeLiveSensorsSection()}
                 <section class="py-16 bg-gradient-to-b from-white to-green-50" id="chi-siamo-section">
                     <div class="container mx-auto px-4">
