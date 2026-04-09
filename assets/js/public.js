@@ -15,7 +15,7 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.13';
+        const FRONTEND_ASSET_VERSION = '1.1.14';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
@@ -3063,81 +3063,104 @@
             return `<div class="rayat-sensor-card-grid ${variantClass} ${className}">${rows}</div>`;
         }
 
-        function renderHomeSensorBadge(sensorKey) {
-            const sensor = sensorData[sensorKey];
-            if (!sensor) {
-                return '';
+        function isHomepageMetricInstalled(sensorKey, metric) {
+            if (!metric || metric.installed === false) {
+                return false;
             }
 
+            if (sensorKey === 'clima' && metric.key === 'windSpeed') {
+                return false;
+            }
+
+            return true;
+        }
+
+        function getHomepageMetrics(sensorKey) {
+            const sensor = sensorData[sensorKey];
+            if (!sensor?.details?.length) {
+                return [];
+            }
+
+            return sensor.details.filter((metric) => isHomepageMetricInstalled(sensorKey, metric));
+        }
+
+        function renderHomepageStatusBadge(sensorKey) {
+            const statusMeta = getSensorConnectionMeta(sensorKey);
+            const badgeLabel = sensorKey === 'terreno' ? 'Suolo' : 'Clima';
+            const statusLabel = statusMeta.state === 'online'
+                ? 'Online'
+                : (statusMeta.state === 'offline' ? 'Offline' : 'In aggiornamento');
+
             return `
-                <span class="inline-flex items-center gap-3 rounded-full border border-green-100 bg-green-50 px-4 py-2 text-sm font-black uppercase tracking-[0.14em] text-green-800">
-                    <span class="text-lg" aria-hidden="true">${sensor.icon}</span>
-                    <span>${t(sensor.nome)}</span>
+                <span class="rayat-home-status-badge ${statusMeta.className}">
+                    <span class="rayat-home-status-badge__dot" aria-hidden="true"></span>
+                    <span class="rayat-home-status-badge__label">${badgeLabel}</span>
+                    <span class="rayat-home-status-badge__state">${statusLabel}</span>
                 </span>
             `;
         }
 
-        function renderHomeLiveSensorPanel(sensorKey, group) {
-            const sensor = sensorData[sensorKey];
-            const statusMeta = getSensorConnectionMeta(sensorKey);
+        function renderHomepageMetricCard(sensorKey, group, metric) {
+            if (!isHomepageMetricInstalled(sensorKey, metric)) {
+                return '';
+            }
+
+            const normalizedValue = normalizeMetricValue(group, metric.key, metric.value);
+            const range = getRangeForMetric(group, metric.key);
+            const unit = getMetricUnit(group, metric.key, metric.unit || metric.unita || '');
+            const gauge = range ? getGaugeMeta(group, metric.key, range) : null;
+            const gaugeMarkerPercent = gauge ? getGaugeMarkerPercent(normalizedValue, gauge.min, gauge.max) : null;
+            const hasValue = Number.isFinite(normalizedValue);
+            const rangeLabel = range
+                ? buildOptimalRangeLabel(range, group === 'climate' ? 'climate' : 'range')
+                : t('refreshingDataAction');
 
             return `
-                <article class="rayat-home-live-panel bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(15,23,42,0.08)] border border-slate-100 p-6 md:p-8">
-                    <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between mb-6">
-                        <div>
-                            <p class="text-xs font-black uppercase tracking-[0.28em] text-slate-400 mb-2">${t('realTimeMonitoring')}</p>
-                            <h4 class="text-2xl md:text-3xl font-black text-green-800 tracking-tighter">${t(sensor.nome)}</h4>
-                            <p class="mt-3 text-sm md:text-base font-medium leading-relaxed text-slate-500">${t(sensor.descrizioneEstesa || sensor.descrizione)}</p>
+                <article class="rayat-home-metric-card ${hasValue ? 'is-live' : 'is-loading'}" data-home-sensor="${sensorKey}" data-metric-key="${metric.key}">
+                    <div class="rayat-home-metric-card__head">
+                        <p class="rayat-home-metric-card__title">${t(metric.label)}</p>
+                    </div>
+                    <div class="rayat-home-metric-card__value-row">
+                        <span class="rayat-home-metric-card__value">${hasValue ? formatMetricValue(normalizedValue) : '--'}</span>
+                        <span class="rayat-home-metric-card__unit">${unit || ''}</span>
+                    </div>
+                    ${gauge ? `
+                        <div class="rayat-home-metric-card__gauge">
+                            <div class="rayat-range-track-shell">
+                                <div class="rayat-range-track" style="background:${gauge.gradient};">
+                                    ${hasValue && gaugeMarkerPercent !== null ? `<div class="rayat-range-pointer" style="left:${gaugeMarkerPercent}%;" aria-hidden="true"></div>` : ''}
+                                </div>
+                            </div>
                         </div>
-                        <span class="rayat-monitoring-status-pill ${statusMeta.className}">
-                            <span class="rayat-monitoring-status-pill__dot" aria-hidden="true"></span>
-                            <span class="rayat-monitoring-status-pill__copy">
-                                <strong>${statusMeta.label}</strong>
-                                <span>${t(sensor.descrizione)}</span>
-                            </span>
-                        </span>
-                    </div>
-                    ${renderSensorMetricGrid(sensorKey, group, 'grid grid-cols-1 md:grid-cols-2 gap-6')}
-                    <div class="mt-6 flex justify-start">
-                        <button
-                            type="button"
-                            class="inline-flex min-h-[52px] items-center justify-center rounded-2xl bg-green-700 px-6 py-3 text-sm font-black uppercase tracking-[0.14em] text-white transition hover:bg-green-800"
-                            onclick="openSensorDashboard('${sensorKey}')"
-                        >
-                            ${user ? t('dashboardBtn') : t('tryDemo')}
-                        </button>
-                    </div>
+                    ` : ''}
+                    <p class="rayat-home-metric-card__meta">${hasValue ? rangeLabel : t('refreshingDataAction')}</p>
                 </article>
             `;
         }
 
+        function renderHomepageSensorGrid() {
+            const cards = HOMEPAGE_REAL_SENSOR_KEYS.flatMap((sensorKey) => {
+                const group = sensorKey === 'terreno' ? 'soil' : 'climate';
+                return getHomepageMetrics(sensorKey).map((metric) => renderHomepageMetricCard(sensorKey, group, metric));
+            }).join('');
+
+            return `<div class="rayat-home-sensor-grid">${cards}</div>`;
+        }
+
         function renderHomeLiveSensorsSection() {
             return `
-                <section class="py-16 bg-gradient-to-b from-white to-slate-50 border-b border-slate-100">
+                <section class="rayat-home-sensors-section">
                     <div class="container mx-auto px-4">
-                        <div class="rayat-monitoring-toolbar">
-                            <div class="rayat-monitoring-toolbar__copy">
-                                <h2 class="rayat-monitoring-toolbar__title">${t('liveMonitoringTitle')}</h2>
-                                <p class="rayat-monitoring-toolbar__subtitle">${t('liveMonitoringSubtitle')}</p>
-                            </div>
-                        </div>
-                        <div class="rounded-[2.5rem] border border-slate-100 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:p-8 lg:p-10">
-                            <div class="mb-8 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                                <div class="max-w-3xl">
-                                    <p class="mb-3 text-xs font-black uppercase tracking-[0.28em] text-slate-400">${t('realTimeMonitoring')}</p>
-                                    <h3 class="text-3xl font-black tracking-tighter text-slate-900 md:text-5xl">
-                                        ${t('sensorSoName')} + ${t('sensorClName')}
-                                    </h3>
-                                    <p class="mt-4 text-base leading-relaxed text-slate-600 md:text-lg">
-                                        ${t('sensorSoDesc')} • ${t('sensorClDetails')}
-                                    </p>
-                                </div>
-                                <div class="flex flex-wrap gap-3">
-                                    ${HOMEPAGE_REAL_SENSOR_KEYS.map((sensorKey) => renderHomeSensorBadge(sensorKey)).join('')}
+                        <div class="rayat-home-sensors-shell">
+                            <div class="rayat-home-sensors-head">
+                                <h2 class="rayat-home-sensors-title">Sistema completo: Suolo + Clima</h2>
+                                <div class="rayat-home-sensors-statuses">
+                                    ${HOMEPAGE_REAL_SENSOR_KEYS.map((sensorKey) => renderHomepageStatusBadge(sensorKey)).join('')}
                                 </div>
                             </div>
-                            <div class="grid gap-8 xl:grid-cols-2">
-                                ${HOMEPAGE_REAL_SENSOR_KEYS.map((sensorKey) => renderHomeLiveSensorPanel(sensorKey, sensorKey === 'terreno' ? 'soil' : 'climate')).join('')}
+                            ${renderHomepageSensorGrid()}
+                            <div class="rayat-home-sensors-cta">
+                                <a href="/dashboard" class="rayat-home-demo-cta">Prova la demo</a>
                             </div>
                         </div>
                     </div>
@@ -4577,26 +4600,12 @@
                 ${renderHeader(!!user)}
                 
                 <section class="rayat-hero">
-                    <div class="rayat-hero-orb rayat-hero-orb--one"></div>
-                    <div class="rayat-hero-orb rayat-hero-orb--two"></div>
                     <div class="container mx-auto px-4">
                         <div class="rayat-hero-shell">
-                            <div class="rayat-hero-kicker">${t('heroEyebrow')}</div>
-                            <!-- RAYAT FIX - forza il titolo hero su tre righe controllate -->
-                            <h1 class="rayat-hero-title rayat-fade-up">
-                                <span class="rayat-hero-title-line rayat-hero-title-line--primary">${t('heroTitleLine1')}</span>
-                                <span class="rayat-hero-title-line rayat-hero-title-line--secondary">${t('heroTitleLine2')}</span>
-                                <span class="rayat-hero-title-line rayat-hero-title-line--accent rayat-hero-accent">${t('heroTitleAccent')}</span>
+                            <h1 class="rayat-hero-title rayat-hero-title--homepage rayat-fade-up">
+                                Dati reali dai sensori Rayat installati a Taroudant
                             </h1>
-                            <p class="rayat-hero-subtitle rayat-fade-in">${t('heroPlatformSub')}</p>
-                            <div class="rayat-mobile-actions flex gap-4 justify-center">
-                                <button onclick="setViewWithTracking('demo')" class="bg-orange-500 hover:bg-orange-600 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-orange-950/20">
-                                ${t('tryDemo')}
-                                </button>
-                                <button onclick="setView('servizi')" class="bg-white text-green-800 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-green-950/10">
-                                ${t('discoverServices')}
-                                </button>
-                            </div>
+                            <p class="rayat-hero-subtitle rayat-hero-subtitle--homepage rayat-fade-in">Dati reali da sensori installati in una serra di banane a Taroudant, monitorati insieme a Hassan Araba con oltre 20 anni di esperienza, per analizzare i dati e ottimizzare le decisioni sul campo.</p>
                         </div>
                     </div>
                 </section>
