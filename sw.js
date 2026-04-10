@@ -2,26 +2,27 @@
 // RAYAT Service Worker - Offline Cache
 // =============================================
 // RAYAT FIX - mobile app ready optimization
-const CACHE_VERSION = '1.1.24';
+const CACHE_VERSION = '1.1.25';
 const CACHE_NAME = `rayat-${CACHE_VERSION}`;
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
     './admin/index.html',
-    './manifest.json?v=1.1.24',
-    './favicon.png?v=1.1.24',
-    './favicon-32.png?v=1.1.24',
-    './favicon.ico?v=1.1.24',
-    './assets/css/public.css?v=1.1.24',
-    './assets/js/public.js?v=1.1.24',
+    './manifest.json',
+    './favicon.png',
+    './favicon-32.png',
+    './favicon.ico',
+    './assets/css/public.css?v=1.1.25',
+    './assets/js/public.js?v=1.1.25',
     './assets/logo/logo-black.svg',
     './assets/logo/logo-green.svg',
     './assets/logo/logo-white.svg',
-    './icons/apple-touch-icon.png?v=1.1.24',
-    './icons/favicon-16x16.png?v=1.1.24',
-    './icons/favicon-32x32.png?v=1.1.24',
-    './icons/icon-192.png?v=1.1.24',
-    './icons/icon-512.png?v=1.1.24',
+    './icons/apple-touch-icon.png',
+    './icons/favicon-16x16.png',
+    './icons/favicon-32x32.png',
+    './icons/favicon-48x48.png',
+    './icons/icon-192.png',
+    './icons/icon-512.png',
     'https://cdn.tailwindcss.com',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
