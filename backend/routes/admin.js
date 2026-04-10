@@ -17,6 +17,10 @@ const {
     withTransaction
 } = require('../config/database');
 const {
+    getOfflineAfterMinutes,
+    getPostgresMinuteIntervalLiteral
+} = require('../utils/monitoring-config');
+const {
     extractAdminSessionToken,
     getAdminSessionCookieOptions,
     isPrivilegedAdminRole,
@@ -757,6 +761,7 @@ router.post('/logout', async (req, res) => {
 router.get('/stats', isAdminRole, async (req, res) => {
     try {
         const flags = await getUserColumnFlags();
+        const offlineIntervalLiteral = getPostgresMinuteIntervalLiteral(getOfflineAfterMinutes());
         const [clientCount] = await query(
             `SELECT COUNT(*) AS count
              FROM users
@@ -767,7 +772,7 @@ router.get('/stats', isAdminRole, async (req, res) => {
         const [onlineDevices] = await query(
             `SELECT COUNT(*) AS count
              FROM devices
-             WHERE last_seen >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)`
+             WHERE last_seen >= NOW() - INTERVAL '${offlineIntervalLiteral}'`
         );
         const [sensorCount] = await query('SELECT COUNT(*) AS count FROM sensors WHERE enabled = 1');
         const [latestReading] = await query('SELECT MAX(updated_at) AS last FROM sensor_latest');
@@ -1541,6 +1546,7 @@ router.delete('/registrations/:id', isAdminRole, isSuperAdmin, async (req, res) 
 router.get('/sensors', isAdminRole, async (req, res) => {
     try {
         const flags = await getUserColumnFlags();
+        const offlineIntervalLiteral = getPostgresMinuteIntervalLiteral(getOfflineAfterMinutes());
         const { page, pageSize, offset } = parsePagination(req, 50);
         const { whereSql, params } = buildSensorWhereClause(req, flags);
 
@@ -1573,7 +1579,7 @@ router.get('/sensors', isAdminRole, async (req, res) => {
                 sl.value AS latest_value,
                 sl.timestamp AS last_reading,
                 CASE
-                    WHEN d.last_seen >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) THEN 'online'
+                    WHEN d.last_seen >= NOW() - INTERVAL '${offlineIntervalLiteral}' THEN 'online'
                     WHEN d.last_seen IS NULL THEN 'never'
                     ELSE 'offline'
                 END AS online_status
@@ -1584,7 +1590,7 @@ router.get('/sensors', isAdminRole, async (req, res) => {
              WHERE ${whereSql}
              ORDER BY
                 CASE
-                    WHEN d.last_seen >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) THEN 0
+                    WHEN d.last_seen >= NOW() - INTERVAL '${offlineIntervalLiteral}' THEN 0
                     WHEN d.last_seen IS NULL THEN 2
                     ELSE 1
                 END,
@@ -1611,6 +1617,7 @@ router.get('/sensors', isAdminRole, async (req, res) => {
 router.get('/devices', isAdminRole, async (req, res) => {
     try {
         const flags = await getUserColumnFlags();
+        const offlineIntervalLiteral = getPostgresMinuteIntervalLiteral(getOfflineAfterMinutes());
         const { page, pageSize, offset } = parsePagination(req, 50);
         const { whereSql, params } = buildDeviceWhereClause(req, flags);
         const metricsJoin = `
@@ -1653,7 +1660,7 @@ router.get('/devices', isAdminRole, async (req, res) => {
                 COALESCE(sm.sensor_count, 0) AS sensor_count,
                 sm.last_reading,
                 CASE
-                    WHEN d.last_seen >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) THEN 'online'
+                    WHEN d.last_seen >= NOW() - INTERVAL '${offlineIntervalLiteral}' THEN 'online'
                     WHEN d.last_seen IS NULL THEN 'never'
                     ELSE 'offline'
                 END AS online_status

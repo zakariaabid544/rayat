@@ -2,6 +2,13 @@ const cron = require('node-cron');
 const nodemailer = require('nodemailer');
 
 const { query } = require('../../config/database');
+const {
+  getMonitoringConfig,
+  getMissingDataThresholdMinutes,
+  getOfflineAfterMinutes,
+  getRouterIntervalMinutes,
+  parseMinutes
+} = require('../../utils/monitoring-config');
 
 const ALERT_TYPE = 'missing_sensor_data';
 const ALERT_SUBJECT = '⚠️ RAYAT – Nessun dato ricevuto';
@@ -45,17 +52,8 @@ const mailConfigCache = {
   values: null
 };
 
-function parseMinutes(value, fallback) {
-  const normalized = Number.parseInt(String(value ?? ''), 10);
-  return Number.isFinite(normalized) && normalized > 0 ? normalized : fallback;
-}
-
 function getExpectedDataMinutes() {
-  return parseMinutes(process.env.ALERT_EXPECTED_DATA_MINUTES, 30);
-}
-
-function getMissingDataThresholdMinutes() {
-  return parseMinutes(process.env.ALERT_MISSING_DATA_THRESHOLD_MINUTES, 45);
+  return getRouterIntervalMinutes();
 }
 
 function getNotificationCooldownMinutes() {
@@ -283,8 +281,9 @@ function buildAlertText(lastUpdate, minutesSinceLastData, options = {}) {
     '',
     `Ultimo dato ricevuto: ${lastUpdateText}`,
     `Minuti trascorsi dall’ultimo dato: ${minutesSinceLastData}`,
-    `Intervallo atteso: ${getExpectedDataMinutes()} minuti`,
-    `Soglia alert: ${getMissingDataThresholdMinutes()} minuti`,
+    `Intervallo router previsto: ${getExpectedDataMinutes()} minuti`,
+    `Stato offline sul sito dopo: ${getOfflineAfterMinutes()} minuti`,
+    `Soglia email alert: ${getMissingDataThresholdMinutes()} minuti`,
     '',
     'Possibile problema: credito SIM insufficiente, SIM non attiva oppure anomalia del router/DTU/broker.',
     'Azione consigliata: recarsi in campo oppure ricaricare la SIM e verificare la connettività del router.'
@@ -615,12 +614,19 @@ function notifyMissingDataHeartbeat(timestamp) {
 
 async function getMissingDataAlertRuntimeStatus(options = {}) {
   const mailConfig = await resolveAlertMailConfig(options);
+  const monitoringConfig = getMonitoringConfig();
 
   return {
     mode: 'exact_timer_plus_minute_sync',
     cron: getAlertCronExpression(),
-    expectedDataMinutes: getExpectedDataMinutes(),
-    missingDataThresholdMinutes: getMissingDataThresholdMinutes(),
+    configSource: monitoringConfig.configSource,
+    routerIntervalMinutes: monitoringConfig.routerIntervalMinutes,
+    expectedDataMinutes: monitoringConfig.expectedDataMinutes,
+    offlineGraceMinutes: monitoringConfig.offlineGraceMinutes,
+    offlineAfterMinutes: monitoringConfig.offlineAfterMinutes,
+    alertExtraMinutes: monitoringConfig.alertExtraMinutes,
+    emailAfterMinutes: monitoringConfig.emailAfterMinutes,
+    missingDataThresholdMinutes: monitoringConfig.missingDataThresholdMinutes,
     notificationCooldownMinutes: getNotificationCooldownMinutes(),
     smtpConfigured: Boolean(
       mailConfig.user

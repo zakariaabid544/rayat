@@ -10,6 +10,11 @@ const {
     ingestTrustedReadings,
     ingestPublicReadings
 } = require('../utils/sensor-ingest');
+const {
+    getMonitoringConfig,
+    getOfflineAfterMinutes,
+    getPostgresMinuteIntervalLiteral
+} = require('../utils/monitoring-config');
 const { cleanString, parseSensorUpdate } = require('../utils/sensor-update-parser');
 
 const DEFAULT_BRIDGE_TOKEN_HEADER = 'x-rayat-bridge-token';
@@ -147,6 +152,7 @@ function resolveHistoryRange(queryParams = {}) {
 // GET /api/sensors/public/latest - Ultimi dati pubblici per la demo senza login
 router.get('/public/latest', async (_req, res) => {
     try {
+        const offlineIntervalLiteral = getPostgresMinuteIntervalLiteral(getOfflineAfterMinutes());
         const rows = await query(
             `SELECT
                 sensor_type AS type,
@@ -155,7 +161,7 @@ router.get('/public/latest', async (_req, res) => {
                 topic,
                 timestamp,
                 CASE
-                    WHEN timestamp >= NOW() - INTERVAL '35 minutes' THEN 'online'
+                    WHEN timestamp >= NOW() - INTERVAL '${offlineIntervalLiteral}' THEN 'online'
                     ELSE 'offline'
                 END AS online_status
              FROM public_sensor_latest
@@ -165,7 +171,8 @@ router.get('/public/latest', async (_req, res) => {
 
         res.json({
             success: true,
-            data: normalizedRows
+            data: normalizedRows,
+            monitoring: getMonitoringConfig()
         });
     } catch (error) {
         console.error('Get public latest sensors error:', error);
@@ -294,6 +301,7 @@ router.post('/update', async (req, res) => {
 router.get('/latest', authenticateToken, checkSubscription, async (req, res) => {
     try {
         const userId = req.user.id;
+        const offlineIntervalLiteral = getPostgresMinuteIntervalLiteral(getOfflineAfterMinutes());
 
         const sql = `
   SELECT 
@@ -310,7 +318,7 @@ router.get('/latest', authenticateToken, checkSubscription, async (req, res) => 
     d.last_seen,
     CASE
       WHEN d.last_seen IS NULL THEN 'never'
-      WHEN d.last_seen >= NOW() - INTERVAL '35 minutes' THEN 'online'
+      WHEN d.last_seen >= NOW() - INTERVAL '${offlineIntervalLiteral}' THEN 'online'
       ELSE 'offline'
     END AS online_status
   FROM sensors s
@@ -343,7 +351,8 @@ router.get('/latest', authenticateToken, checkSubscription, async (req, res) => 
         res.json({
             success: true,
             data: readings,
-            grouped: grouped
+            grouped: grouped,
+            monitoring: getMonitoringConfig()
         });
 
     } catch (error) {
@@ -357,6 +366,7 @@ router.get('/:type/latest', authenticateToken, checkSubscription, async (req, re
     try {
         const userId = req.user.id;
         const sensorType = req.params.type;
+        const offlineIntervalLiteral = getPostgresMinuteIntervalLiteral(getOfflineAfterMinutes());
 
         const sql = `
       SELECT 
@@ -373,7 +383,7 @@ router.get('/:type/latest', authenticateToken, checkSubscription, async (req, re
         d.last_seen,
         CASE
           WHEN d.last_seen IS NULL THEN 'never'
-          WHEN d.last_seen >= NOW() - INTERVAL '35 minutes' THEN 'online'
+          WHEN d.last_seen >= NOW() - INTERVAL '${offlineIntervalLiteral}' THEN 'online'
           ELSE 'offline'
         END AS online_status
       FROM sensors s
@@ -385,7 +395,11 @@ router.get('/:type/latest', authenticateToken, checkSubscription, async (req, re
     `;
 
         const readings = normalizeSoilReadingPairs(await query(sql, [userId, sensorType]), { includeTimestamp: true });
-        res.json({ success: true, data: readings });
+        res.json({
+            success: true,
+            data: readings,
+            monitoring: getMonitoringConfig()
+        });
 
     } catch (error) {
         console.error('Get sensor type error:', error);

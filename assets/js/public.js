@@ -15,10 +15,18 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.21';
+        const FRONTEND_ASSET_VERSION = '1.1.22';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
-        const SENSOR_ONLINE_WINDOW_MS = 35 * 60 * 1000;
+        const DEFAULT_MONITORING_CONFIG = Object.freeze({
+            routerIntervalMinutes: 30,
+            expectedDataMinutes: 30,
+            offlineGraceMinutes: 5,
+            offlineAfterMinutes: 35,
+            alertExtraMinutes: 15,
+            emailAfterMinutes: 45,
+            missingDataThresholdMinutes: 45
+        });
 
         let isRefreshingData = false;
         let activeRefreshPromise = null;
@@ -33,6 +41,8 @@
         const ADMIN_AUTH_TOKEN_STORAGE_KEY = 'rayat_admin_token';
         const ADMIN_AUTH_USER_STORAGE_KEY = 'rayat_admin_user';
         const PUBLIC_SENSOR_CACHE_KEY = 'rayat_public_sensor_cache';
+        const PRIVATE_SENSOR_CACHE_KEY = 'rayat_sensor_cache';
+        let liveMonitoringConfig = { ...DEFAULT_MONITORING_CONFIG };
         let sensorConnectionState = {
             energia: 'loading',
             acqua: 'loading',
@@ -2878,6 +2888,89 @@
             };
         }
 
+        function parsePositiveInteger(value, fallback) {
+            const normalized = Number.parseInt(String(value ?? '').trim(), 10);
+            return Number.isFinite(normalized) && normalized > 0 ? normalized : fallback;
+        }
+
+        function normalizeMonitoringConfig(config) {
+            const source = config && typeof config === 'object' ? config : {};
+            const routerIntervalMinutes = parsePositiveInteger(
+                source.routerIntervalMinutes ?? source.expectedDataMinutes,
+                DEFAULT_MONITORING_CONFIG.routerIntervalMinutes
+            );
+            const offlineGraceMinutes = parsePositiveInteger(
+                source.offlineGraceMinutes,
+                DEFAULT_MONITORING_CONFIG.offlineGraceMinutes
+            );
+            const offlineAfterMinutes = parsePositiveInteger(
+                source.offlineAfterMinutes,
+                routerIntervalMinutes + offlineGraceMinutes
+            );
+            const alertExtraMinutes = parsePositiveInteger(
+                source.alertExtraMinutes,
+                DEFAULT_MONITORING_CONFIG.alertExtraMinutes
+            );
+            const emailAfterMinutes = parsePositiveInteger(
+                source.emailAfterMinutes ?? source.missingDataThresholdMinutes,
+                routerIntervalMinutes + alertExtraMinutes
+            );
+
+            return {
+                routerIntervalMinutes,
+                expectedDataMinutes: routerIntervalMinutes,
+                offlineGraceMinutes,
+                offlineAfterMinutes,
+                alertExtraMinutes,
+                emailAfterMinutes,
+                missingDataThresholdMinutes: emailAfterMinutes
+            };
+        }
+
+        function applyMonitoringConfig(config) {
+            liveMonitoringConfig = normalizeMonitoringConfig(config);
+            return liveMonitoringConfig;
+        }
+
+        function getSensorOnlineWindowMs() {
+            return liveMonitoringConfig.offlineAfterMinutes * 60 * 1000;
+        }
+
+        function readSensorCache(cacheKey) {
+            const rawValue = localStorage.getItem(cacheKey);
+            if (!rawValue) {
+                return null;
+            }
+
+            try {
+                const parsed = JSON.parse(rawValue);
+                if (Array.isArray(parsed)) {
+                    return {
+                        data: parsed,
+                        monitoring: null
+                    };
+                }
+
+                if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.data)) {
+                    return null;
+                }
+
+                return {
+                    data: parsed.data,
+                    monitoring: parsed.monitoring || null
+                };
+            } catch (_error) {
+                return null;
+            }
+        }
+
+        function writeSensorCache(cacheKey, data, monitoring) {
+            localStorage.setItem(cacheKey, JSON.stringify({
+                data,
+                monitoring: normalizeMonitoringConfig(monitoring)
+            }));
+        }
+
         function resolveSensorOnlineStatus(reading) {
             const explicitStatus = String(reading?.online_status || '').trim().toLowerCase();
             if (explicitStatus === 'online') {
@@ -2897,7 +2990,7 @@
                 return 'loading';
             }
 
-            return (Date.now() - freshnessDate.getTime()) < SENSOR_ONLINE_WINDOW_MS ? 'online' : 'offline';
+            return (Date.now() - freshnessDate.getTime()) < getSensorOnlineWindowMs() ? 'online' : 'offline';
         }
 
 
@@ -4162,7 +4255,8 @@
                             const result = await response.json();
                             if (result.success && Array.isArray(result.data)) {
                                 const data = result.data;
-                                localStorage.setItem(PUBLIC_SENSOR_CACHE_KEY, JSON.stringify(data));
+                                const monitoring = applyMonitoringConfig(result.monitoring);
+                                writeSensorCache(PUBLIC_SENSOR_CACHE_KEY, data, monitoring);
                                 const didRender = updateSensorData(data, true);
                                 dataError = false;
                                 setOfflineBannerVisibility(false);
@@ -4171,14 +4265,13 @@
                         }
                     } catch (error) { }
 
-                    const cached = localStorage.getItem(PUBLIC_SENSOR_CACHE_KEY);
-                    if (cached) {
-                        try {
-                            const didRender = updateSensorData(JSON.parse(cached), true);
-                            dataError = false;
-                            setOfflineBannerVisibility(true, t('usingCache'));
-                            return didRender;
-                        } catch (e) { /* ignore cache error in demo mode */ }
+                    const cached = readSensorCache(PUBLIC_SENSOR_CACHE_KEY);
+                    if (cached?.data) {
+                        applyMonitoringConfig(cached.monitoring);
+                        const didRender = updateSensorData(cached.data, true);
+                        dataError = false;
+                        setOfflineBannerVisibility(true, t('usingCache'));
+                        return didRender;
                     }
 
                     const hadRenderedData = Boolean(lastSensorPayloadSignature);
@@ -4223,8 +4316,9 @@
 
                     if (response.ok) {
                         const result = await response.json();
-                        if (result.success && result.data) {
-                            localStorage.setItem('rayat_sensor_cache', JSON.stringify(result.data));
+                        if (result.success && Array.isArray(result.data)) {
+                            const monitoring = applyMonitoringConfig(result.monitoring);
+                            writeSensorCache(PRIVATE_SENSOR_CACHE_KEY, result.data, monitoring);
                             const didRender = updateSensorData(result.data);
                             dataError = false;
                             setOfflineBannerVisibility(false);
@@ -4235,14 +4329,13 @@
 
                 dataError = false;
 
-                const cached = localStorage.getItem('rayat_sensor_cache');
-                if (cached) {
-                    try {
-                        const didRender = updateSensorData(JSON.parse(cached), true);
-                        dataError = false;
-                        setOfflineBannerVisibility(true, t('usingCache'));
-                        return didRender;
-                    } catch (e) { }
+                const cached = readSensorCache(PRIVATE_SENSOR_CACHE_KEY);
+                if (cached?.data) {
+                    applyMonitoringConfig(cached.monitoring);
+                    const didRender = updateSensorData(cached.data, true);
+                    dataError = false;
+                    setOfflineBannerVisibility(true, t('usingCache'));
+                    return didRender;
                 }
 
                 const hadRenderedData = Boolean(lastSensorPayloadSignature);

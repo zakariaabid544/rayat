@@ -48,8 +48,9 @@ RAYAT - README DEPLOY
   EMAIL_FROM
   EMAIL_TO
   ALERT_JOB_CRON
-  ALERT_EXPECTED_DATA_MINUTES
-  ALERT_MISSING_DATA_THRESHOLD_MINUTES
+  ROUTER_INTERVAL_MINUTES
+  ROUTER_OFFLINE_GRACE_MINUTES
+  ROUTER_ALERT_EXTRA_MINUTES
   ALERT_NOTIFICATION_COOLDOWN_MINUTES
   ALERT_EMAILS
   ADMIN_DEFAULT_EMAIL
@@ -73,10 +74,16 @@ RAYAT - README DEPLOY
 - If the broker is protected, set `MQTT_USERNAME` and `MQTT_PASSWORD`
 - Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
 - Configure `ALERT_EMAILS=zakariaabid544@gmail.com`
-- Keep `ALERT_MISSING_DATA_THRESHOLD_MINUTES=45`
+- Set `ROUTER_INTERVAL_MINUTES=30`
+- Set `ROUTER_OFFLINE_GRACE_MINUTES=5` so the site shows red after 35 minutes without data
+- Set `ROUTER_ALERT_EXTRA_MINUTES=15` so the email goes out at 45 minutes without data
 - Set `ALERT_JOB_CRON=* * * * *` so the server also runs the minute sync that protects the exact timer
 - With this setup the server receives MQTT data directly and sends alert emails automatically even when the Mac is off
-- The backend now schedules an exact timer at 45 minutes from the last reading and also keeps a 1-minute recovery sync in case the process restarts
+- The backend now schedules an exact timer at `ROUTER_INTERVAL_MINUTES + ROUTER_ALERT_EXTRA_MINUTES` and also keeps a 1-minute recovery sync in case the process restarts
+
+Legacy compatibility:
+- `ALERT_EXPECTED_DATA_MINUTES` and `ALERT_MISSING_DATA_THRESHOLD_MINUTES` are still supported for older deploys
+- For new deploys use only the `ROUTER_*` values above so the site badge and email threshold stay aligned from one central config
 
 7. Create the first super admin
 - Run once after backend/.env is ready:

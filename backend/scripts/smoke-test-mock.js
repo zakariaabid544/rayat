@@ -771,6 +771,9 @@ async function run() {
         assert.equal(publicLatestRes.status, 200);
         const publicLatestJson = await publicLatestRes.json();
         assert.equal(publicLatestJson.success, true);
+        assert.equal(publicLatestJson.monitoring.routerIntervalMinutes, 30);
+        assert.equal(publicLatestJson.monitoring.offlineAfterMinutes, 35);
+        assert.equal(publicLatestJson.monitoring.emailAfterMinutes, 45);
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_temperature'));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_temperature' && Number(row.value) === 21.2));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_humidity' && Number(row.value) === 82.1));
