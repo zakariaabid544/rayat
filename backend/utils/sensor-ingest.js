@@ -2,6 +2,7 @@ const crypto = require('crypto');
 
 const { withTransaction } = require('../config/database');
 const { checkAlerts } = require('./alerts');
+const { notifyMissingDataHeartbeat } = require('../src/jobs/alertJob');
 const {
     extractRawEnvelope,
     bufferFromEnvelope,
@@ -610,6 +611,7 @@ async function ingestDeviceReadings({ deviceId, apiKey, timestamp, readings }) {
         return persistReadingsForDevice(execute, device, normalizedReadings, readingTimestamp);
     });
 
+    notifyMissingDataHeartbeat(readingTimestamp);
     await triggerAlerts(result);
     return result;
 }
@@ -635,6 +637,7 @@ async function ingestTrustedReadings({ deviceId, timestamp, readings }) {
         return persistReadingsForDevice(execute, device, normalizedReadings, readingTimestamp);
     });
 
+    notifyMissingDataHeartbeat(readingTimestamp);
     await triggerAlerts(result);
     return result;
 }
@@ -647,6 +650,8 @@ async function ingestPublicReadings({ timestamp, readings }) {
         const execute = createExecutor(connection);
         await persistPublicSensorLatest(execute, normalizedReadings, readingTimestamp);
     });
+
+    notifyMissingDataHeartbeat(readingTimestamp);
 
     return {
         mode: 'public_only',

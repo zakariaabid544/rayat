@@ -29,7 +29,7 @@ function buildRequiredEnvBlock() {
         'SMTP_USER=',
         'SMTP_PASS=',
         'SMTP_FROM=',
-        'EMAIL_TO=zakariaabid@hotmail.it',
+        'EMAIL_TO=zakariaabid544@gmail.com',
         'EMAIL_USER=  # optional compatibility alias for SMTP_USER',
         'EMAIL_PASS=  # optional compatibility alias for SMTP_PASS',
         'EMAIL_FROM=  # optional compatibility alias for SMTP_FROM'

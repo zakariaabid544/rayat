@@ -6,7 +6,11 @@ require('./config/env');
 const { getDatabaseHealth, testConnection, query } = require('./config/database');
 const { ensurePlatformSchema } = require('./utils/platform-schema');
 const { ensureSuperAdmin } = require('./utils/super-admin');
-const { startMissingDataAlertJob } = require('./src/jobs/alertJob');
+const {
+    getMissingDataAlertRuntimeStatus,
+    startMissingDataAlertJob
+} = require('./src/jobs/alertJob');
+const { getMqttConfig, startMqttDirectJob } = require('./src/jobs/mqttDirectJob');
 const {
     extractAdminSessionToken,
     isPrivilegedAdminRole,
@@ -178,7 +182,19 @@ app.get('/api', (req, res) => {
 // Health check endpoint
 app.get(['/api/health', '/health'], async (req, res) => {
     const health = await getDatabaseHealth();
-    res.status(health.db === 'ok' ? 200 : 503).json(health);
+    const mqttConfig = getMqttConfig();
+
+    res.status(health.db === 'ok' ? 200 : 503).json({
+        ...health,
+        app: 'ok',
+        uptimeSeconds: Math.floor(process.uptime()),
+        alertMonitoring: getMissingDataAlertRuntimeStatus(),
+        mqttDirect: {
+            enabled: mqttConfig.enabled,
+            brokerConfigured: Boolean(mqttConfig.brokerUrl),
+            topic: mqttConfig.topic
+        }
+    });
 });
 
 // 404 handler
@@ -244,8 +260,10 @@ async function startServer() {
 
         if (dbConnected) {
             startMissingDataAlertJob();
+            startMqttDirectJob();
         } else {
             console.warn('[alert-job] Job notifiche non avviato: database non disponibile.');
+            console.warn('[mqtt-direct] Ingest MQTT diretto non avviato: database non disponibile.');
         }
 
     } catch (error) {

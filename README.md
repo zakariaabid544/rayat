@@ -235,6 +235,17 @@ Nel repository trovi uno script pronto:
 
 Questo processo si collega a Mosquitto su `45.63.114.40:8080`, ascolta `sensors/#` e inoltra ogni messaggio a `https://rayat.ma/api/sensors/update`.
 
+Per un monitoraggio completamente autonomo senza Mac/PC acceso:
+
+- esegui il backend su un server sempre acceso
+- abilita `MQTT_DIRECT_ENABLED=true` nel `backend/.env`
+- configura Gmail SMTP con `App Password`
+- imposta `ALERT_EMAILS=zakariaabid544@gmail.com`
+- imposta `ALERT_MISSING_DATA_THRESHOLD_MINUTES=45`
+- imposta `ALERT_JOB_CRON=* * * * *`
+
+Il backend programma un timer preciso 45 minuti dopo l'ultimo dato ricevuto e mantiene anche una sincronizzazione ogni minuto per recuperare automaticamente dopo eventuali riavvii del processo.
+
 ### Esempio Arduino/ESP32 (HTTP POST)
 
 ```cpp

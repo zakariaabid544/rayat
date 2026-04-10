@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "seed:admin": "node seed-admin.js",
     "smoke:routes": "node scripts/smoke-test-mock.js",
+    "test:alert-email": "node scripts/send-missing-data-test-alert.js",
     "test": "npm run smoke:routes"
   },
   "keywords": [

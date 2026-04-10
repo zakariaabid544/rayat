@@ -6496,7 +6496,7 @@
             phoneItaly: '+39 351 320 3307',
             phoneMorocco: '+212 628 265466',
             whatsapp: WHATSAPP_DISPLAY_NUMBER,
-            email: 'zakariaabid@hotmail.it',
+            email: 'zakariaabid544@gmail.com',
             officeName: 'Rayat Agriculture Technology',
             officeCity: 'Taroudant',
             officeRegion: 'Souss-Massa',
@@ -6505,6 +6505,10 @@
             lat: 30.4703,
             lng: -8.8770
         };
+        if (contactSettings.email === 'zakariaabid@hotmail.it') {
+            contactSettings.email = 'zakariaabid544@gmail.com';
+            localStorage.setItem('contactSettings', JSON.stringify(contactSettings));
+        }
         contactSettings.whatsapp = WHATSAPP_DISPLAY_NUMBER;
 
         let registrationStep = 1;
