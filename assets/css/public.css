@@ -21,7 +21,6 @@
             -webkit-tap-highlight-color: transparent;
             user-select: auto;
             touch-action: manipulation;
-            overscroll-behavior-y: none;
             background-color: #f8fafc;
             min-height: 100%;
             overflow-y: auto;
