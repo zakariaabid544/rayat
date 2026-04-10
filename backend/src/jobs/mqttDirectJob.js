@@ -92,9 +92,13 @@ function buildIncomingBody(topic, parsedPayload) {
 }
 
 function getMqttConfig() {
+    const hasExplicitEnabled = String(process.env.MQTT_DIRECT_ENABLED || '').trim() !== '';
+    const defaultEnabled = process.env.NODE_ENV === 'production';
+    const brokerUrl = cleanString(process.env.MQTT_BROKER) || 'mqtt://45.63.114.40:8080';
+
     return {
-        enabled: parseBoolean(process.env.MQTT_DIRECT_ENABLED),
-        brokerUrl: cleanString(process.env.MQTT_BROKER),
+        enabled: hasExplicitEnabled ? parseBoolean(process.env.MQTT_DIRECT_ENABLED) : defaultEnabled,
+        brokerUrl,
         topic: cleanString(process.env.MQTT_TOPIC) || 'sensors/#',
         username: cleanString(process.env.MQTT_USERNAME) || undefined,
         password: cleanString(process.env.MQTT_PASSWORD) || undefined,

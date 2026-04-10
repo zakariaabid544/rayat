@@ -282,33 +282,88 @@ function buildAlertText(lastUpdate, minutesSinceLastData, options = {}) {
   return lines.join('\n');
 }
 
-function createMailTransport() {
-  const host = String(process.env.SMTP_HOST || '').trim();
-  const port = Number.parseInt(String(process.env.SMTP_PORT || ''), 10);
-  const user = String(process.env.SMTP_USER || '').trim();
-  const pass = String(process.env.SMTP_PASS || '').trim();
+function inferMailService(emailUser = '') {
+  const domain = String(emailUser || '').split('@')[1]?.toLowerCase() || '';
 
-  if (!host || !Number.isFinite(port)) {
+  if (domain.includes('gmail') || domain.includes('googlemail')) {
+    return 'gmail';
+  }
+  if (['outlook.com', 'hotmail.com', 'live.com', 'msn.com'].includes(domain)) {
+    return 'hotmail';
+  }
+  if (domain.includes('yahoo')) {
+    return 'yahoo';
+  }
+
+  return null;
+}
+
+function resolveAlertMailConfig() {
+  const smtpHost = String(process.env.SMTP_HOST || '').trim();
+  const smtpPort = Number.parseInt(String(process.env.SMTP_PORT || ''), 10);
+  const smtpUser = String(process.env.SMTP_USER || '').trim();
+  const smtpPass = String(process.env.SMTP_PASS || '').trim();
+  const emailUser = String(process.env.EMAIL_USER || '').trim();
+  const emailPass = String(process.env.EMAIL_PASS || '').trim();
+  const user = smtpUser || emailUser;
+  const pass = smtpPass || emailPass;
+  const service = inferMailService(user);
+
+  return {
+    host: smtpHost,
+    port: Number.isFinite(smtpPort) ? smtpPort : null,
+    user,
+    pass,
+    from:
+      String(process.env.SMTP_FROM || '').trim() ||
+      String(process.env.EMAIL_FROM || '').trim() ||
+      user ||
+      'no-reply@rayat.local',
+    service
+  };
+}
+
+function createMailTransport() {
+  const mailConfig = resolveAlertMailConfig();
+  if (!mailConfig.user || !mailConfig.pass) {
     return null;
   }
 
-  const transportConfig = {
-    host,
-    port,
-    secure: port === 465
-  };
-
-  if (user && pass) {
-    transportConfig.auth = { user, pass };
+  if (mailConfig.host && Number.isFinite(mailConfig.port)) {
+    return nodemailer.createTransport({
+      host: mailConfig.host,
+      port: mailConfig.port,
+      secure: mailConfig.port === 465,
+      auth: {
+        user: mailConfig.user,
+        pass: mailConfig.pass
+      }
+    });
   }
 
-  return nodemailer.createTransport(transportConfig);
+  if (mailConfig.service) {
+    return nodemailer.createTransport({
+      service: mailConfig.service,
+      auth: {
+        user: mailConfig.user,
+        pass: mailConfig.pass
+      }
+    });
+  }
+
+  return null;
 }
 
 function hasConfiguredSmtp() {
-  const host = String(process.env.SMTP_HOST || '').trim();
-  const port = Number.parseInt(String(process.env.SMTP_PORT || ''), 10);
-  return Boolean(host && Number.isFinite(port));
+  const mailConfig = resolveAlertMailConfig();
+  return Boolean(
+    mailConfig.user
+    && mailConfig.pass
+    && (
+      (mailConfig.host && Number.isFinite(mailConfig.port))
+      || mailConfig.service
+    )
+  );
 }
 
 async function deliverAlertEmail(lastUpdate, minutesSinceLastData, options = {}) {
@@ -336,14 +391,11 @@ async function deliverAlertEmail(lastUpdate, minutesSinceLastData, options = {})
 
   const transporter = createMailTransport();
   if (!transporter) {
-    throw new Error('SMTP non configurato: imposta SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS e SMTP_FROM.');
+    throw new Error('SMTP non configurato: imposta SMTP_HOST/SMTP_PORT oppure EMAIL_USER/EMAIL_PASS compatibili, più il mittente.');
   }
 
-  const from =
-    String(process.env.SMTP_FROM || '').trim() ||
-    String(process.env.EMAIL_FROM || '').trim() ||
-    String(process.env.SMTP_USER || '').trim() ||
-    'no-reply@rayat.local';
+  const mailConfig = resolveAlertMailConfig();
+  const from = mailConfig.from;
 
   const sendEmail = async (recipient) => {
     await transporter.sendMail({
@@ -398,7 +450,7 @@ async function sendMissingDataTestEmail(options = {}) {
   const lastUpdate = new Date(Date.now() - (minutesSinceLastData * 60 * 1000));
 
   if (!hasConfiguredSmtp()) {
-    throw new Error('SMTP del backend non configurato. Per il test server servono SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS e SMTP_FROM nel backend/.env.');
+    throw new Error('SMTP del backend non configurato. Per il test server servono SMTP_HOST/SMTP_PORT oppure EMAIL_USER/EMAIL_PASS compatibili, piu il mittente nel backend/.env.');
   }
 
   await deliverAlertEmail(lastUpdate, minutesSinceLastData, {
