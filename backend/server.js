@@ -183,12 +183,13 @@ app.get('/api', (req, res) => {
 app.get(['/api/health', '/health'], async (req, res) => {
     const health = await getDatabaseHealth();
     const mqttConfig = getMqttConfig();
+    const alertMonitoring = await getMissingDataAlertRuntimeStatus({ forceRefresh: true });
 
     res.status(health.db === 'ok' ? 200 : 503).json({
         ...health,
         app: 'ok',
         uptimeSeconds: Math.floor(process.uptime()),
-        alertMonitoring: getMissingDataAlertRuntimeStatus(),
+        alertMonitoring,
         mqttDirect: {
             enabled: mqttConfig.enabled,
             brokerConfigured: Boolean(mqttConfig.brokerUrl),

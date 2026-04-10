@@ -295,6 +295,20 @@ async function ensureCoreTables(changes) {
 
   if (
     await ensureTable(
+      'runtime_config',
+      `CREATE TABLE IF NOT EXISTS runtime_config (
+         config_key VARCHAR(120) PRIMARY KEY,
+         config_value TEXT NULL,
+         is_secret BOOLEAN NOT NULL DEFAULT FALSE,
+         updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+       )`
+    )
+  ) {
+    changes.push('runtime_config table');
+  }
+
+  if (
+    await ensureTable(
       'password_resets',
       `CREATE TABLE IF NOT EXISTS password_resets (
          id SERIAL PRIMARY KEY,

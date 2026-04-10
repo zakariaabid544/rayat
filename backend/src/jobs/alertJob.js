@@ -21,14 +21,29 @@ const runtimeState = {
   scheduledForLastUpdate: null,
   lastScheduleSyncAt: null,
   lastAlertCheckAt: null,
-  lastAlertCheckTrigger: null
+  lastAlertCheckTrigger: null,
+  smtpConfigSource: 'missing'
 };
+
+const ALERT_MAIL_RUNTIME_KEYS = [
+  'smtp_host',
+  'smtp_port',
+  'smtp_user',
+  'smtp_pass',
+  'smtp_from'
+];
 
 let scheduledTask = null;
 let exactAlertTimeout = null;
 let isRunning = false;
 let isSyncingSchedule = false;
 let hasLegacySensorDataTable = null;
+let hasRuntimeConfigTable = null;
+
+const mailConfigCache = {
+  loadedAt: 0,
+  values: null
+};
 
 function parseMinutes(value, fallback) {
   const normalized = Number.parseInt(String(value ?? ''), 10);
@@ -298,7 +313,7 @@ function inferMailService(emailUser = '') {
   return null;
 }
 
-function resolveAlertMailConfig() {
+function getEnvAlertMailConfig() {
   const smtpHost = String(process.env.SMTP_HOST || '').trim();
   const smtpPort = Number.parseInt(String(process.env.SMTP_PORT || ''), 10);
   const smtpUser = String(process.env.SMTP_USER || '').trim();
@@ -323,8 +338,92 @@ function resolveAlertMailConfig() {
   };
 }
 
-function createMailTransport() {
-  const mailConfig = resolveAlertMailConfig();
+async function getDbAlertMailConfig(options = {}) {
+  const shouldRefresh = Boolean(options.forceRefresh);
+  const cacheAgeMs = Date.now() - mailConfigCache.loadedAt;
+
+  if (!shouldRefresh && mailConfigCache.values && cacheAgeMs < 60 * 1000) {
+    return mailConfigCache.values;
+  }
+
+  if (hasRuntimeConfigTable === null) {
+    const rows = await query(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM information_schema.tables
+         WHERE table_schema = current_schema()
+           AND table_name = 'runtime_config'
+       ) AS exists`
+    );
+    hasRuntimeConfigTable = Boolean(rows?.[0]?.exists);
+  }
+
+  if (!hasRuntimeConfigTable) {
+    mailConfigCache.loadedAt = Date.now();
+    mailConfigCache.values = {};
+    return {};
+  }
+
+  const rows = await query(
+    `SELECT config_key, config_value
+     FROM runtime_config
+     WHERE config_key IN (?, ?, ?, ?, ?)`,
+    ALERT_MAIL_RUNTIME_KEYS
+  );
+  const entries = Object.fromEntries(
+    rows.map((row) => [String(row.config_key || '').trim(), String(row.config_value || '').trim()])
+  );
+  const host = entries.smtp_host || '';
+  const port = Number.parseInt(entries.smtp_port || '', 10);
+  const user = entries.smtp_user || '';
+  const pass = entries.smtp_pass || '';
+  const from = entries.smtp_from || user || 'no-reply@rayat.local';
+
+  mailConfigCache.loadedAt = Date.now();
+  mailConfigCache.values = {
+    host,
+    port: Number.isFinite(port) ? port : null,
+    user,
+    pass,
+    from,
+    service: inferMailService(user)
+  };
+
+  return mailConfigCache.values;
+}
+
+async function resolveAlertMailConfig(options = {}) {
+  const envConfig = getEnvAlertMailConfig();
+  const dbConfig = await getDbAlertMailConfig(options);
+  const host = envConfig.host || dbConfig.host || '';
+  const port = envConfig.port || dbConfig.port || null;
+  const user = envConfig.user || dbConfig.user || '';
+  const pass = envConfig.pass || dbConfig.pass || '';
+  const from =
+    envConfig.from && envConfig.from !== 'no-reply@rayat.local'
+      ? envConfig.from
+      : (dbConfig.from || envConfig.from);
+  const service = inferMailService(user);
+
+  const source = envConfig.user && envConfig.pass
+    ? 'env'
+    : (dbConfig.user && dbConfig.pass ? 'database' : 'missing');
+
+  runtimeState.smtpConfigSource = source;
+
+  return {
+    host,
+    port,
+    user,
+    pass,
+    from,
+    service,
+    source
+  };
+}
+
+async function createMailTransport(options = {}) {
+  const mailConfig = await resolveAlertMailConfig(options);
   if (!mailConfig.user || !mailConfig.pass) {
     return null;
   }
@@ -354,8 +453,8 @@ function createMailTransport() {
   return null;
 }
 
-function hasConfiguredSmtp() {
-  const mailConfig = resolveAlertMailConfig();
+async function hasConfiguredSmtp(options = {}) {
+  const mailConfig = await resolveAlertMailConfig(options);
   return Boolean(
     mailConfig.user
     && mailConfig.pass
@@ -389,12 +488,12 @@ async function deliverAlertEmail(lastUpdate, minutesSinceLastData, options = {})
     return;
   }
 
-  const transporter = createMailTransport();
+  const transporter = await createMailTransport(options);
   if (!transporter) {
     throw new Error('SMTP non configurato: imposta SMTP_HOST/SMTP_PORT oppure EMAIL_USER/EMAIL_PASS compatibili, più il mittente.');
   }
 
-  const mailConfig = resolveAlertMailConfig();
+  const mailConfig = await resolveAlertMailConfig(options);
   const from = mailConfig.from;
 
   const sendEmail = async (recipient) => {
@@ -449,7 +548,7 @@ async function sendMissingDataTestEmail(options = {}) {
     : thresholdMinutes + 1;
   const lastUpdate = new Date(Date.now() - (minutesSinceLastData * 60 * 1000));
 
-  if (!hasConfiguredSmtp()) {
+  if (!await hasConfiguredSmtp({ forceRefresh: true })) {
     throw new Error('SMTP del backend non configurato. Per il test server servono SMTP_HOST/SMTP_PORT oppure EMAIL_USER/EMAIL_PASS compatibili, piu il mittente nel backend/.env.');
   }
 
@@ -514,14 +613,24 @@ function notifyMissingDataHeartbeat(timestamp) {
   scheduleExactAlertTimeout(lastUpdate, { trigger: 'ingest' });
 }
 
-function getMissingDataAlertRuntimeStatus() {
+async function getMissingDataAlertRuntimeStatus(options = {}) {
+  const mailConfig = await resolveAlertMailConfig(options);
+
   return {
     mode: 'exact_timer_plus_minute_sync',
     cron: getAlertCronExpression(),
     expectedDataMinutes: getExpectedDataMinutes(),
     missingDataThresholdMinutes: getMissingDataThresholdMinutes(),
     notificationCooldownMinutes: getNotificationCooldownMinutes(),
-    smtpConfigured: hasConfiguredSmtp(),
+    smtpConfigured: Boolean(
+      mailConfig.user
+      && mailConfig.pass
+      && (
+        (mailConfig.host && Number.isFinite(mailConfig.port))
+        || mailConfig.service
+      )
+    ),
+    smtpConfigSource: mailConfig.source,
     recipientCount: getAlertRecipients().recipients.length,
     lastKnownDataAt: runtimeState.lastKnownDataAt,
     nextAlertDueAt: runtimeState.nextAlertDueAt,

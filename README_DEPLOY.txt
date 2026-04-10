@@ -90,6 +90,8 @@ RAYAT - README DEPLOY
   npm start
 - Test email alert dal backend (usa lo stesso SMTP degli alert automatici):
   npm --prefix backend run test:alert-email
+- Se il server live non espone ancora le variabili SMTP, puoi salvare la configurazione email direttamente nel database runtime con:
+  npm --prefix backend run sync:live-mail-config
 
 9. Hosting rules
 - Serve index.html, assets/, admin/, icons/, manifest.json and sw.js as static files
