@@ -15,7 +15,8 @@
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        const FRONTEND_ASSET_VERSION = '1.1.25';
+        // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate rollout.
+        const FRONTEND_ASSET_VERSION = '1.1.26';
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -49,6 +50,14 @@
             terreno: 'loading',
             clima: 'loading'
         };
+        // RAYAT-FIX: keep track of the freshest sensor independently from the selected dashboard tab.
+        let sensorLatestTimestamps = {
+            energia: null,
+            acqua: null,
+            terreno: null,
+            clima: null
+        };
+        let latestActiveSensorKey = null;
 
         let authToken = null;
         let currentRole = 'guest';
@@ -56,7 +65,7 @@
         let activeAdminSessionRestorePromise = null;
 
         let currentView = 'home';
-        let selectedSensor = 'energia';
+        let selectedSensor = null;
         let user = null;
         let currentLang = localStorage.getItem('rayat_lang') || sessionStorage.getItem('rayat_lang') || 'fr';
         let showSettings = false;
@@ -2888,6 +2897,83 @@
             };
         }
 
+        function resetSensorLatestTimestamps() {
+            // RAYAT-FIX: reset freshness state atomically whenever live sensor data is rebuilt.
+            sensorLatestTimestamps = {
+                energia: null,
+                acqua: null,
+                terreno: null,
+                clima: null
+            };
+            latestActiveSensorKey = null;
+        }
+
+        function updateSensorTimestamp(sensorKey, timestampValue) {
+            const normalizedSensorKey = normalizeDashboardSensorKey(sensorKey);
+            if (!normalizedSensorKey || !timestampValue) {
+                return;
+            }
+
+            const timestamp = new Date(timestampValue);
+            if (Number.isNaN(timestamp.getTime())) {
+                return;
+            }
+
+            const currentTimestamp = sensorLatestTimestamps[normalizedSensorKey]
+                ? new Date(sensorLatestTimestamps[normalizedSensorKey]).getTime()
+                : 0;
+            if (timestamp.getTime() >= currentTimestamp) {
+                sensorLatestTimestamps[normalizedSensorKey] = timestamp.toISOString();
+            }
+        }
+
+        function resolveFreshestSensorKey(fallbackSensorKey = selectedSensor) {
+            let freshestSensorKey = null;
+            let freshestTimestamp = 0;
+
+            Object.entries(sensorLatestTimestamps).forEach(([sensorKey, timestampValue]) => {
+                if (!timestampValue) {
+                    return;
+                }
+
+                const timestamp = new Date(timestampValue).getTime();
+                if (Number.isNaN(timestamp) || timestamp < freshestTimestamp) {
+                    return;
+                }
+
+                freshestTimestamp = timestamp;
+                freshestSensorKey = sensorKey;
+            });
+
+            return freshestSensorKey || normalizeDashboardSensorKey(fallbackSensorKey) || 'terreno';
+        }
+
+        function alignSelectedSensorWithFreshestData() {
+            // RAYAT-FIX: prefer the freshest online sensor when the current tab is stale/offline.
+            const freshestSensorKey = resolveFreshestSensorKey(selectedSensor);
+            const normalizedSelectedSensor = normalizeDashboardSensorKey(selectedSensor);
+            latestActiveSensorKey = freshestSensorKey;
+
+            if (!normalizedSelectedSensor) {
+                selectedSensor = freshestSensorKey;
+                return freshestSensorKey;
+            }
+
+            const selectedStatus = sensorConnectionState[normalizedSelectedSensor];
+            const freshestStatus = sensorConnectionState[freshestSensorKey];
+            if (selectedStatus === 'offline' && freshestStatus === 'online') {
+                selectedSensor = freshestSensorKey;
+                return freshestSensorKey;
+            }
+
+            if (!sensorLatestTimestamps[normalizedSelectedSensor]) {
+                selectedSensor = freshestSensorKey;
+                return freshestSensorKey;
+            }
+
+            return normalizedSelectedSensor;
+        }
+
         function parsePositiveInteger(value, fallback) {
             const normalized = Number.parseInt(String(value ?? '').trim(), 10);
             return Number.isFinite(normalized) && normalized > 0 ? normalized : fallback;
@@ -4443,11 +4529,15 @@
             };
             resetLiveSensorDisplayData();
             resetSensorConnectionState();
+            resetSensorLatestTimestamps();
 
             let updated = false;
             normalizedApiData.forEach(r => {
                 if (r?.type && sensorConnectionState[r.type] !== 'online') {
                     sensorConnectionState[r.type] = resolveSensorOnlineStatus(r);
+                }
+                if (r?.type && r?.timestamp) {
+                    updateSensorTimestamp(r.type, r.timestamp);
                 }
                 if (!r || r.value === undefined || r.value === null) return;
 
@@ -4473,6 +4563,7 @@
                     if (d) { d.value = val; updated = true; }
                 }
             });
+            alignSelectedSensorWithFreshestData();
             if (updated) {
                 if (!historyState.usesLiveData) {
                     syncCurrentSensorSnapshotToHistory(new Date());
@@ -6219,14 +6310,16 @@
 
 
         function renderDemoPage() {
-            const demoStatusState = sensorConnectionState[selectedSensor] || 'loading';
+            const displaySensorKey = latestActiveSensorKey || resolveFreshestSensorKey(selectedSensor);
+            const currentSensorKey = normalizeDashboardSensorKey(selectedSensor) || displaySensorKey || 'terreno';
+            const demoStatusState = sensorConnectionState[displaySensorKey] || sensorConnectionState[currentSensorKey] || 'loading';
             const demoStatusClass = demoStatusState === 'online'
                 ? 'is-online'
                 : (demoStatusState === 'offline' ? 'is-offline' : 'is-loading');
             const demoStatusLabel = demoStatusState === 'online'
                 ? t('monitoringOnline')
                 : (demoStatusState === 'offline' ? t('monitoringOffline') : t('refreshingDataAction'));
-            const current = sensorData[selectedSensor] || sensorData.energia;
+            const current = sensorData[currentSensorKey] || sensorData[displaySensorKey] || sensorData.terreno;
 
             // RAYAT FIX - demo section refresh cleanup and repositioning
             const renderMonitoringRefreshControl = (variant = 'toolbar') => `

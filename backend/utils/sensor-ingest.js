@@ -512,11 +512,16 @@ async function findDeviceByCredentials(execute, deviceId, apiKey) {
 }
 
 async function findDeviceById(execute, deviceId) {
+    // RAYAT-FIX: allow the real gateway MQTT clientId stored in metadata to resolve
+    // the same physical device without changing the live topic-based device_id.
     const devices = await execute(
-        `SELECT id, user_id
+        `SELECT id, user_id, device_id
          FROM devices
-         WHERE device_id = ?`,
-        [deviceId]
+         WHERE device_id = ?
+            OR COALESCE(metadata->>'clientId', '') = ?
+         ORDER BY CASE WHEN device_id = ? THEN 0 ELSE 1 END
+         LIMIT 1`,
+        [deviceId, deviceId, deviceId]
     );
 
     if (!devices.length) {
@@ -526,7 +531,7 @@ async function findDeviceById(execute, deviceId) {
     return {
         id: devices[0].id,
         user_id: devices[0].user_id,
-        device_id: deviceId
+        device_id: devices[0].device_id
     };
 }
 

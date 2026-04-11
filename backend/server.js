@@ -10,7 +10,12 @@ const {
     getMissingDataAlertRuntimeStatus,
     startMissingDataAlertJob
 } = require('./src/jobs/alertJob');
-const { getMqttConfig, startMqttDirectJob } = require('./src/jobs/mqttDirectJob');
+const {
+    getMqttConfig,
+    getMqttRuntimeStatus,
+    startMqttDirectJob,
+    stopMqttDirectJob
+} = require('./src/jobs/mqttDirectJob');
 const {
     extractAdminSessionToken,
     isPrivilegedAdminRole,
@@ -20,6 +25,8 @@ const {
 // Inizializza Express
 const app = express();
 const PORT = process.env.PORT || 3000;
+let httpServer = null;
+let shutdownInProgress = false;
 
 // Middleware
 app.use(cors({
@@ -193,7 +200,8 @@ app.get(['/api/health', '/health'], async (req, res) => {
         mqttDirect: {
             enabled: mqttConfig.enabled,
             brokerConfigured: Boolean(mqttConfig.brokerUrl),
-            topic: mqttConfig.topic
+            topic: mqttConfig.topic,
+            runtime: getMqttRuntimeStatus() // RAYAT-FIX
         }
     });
 });
@@ -239,7 +247,7 @@ async function startServer() {
         }
 
         // Avvia server
-        app.listen(PORT, () => {
+        httpServer = app.listen(PORT, () => {
             console.log('');
             console.log('🌾 ========================================');
             console.log('   RAYAT IoT Platform - Backend API');
@@ -273,15 +281,33 @@ async function startServer() {
     }
 }
 
-// Gestione shutdown graceful
+// RAYAT-FIX: close MQTT cleanly before exiting so in-flight messages can finish.
+async function shutdownServer(signal) {
+    if (shutdownInProgress) {
+        return;
+    }
+
+    shutdownInProgress = true;
+    console.log(`${signal} ricevuto, chiusura server...`);
+
+    try {
+        await stopMqttDirectJob();
+        if (httpServer) {
+            await new Promise((resolve) => httpServer.close(resolve));
+        }
+        process.exit(0);
+    } catch (error) {
+        console.error('Errore durante la chiusura del server:', error);
+        process.exit(1);
+    }
+}
+
 process.on('SIGTERM', () => {
-    console.log('SIGTERM ricevuto, chiusura server...');
-    process.exit(0);
+    void shutdownServer('SIGTERM');
 });
 
 process.on('SIGINT', () => {
-    console.log('\nSIGINT ricevuto, chiusura server...');
-    process.exit(0);
+    void shutdownServer('SIGINT');
 });
 
 // Avvia server

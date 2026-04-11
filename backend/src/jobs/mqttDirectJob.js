@@ -11,6 +11,23 @@ const { cleanString, parseSensorUpdate } = require('../../utils/sensor-update-pa
 const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
 
 let mqttClient = null;
+let mqttConfigSnapshot = null;
+let reconnectDelayMs = 0;
+let inFlightMessages = 0;
+let shutdownPromise = null;
+
+// RAYAT-FIX: expose live MQTT runtime diagnostics to health checks and logs.
+const mqttRuntime = {
+    connected: false,
+    reconnectCount: 0,
+    lastConnectAt: null,
+    lastDisconnectAt: null,
+    lastMessageAt: null,
+    lastMessageTopic: null,
+    lastPersistOkAt: null,
+    lastPersistErrorAt: null,
+    consecutiveErrors: 0
+};
 
 function parseBoolean(value) {
     const normalized = String(value || '').trim().toLowerCase();
@@ -95,6 +112,7 @@ function getMqttConfig() {
     const hasExplicitEnabled = String(process.env.MQTT_DIRECT_ENABLED || '').trim() !== '';
     const defaultEnabled = process.env.NODE_ENV === 'production';
     const brokerUrl = cleanString(process.env.MQTT_BROKER) || 'mqtt://45.63.114.40:8080';
+    const reconnectPeriod = Math.max(1000, Number(process.env.MQTT_RECONNECT_PERIOD_MS || 5000));
 
     return {
         enabled: hasExplicitEnabled ? parseBoolean(process.env.MQTT_DIRECT_ENABLED) : defaultEnabled,
@@ -102,10 +120,48 @@ function getMqttConfig() {
         topic: cleanString(process.env.MQTT_TOPIC) || 'sensors/#',
         username: cleanString(process.env.MQTT_USERNAME) || undefined,
         password: cleanString(process.env.MQTT_PASSWORD) || undefined,
-        clientId: cleanString(process.env.MQTT_CLIENT_ID) || `rayat-backend-${Math.random().toString(16).slice(2, 10)}`,
-        reconnectPeriod: Number(process.env.MQTT_RECONNECT_PERIOD_MS || 5000),
+        // RAYAT-FIX: keep a stable backend consumer identity across reconnects.
+        clientId: cleanString(process.env.MQTT_CLIENT_ID) || 'rayat-backend-prod',
+        reconnectPeriod,
+        maxReconnectPeriod: Math.max(reconnectPeriod, Number(process.env.MQTT_MAX_RECONNECT_PERIOD_MS || 60000)),
         connectTimeout: Number(process.env.MQTT_CONNECT_TIMEOUT_MS || 30000)
     };
+}
+
+function markDisconnected() {
+    mqttRuntime.connected = false;
+    mqttRuntime.lastDisconnectAt = new Date().toISOString();
+}
+
+function resetReconnectDelay() {
+    if (!mqttConfigSnapshot) {
+        return;
+    }
+
+    reconnectDelayMs = mqttConfigSnapshot.reconnectPeriod;
+    if (mqttClient?.options) {
+        mqttClient.options.reconnectPeriod = reconnectDelayMs;
+    }
+}
+
+function bumpReconnectDelay() {
+    if (!mqttConfigSnapshot) {
+        return 0;
+    }
+
+    const baseDelay = reconnectDelayMs || mqttConfigSnapshot.reconnectPeriod;
+    const nextDelay = Math.min(mqttConfigSnapshot.maxReconnectPeriod, baseDelay * 2);
+    reconnectDelayMs = nextDelay;
+
+    if (mqttClient?.options) {
+        mqttClient.options.reconnectPeriod = reconnectDelayMs;
+    }
+
+    return nextDelay;
+}
+
+function getMqttRuntimeStatus() {
+    return { ...mqttRuntime };
 }
 
 async function processIncomingMessage(topic, payloadBuffer) {
@@ -143,7 +199,13 @@ async function processIncomingMessage(topic, payloadBuffer) {
         }
     }
 
-    console.log(`[mqtt-direct] ${topic} salvato con successo (${result.insertedReadings.length} letture)`);
+    mqttRuntime.lastPersistOkAt = new Date().toISOString();
+    mqttRuntime.consecutiveErrors = 0;
+
+    // RAYAT-FIX: structured topic/timestamp success log for production correlation.
+    console.log(
+        `[mqtt-direct] topic=${topic} timestamp=${prepared.timestamp || mqttRuntime.lastMessageAt} salvato con successo (${result.insertedReadings.length} letture)`
+    );
 }
 
 function startMqttDirectJob() {
@@ -161,6 +223,9 @@ function startMqttDirectJob() {
         return null;
     }
 
+    mqttConfigSnapshot = config;
+    reconnectDelayMs = config.reconnectPeriod;
+
     mqttClient = mqtt.connect(config.brokerUrl, {
         clientId: config.clientId,
         username: config.username,
@@ -168,13 +233,18 @@ function startMqttDirectJob() {
         reconnectPeriod: config.reconnectPeriod,
         connectTimeout: config.connectTimeout,
         keepalive: 30,
-        clean: true,
+        // RAYAT-FIX: durable MQTT subscription across reconnects/restarts.
+        clean: false,
         resubscribe: true
     });
 
     mqttClient.on('connect', () => {
+        mqttRuntime.connected = true;
+        mqttRuntime.lastConnectAt = new Date().toISOString();
+        mqttRuntime.consecutiveErrors = 0;
+        resetReconnectDelay();
         console.log(`[mqtt-direct] connesso a ${config.brokerUrl}`);
-        mqttClient.subscribe(config.topic, { qos: 0 }, (error) => {
+        mqttClient.subscribe(config.topic, { qos: 1 }, (error) => {
             if (error) {
                 console.error(`[mqtt-direct] errore subscribe su ${config.topic}:`, error.message);
                 return;
@@ -184,14 +254,19 @@ function startMqttDirectJob() {
     });
 
     mqttClient.on('reconnect', () => {
-        console.warn('[mqtt-direct] broker non disponibile, nuovo tentativo...');
+        mqttRuntime.connected = false;
+        mqttRuntime.reconnectCount += 1;
+        const nextDelay = bumpReconnectDelay();
+        console.warn(`[mqtt-direct] broker non disponibile, nuovo tentativo tra ${nextDelay || config.reconnectPeriod}ms...`);
     });
 
     mqttClient.on('offline', () => {
+        markDisconnected();
         console.warn('[mqtt-direct] client offline');
     });
 
     mqttClient.on('close', () => {
+        markDisconnected();
         console.warn('[mqtt-direct] connessione MQTT chiusa');
     });
 
@@ -200,18 +275,84 @@ function startMqttDirectJob() {
     });
 
     mqttClient.on('message', (topic, payloadBuffer) => {
+        mqttRuntime.lastMessageAt = new Date().toISOString();
+        mqttRuntime.lastMessageTopic = topic;
+        inFlightMessages += 1;
+
         processIncomingMessage(topic, payloadBuffer).catch((error) => {
-            console.error(`[mqtt-direct] errore ingest per topic "${topic}":`, error.message);
+            mqttRuntime.lastPersistErrorAt = new Date().toISOString();
+            mqttRuntime.consecutiveErrors += 1;
+            // RAYAT-FIX: keep topic + receive timestamp visible for failed ingests.
+            console.error(
+                `[mqtt-direct] errore ingest topic=${topic} receivedAt=${mqttRuntime.lastMessageAt}:`,
+                error.message
+            );
+        }).finally(() => {
+            inFlightMessages = Math.max(0, inFlightMessages - 1);
         });
     });
 
     return mqttClient;
 }
 
+async function waitForInFlightMessages(timeoutMs = 15000) {
+    const startTime = Date.now();
+
+    // RAYAT-FIX: finish in-flight persistence before disconnecting MQTT on shutdown.
+    while (inFlightMessages > 0 && (Date.now() - startTime) < timeoutMs) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+}
+
+async function stopMqttDirectJob() {
+    if (!mqttClient) {
+        markDisconnected();
+        return;
+    }
+
+    if (shutdownPromise) {
+        return shutdownPromise;
+    }
+
+    const client = mqttClient;
+
+    shutdownPromise = (async () => {
+        await waitForInFlightMessages();
+
+        await new Promise((resolve) => {
+            let settled = false;
+            const finalize = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                resolve();
+            };
+
+            const timeoutId = setTimeout(finalize, 5000);
+            client.end(false, {}, () => {
+                clearTimeout(timeoutId);
+                finalize();
+            });
+        });
+
+        markDisconnected();
+        mqttClient = null;
+        mqttConfigSnapshot = null;
+        reconnectDelayMs = 0;
+        inFlightMessages = 0;
+        shutdownPromise = null;
+    })();
+
+    return shutdownPromise;
+}
+
 module.exports = {
     buildIncomingBody,
     getMqttConfig,
+    getMqttRuntimeStatus,
     parsePayload,
     processIncomingMessage,
-    startMqttDirectJob
+    startMqttDirectJob,
+    stopMqttDirectJob
 };
