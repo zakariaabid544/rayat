@@ -18,7 +18,7 @@
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
         // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.28'; // RAYAT-FIX
+        const FRONTEND_ASSET_VERSION = '1.1.29'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -6630,7 +6630,6 @@
                 <div class="rayat-demo-shell container mx-auto px-4 max-w-[1300px]">
                     ${renderSubscriptionWarningBanner()}
                     ${renderMonitoringHeaderBlock()}
-                    ${renderGatewayStatusPanel()}
                     <div class="rayat-demo-nav-grid grid grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
                         ${Object.keys(sensorData).map(key => {
                 const isSel = selectedSensor === key;
