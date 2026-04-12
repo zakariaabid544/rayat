@@ -18,7 +18,7 @@
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
         // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.27'; // RAYAT-FIX
+        const FRONTEND_ASSET_VERSION = '1.1.28'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -3439,97 +3439,55 @@
             };
         }
 
-        function formatGatewayStatusTimestamp(timestampValue) { // RAYAT-FIX
-            if (!timestampValue) { // RAYAT-FIX
-                return '--'; // RAYAT-FIX
-            } // RAYAT-FIX
+        function formatSectionStatusTimestamp(timestampValue) {
+            if (!timestampValue) {
+                return '--';
+            }
 
-            const timestamp = new Date(timestampValue); // RAYAT-FIX
-            if (Number.isNaN(timestamp.getTime())) { // RAYAT-FIX
-                return '--'; // RAYAT-FIX
-            } // RAYAT-FIX
+            const timestamp = new Date(timestampValue);
+            if (Number.isNaN(timestamp.getTime())) {
+                return '--';
+            }
 
-            return `${formatLocalizedDate(timestamp)} ${formatLocalizedTime(timestamp)}`; // RAYAT-FIX
+            const now = new Date();
+            const isSameDay = timestamp.getFullYear() === now.getFullYear()
+                && timestamp.getMonth() === now.getMonth()
+                && timestamp.getDate() === now.getDate();
+
+            return isSameDay
+                ? formatLocalizedTime(timestamp)
+                : `${formatLocalizedDate(timestamp)} ${formatLocalizedTime(timestamp)}`;
         }
 
-        function getGatewayStatusCopy() { // RAYAT-FIX
-            const copyByLang = { // RAYAT-FIX
-                it: { gateway: 'Gateway', gatewayOnline: 'Online', gatewayOffline: 'Offline', gatewayUnknown: 'Stato non disponibile', lastHeartbeat: 'Ultimo heartbeat', lastBoot: 'Ultimo boot', sensorData: 'Dati sensori', sensorFresh: 'Freschi', sensorStale: 'Non aggiornati', lastSensorReading: 'Ultima lettura sensori' }, // RAYAT-FIX
-                en: { gateway: 'Gateway', gatewayOnline: 'Online', gatewayOffline: 'Offline', gatewayUnknown: 'Status unavailable', lastHeartbeat: 'Last heartbeat', lastBoot: 'Last boot', sensorData: 'Sensor data', sensorFresh: 'Fresh', sensorStale: 'Not fresh', lastSensorReading: 'Last sensor reading' }, // RAYAT-FIX
-                fr: { gateway: 'Gateway', gatewayOnline: 'En ligne', gatewayOffline: 'Hors ligne', gatewayUnknown: 'Statut indisponible', lastHeartbeat: 'Dernier heartbeat', lastBoot: 'Dernier boot', sensorData: 'Donnees capteurs', sensorFresh: 'Fraiches', sensorStale: 'Non fraiches', lastSensorReading: 'Derniere lecture capteurs' }, // RAYAT-FIX
-                ar: { gateway: 'البوابة', gatewayOnline: 'متصلة', gatewayOffline: 'غير متصلة', gatewayUnknown: 'الحالة غير متاحة', lastHeartbeat: 'آخر نبضة', lastBoot: 'آخر تشغيل', sensorData: 'بيانات المستشعرات', sensorFresh: 'محدثة', sensorStale: 'غير محدثة', lastSensorReading: 'آخر قراءة مستشعرات' }, // RAYAT-FIX
-                ber: { gateway: 'Gateway', gatewayOnline: 'Online', gatewayOffline: 'Offline', gatewayUnknown: 'Status ur yelli', lastHeartbeat: 'Last heartbeat', lastBoot: 'Last boot', sensorData: 'Sensor data', sensorFresh: 'Fresh', sensorStale: 'Not fresh', lastSensorReading: 'Last sensor reading' }, // RAYAT-FIX
-                zgh: { gateway: 'Gateway', gatewayOnline: 'Online', gatewayOffline: 'Offline', gatewayUnknown: 'Status ur yelli', lastHeartbeat: 'Last heartbeat', lastBoot: 'Last boot', sensorData: 'Sensor data', sensorFresh: 'Fresh', sensorStale: 'Not fresh', lastSensorReading: 'Last sensor reading' } // RAYAT-FIX
-            }; // RAYAT-FIX
-            return copyByLang[currentLang] || copyByLang.fr; // RAYAT-FIX
-        }
+        function getDemoSectionStatusMeta(sensorKey) {
+            const normalizedSensorKey = normalizeDashboardSensorKey(sensorKey) || resolveFreshestSensorKey(sensorKey);
+            const timestampValue = sensorLatestTimestamps[normalizedSensorKey]
+                || gatewayStatusState.sensorDataLastAt
+                || gatewayStatusState.lastHeartbeatAt
+                || null;
+            const sensorState = sensorConnectionState[normalizedSensorKey] || 'loading';
+            let effectiveState = sensorState;
 
-        function getGatewayOnlineMeta() { // RAYAT-FIX
-            const copy = getGatewayStatusCopy(); // RAYAT-FIX
-            if (!gatewayStatusState.available) { // RAYAT-FIX
-                return { className: 'is-loading', label: copy.gatewayUnknown }; // RAYAT-FIX
-            } // RAYAT-FIX
-            return gatewayStatusState.routerOnline // RAYAT-FIX
-                ? { className: 'is-online', label: copy.gatewayOnline } // RAYAT-FIX
-                : { className: 'is-offline', label: copy.gatewayOffline }; // RAYAT-FIX
-        }
+            if (effectiveState === 'loading') {
+                if (timestampValue) {
+                    const timestamp = new Date(timestampValue);
+                    effectiveState = !Number.isNaN(timestamp.getTime()) && (Date.now() - timestamp.getTime()) < getSensorOnlineWindowMs()
+                        ? 'online'
+                        : 'offline';
+                } else if (gatewayStatusState.available) {
+                    effectiveState = gatewayStatusState.routerOnline && gatewayStatusState.sensorDataFresh
+                        ? 'online'
+                        : 'offline';
+                } else {
+                    effectiveState = 'offline';
+                }
+            }
 
-        function getSensorFreshnessMeta() { // RAYAT-FIX
-            const copy = getGatewayStatusCopy(); // RAYAT-FIX
-            if (!gatewayStatusState.available) { // RAYAT-FIX
-                return { className: 'is-loading', label: copy.gatewayUnknown }; // RAYAT-FIX
-            } // RAYAT-FIX
-            return gatewayStatusState.sensorDataFresh // RAYAT-FIX
-                ? { className: 'is-online', label: copy.sensorFresh } // RAYAT-FIX
-                : { className: 'is-offline', label: copy.sensorStale }; // RAYAT-FIX
-        }
-
-        function renderGatewayStatusPanel() { // RAYAT-FIX
-            const copy = getGatewayStatusCopy(); // RAYAT-FIX
-            const gatewayMeta = getGatewayOnlineMeta(); // RAYAT-FIX
-            const sensorFreshnessMeta = getSensorFreshnessMeta(); // RAYAT-FIX
-            const gatewayIdentity = gatewayStatusState.deviceName || gatewayStatusState.deviceId || '--'; // RAYAT-FIX
-            return `<!-- RAYAT-FIX -->
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8"> <!-- RAYAT-FIX -->
-                    <article class="rounded-[2rem] bg-slate-950 text-white p-6 shadow-2xl"> <!-- RAYAT-FIX -->
-                        <div class="flex items-center justify-between gap-4"> <!-- RAYAT-FIX -->
-                            <div> <!-- RAYAT-FIX -->
-                                <p class="text-[11px] font-black uppercase tracking-[0.3em] text-white/55">${escapeHtml(copy.gateway)}</p> <!-- RAYAT-FIX -->
-                                <h3 class="text-2xl font-black mt-2">${escapeHtml(gatewayIdentity)}</h3> <!-- RAYAT-FIX -->
-                            </div> <!-- RAYAT-FIX -->
-                            <div class="inline-flex items-center gap-3 rounded-full px-4 py-2 bg-white/10"> <!-- RAYAT-FIX -->
-                                <span class="rayat-demo-section-heading__status ${gatewayMeta.className}" aria-hidden="true"></span> <!-- RAYAT-FIX -->
-                                <span class="text-sm font-bold uppercase tracking-[0.2em]">${escapeHtml(gatewayMeta.label)}</span> <!-- RAYAT-FIX -->
-                            </div> <!-- RAYAT-FIX -->
-                        </div> <!-- RAYAT-FIX -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6"> <!-- RAYAT-FIX -->
-                            <div class="rounded-[1.5rem] bg-white/8 px-4 py-4"> <!-- RAYAT-FIX -->
-                                <p class="text-[11px] font-black uppercase tracking-[0.24em] text-white/45">${escapeHtml(copy.lastHeartbeat)}</p> <!-- RAYAT-FIX -->
-                                <p class="text-base font-semibold mt-2">${escapeHtml(formatGatewayStatusTimestamp(gatewayStatusState.lastHeartbeatAt))}</p> <!-- RAYAT-FIX -->
-                            </div> <!-- RAYAT-FIX -->
-                            <div class="rounded-[1.5rem] bg-white/8 px-4 py-4"> <!-- RAYAT-FIX -->
-                                <p class="text-[11px] font-black uppercase tracking-[0.24em] text-white/45">${escapeHtml(copy.lastBoot)}</p> <!-- RAYAT-FIX -->
-                                <p class="text-base font-semibold mt-2">${escapeHtml(formatGatewayStatusTimestamp(gatewayStatusState.lastBootAt))}</p> <!-- RAYAT-FIX -->
-                            </div> <!-- RAYAT-FIX -->
-                        </div> <!-- RAYAT-FIX -->
-                    </article> <!-- RAYAT-FIX -->
-                    <article class="rounded-[2rem] bg-white border border-slate-200 p-6 shadow-xl"> <!-- RAYAT-FIX -->
-                        <div class="flex items-center justify-between gap-4"> <!-- RAYAT-FIX -->
-                            <div> <!-- RAYAT-FIX -->
-                                <p class="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400">${escapeHtml(copy.sensorData)}</p> <!-- RAYAT-FIX -->
-                                <h3 class="text-2xl font-black mt-2 text-slate-900">${escapeHtml(sensorFreshnessMeta.label)}</h3> <!-- RAYAT-FIX -->
-                            </div> <!-- RAYAT-FIX -->
-                            <div class="inline-flex items-center gap-3 rounded-full px-4 py-2 bg-slate-100"> <!-- RAYAT-FIX -->
-                                <span class="rayat-demo-section-heading__status ${sensorFreshnessMeta.className}" aria-hidden="true"></span> <!-- RAYAT-FIX -->
-                                <span class="text-sm font-bold uppercase tracking-[0.2em] text-slate-700">${escapeHtml(sensorFreshnessMeta.label)}</span> <!-- RAYAT-FIX -->
-                            </div> <!-- RAYAT-FIX -->
-                        </div> <!-- RAYAT-FIX -->
-                        <div class="rounded-[1.5rem] bg-slate-50 px-4 py-4 mt-6"> <!-- RAYAT-FIX -->
-                            <p class="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">${escapeHtml(copy.lastSensorReading)}</p> <!-- RAYAT-FIX -->
-                            <p class="text-base font-semibold mt-2 text-slate-800">${escapeHtml(formatGatewayStatusTimestamp(gatewayStatusState.sensorDataLastAt))}</p> <!-- RAYAT-FIX -->
-                        </div> <!-- RAYAT-FIX -->
-                    </article> <!-- RAYAT-FIX -->
-                </div> <!-- RAYAT-FIX -->`; // RAYAT-FIX
+            return {
+                className: effectiveState === 'online' ? 'is-online' : 'is-offline',
+                label: effectiveState === 'online' ? t('homeStatusOnline') : t('homeStatusOffline'),
+                timestamp: formatSectionStatusTimestamp(timestampValue)
+            };
         }
 
         function renderSensorMetricGrid(sensorKey, group, className = '') {
@@ -6520,13 +6478,6 @@
 
         function renderDemoPage() {
             const currentSensorKey = normalizeDashboardSensorKey(selectedSensor) || resolveFreshestSensorKey(selectedSensor); // RAYAT-FIX
-            const demoStatusState = sensorConnectionState[currentSensorKey] || 'loading'; // RAYAT-FIX
-            const demoStatusClass = demoStatusState === 'online'
-                ? 'is-online'
-                : (demoStatusState === 'offline' ? 'is-offline' : 'is-loading');
-            const demoStatusLabel = demoStatusState === 'online'
-                ? t('monitoringOnline')
-                : (demoStatusState === 'offline' ? t('monitoringOffline') : t('refreshingDataAction'));
             const current = sensorData[currentSensorKey] || sensorData.terreno; // RAYAT-FIX
 
             // RAYAT FIX - demo section refresh cleanup and repositioning
@@ -6560,32 +6511,34 @@
             `;
 
             // RAYAT FIX - demo section refresh cleanup and repositioning
-            const renderDemoSectionHeading = (title) => `
+            const renderDemoSectionHeading = (sensorKey, title) => {
+                const statusMeta = getDemoSectionStatusMeta(sensorKey);
+                const statusSummary = `${statusMeta.label} · ${statusMeta.timestamp}`;
+                return `
                 <div class="rayat-demo-section-heading">
                     <div class="rayat-demo-section-heading__row">
-                        <div class="rayat-demo-section-heading__controls rayat-demo-section-heading__controls--balance" aria-hidden="true">
-                            <span class="rayat-demo-section-heading__status ${demoStatusClass}"></span>
-                            ${renderMonitoringRefreshControl('section')}
-                        </div>
-                        <div class="rayat-demo-section-heading__copy">
-                            <h4 class="rayat-demo-section-heading__title">${title}</h4>
-                            <p class="rayat-demo-section-heading__subtitle">${t('realTimeMonitoring')}</p>
-                        </div>
-                        <div class="rayat-demo-section-heading__controls">
+                        <h4 class="rayat-demo-section-heading__title">${escapeHtml(title)}</h4>
+                        <div class="rayat-demo-section-heading__meta">
                             <span
-                                class="rayat-demo-section-heading__status ${demoStatusClass}"
-                                aria-label="${escapeHtml(demoStatusLabel)}"
-                                title="${escapeHtml(demoStatusLabel)}"
-                            ></span>
+                                class="rayat-demo-section-heading__badge ${statusMeta.className}"
+                                aria-label="${escapeHtml(statusSummary)}"
+                                title="${escapeHtml(statusSummary)}"
+                            >
+                                <span class="rayat-demo-section-heading__status ${statusMeta.className}" aria-hidden="true"></span>
+                                <span class="rayat-demo-section-heading__badge-text">${escapeHtml(statusMeta.label)}</span>
+                                <span class="rayat-demo-section-heading__separator" aria-hidden="true">&middot;</span>
+                                <span class="rayat-demo-section-heading__timestamp">${escapeHtml(statusMeta.timestamp)}</span>
+                            </span>
                             ${renderMonitoringRefreshControl('section')}
                         </div>
                     </div>
                 </div>
             `;
+            };
 
             const render7in1 = () => {
                 return `
-                ${renderDemoSectionHeading(t('sensorSoName'))}
+                ${renderDemoSectionHeading('terreno', t('sensorSoName'))}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
@@ -6595,7 +6548,7 @@
 
             const renderClimate = () => {
                 return `
-                ${renderDemoSectionHeading(t('sensorClName'))}
+                ${renderDemoSectionHeading('clima', t('sensorClName'))}
                 <div class="mb-8">
                     ${renderCropSelector()}
                 </div>
@@ -6616,7 +6569,7 @@
                 const isShortage = avail < req;
 
                 return `
-                ${renderDemoSectionHeading(t('sensorWaName'))}
+                ${renderDemoSectionHeading('acqua', t('sensorWaName'))}
                 <div class="rayat-water-compact mb-12">
                     <div>
                         <label class="block text-xs font-black text-blue-600 uppercase mb-4 tracking-tighter">${t('hectaresLabel')}</label>
@@ -6692,7 +6645,7 @@
                         ${/* Demo Mode: Error overlay removed */ ''}
                         <div class="relative z-10">
                             ${selectedSensor === 'acqua' ? renderWater() : (selectedSensor === 'terreno' ? render7in1() : (selectedSensor === 'clima' ? renderClimate() : `
-                                    ${renderDemoSectionHeading(t(current.nome))}
+                                    ${renderDemoSectionHeading(currentSensorKey, t(current.nome))}
                                     <div class="flex flex-col md:flex-row items-center justify-between mb-16">
                                     <div class="flex items-center justify-center">
                                             <div class="text-[10rem] transform -rotate-12 transition-transform hover:rotate-0 duration-700">${current.icon}</div>
