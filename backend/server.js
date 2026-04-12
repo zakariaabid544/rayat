@@ -191,6 +191,7 @@ app.get(['/api/health', '/health'], async (req, res) => {
     const health = await getDatabaseHealth();
     const mqttConfig = getMqttConfig();
     const alertMonitoring = await getMissingDataAlertRuntimeStatus({ forceRefresh: true });
+    const mqttRuntime = getMqttRuntimeStatus(); // RAYAT-FIX
 
     res.status(health.db === 'ok' ? 200 : 503).json({
         ...health,
@@ -201,7 +202,7 @@ app.get(['/api/health', '/health'], async (req, res) => {
             enabled: mqttConfig.enabled,
             brokerConfigured: Boolean(mqttConfig.brokerUrl),
             topic: mqttConfig.topic,
-            runtime: getMqttRuntimeStatus() // RAYAT-FIX
+            runtime: mqttRuntime // RAYAT-FIX
         }
     });
 });

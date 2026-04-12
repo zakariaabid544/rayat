@@ -57,7 +57,6 @@
             terreno: null,
             clima: null
         };
-        let latestActiveSensorKey = null;
 
         let authToken = null;
         let currentRole = 'guest';
@@ -2905,7 +2904,6 @@
                 terreno: null,
                 clima: null
             };
-            latestActiveSensorKey = null;
         }
 
         function updateSensorTimestamp(sensorKey, timestampValue) {
@@ -2948,30 +2946,16 @@
             return freshestSensorKey || normalizeDashboardSensorKey(fallbackSensorKey) || 'terreno';
         }
 
-        function alignSelectedSensorWithFreshestData() {
-            // RAYAT-FIX: prefer the freshest online sensor when the current tab is stale/offline.
-            const freshestSensorKey = resolveFreshestSensorKey(selectedSensor);
-            const normalizedSelectedSensor = normalizeDashboardSensorKey(selectedSensor);
-            latestActiveSensorKey = freshestSensorKey;
-
-            if (!normalizedSelectedSensor) {
-                selectedSensor = freshestSensorKey;
-                return freshestSensorKey;
+        function initializeSelectedSensorFromFreshestData() {
+            // RAYAT-FIX: use the freshest sensor only for the initial automatic dashboard selection.
+            const normalizedSelectedSensor = normalizeDashboardSensorKey(selectedSensor); // RAYAT-FIX
+            if (normalizedSelectedSensor) {
+                return normalizedSelectedSensor; // RAYAT-FIX
             }
 
-            const selectedStatus = sensorConnectionState[normalizedSelectedSensor];
-            const freshestStatus = sensorConnectionState[freshestSensorKey];
-            if (selectedStatus === 'offline' && freshestStatus === 'online') {
-                selectedSensor = freshestSensorKey;
-                return freshestSensorKey;
-            }
-
-            if (!sensorLatestTimestamps[normalizedSelectedSensor]) {
-                selectedSensor = freshestSensorKey;
-                return freshestSensorKey;
-            }
-
-            return normalizedSelectedSensor;
+            const freshestSensorKey = resolveFreshestSensorKey(selectedSensor); // RAYAT-FIX
+            selectedSensor = freshestSensorKey; // RAYAT-FIX
+            return freshestSensorKey; // RAYAT-FIX
         }
 
         function parsePositiveInteger(value, fallback) {
@@ -4563,7 +4547,7 @@
                     if (d) { d.value = val; updated = true; }
                 }
             });
-            alignSelectedSensorWithFreshestData();
+            initializeSelectedSensorFromFreshestData(); // RAYAT-FIX
             if (updated) {
                 if (!historyState.usesLiveData) {
                     syncCurrentSensorSnapshotToHistory(new Date());
@@ -6310,16 +6294,15 @@
 
 
         function renderDemoPage() {
-            const displaySensorKey = latestActiveSensorKey || resolveFreshestSensorKey(selectedSensor);
-            const currentSensorKey = normalizeDashboardSensorKey(selectedSensor) || displaySensorKey || 'terreno';
-            const demoStatusState = sensorConnectionState[displaySensorKey] || sensorConnectionState[currentSensorKey] || 'loading';
+            const currentSensorKey = normalizeDashboardSensorKey(selectedSensor) || resolveFreshestSensorKey(selectedSensor); // RAYAT-FIX
+            const demoStatusState = sensorConnectionState[currentSensorKey] || 'loading'; // RAYAT-FIX
             const demoStatusClass = demoStatusState === 'online'
                 ? 'is-online'
                 : (demoStatusState === 'offline' ? 'is-offline' : 'is-loading');
             const demoStatusLabel = demoStatusState === 'online'
                 ? t('monitoringOnline')
                 : (demoStatusState === 'offline' ? t('monitoringOffline') : t('refreshingDataAction'));
-            const current = sensorData[currentSensorKey] || sensorData[displaySensorKey] || sensorData.terreno;
+            const current = sensorData[currentSensorKey] || sensorData.terreno; // RAYAT-FIX
 
             // RAYAT FIX - demo section refresh cleanup and repositioning
             const renderMonitoringRefreshControl = (variant = 'toolbar') => `

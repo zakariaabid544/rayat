@@ -1,5 +1,6 @@
 const mqtt = require('mqtt');
 const { TextDecoder } = require('util');
+const { getRouterIntervalMinutes } = require('../../utils/monitoring-config'); // RAYAT-FIX
 
 const {
     ingestDeviceReadings,
@@ -19,6 +20,7 @@ let shutdownPromise = null;
 // RAYAT-FIX: expose live MQTT runtime diagnostics to health checks and logs.
 const mqttRuntime = {
     connected: false,
+    subscribeOk: false, // RAYAT-FIX
     reconnectCount: 0,
     lastConnectAt: null,
     lastDisconnectAt: null,
@@ -129,8 +131,9 @@ function getMqttConfig() {
 }
 
 function markDisconnected() {
-    mqttRuntime.connected = false;
-    mqttRuntime.lastDisconnectAt = new Date().toISOString();
+    mqttRuntime.connected = false; // RAYAT-FIX
+    mqttRuntime.subscribeOk = false; // RAYAT-FIX
+    mqttRuntime.lastDisconnectAt = new Date().toISOString(); // RAYAT-FIX
 }
 
 function resetReconnectDelay() {
@@ -160,8 +163,29 @@ function bumpReconnectDelay() {
     return nextDelay;
 }
 
+function getConsumerHealthyWindowMinutes() {
+    return Math.max(90, getRouterIntervalMinutes() * 3); // RAYAT-FIX
+}
+
 function getMqttRuntimeStatus() {
-    return { ...mqttRuntime };
+    const consumerHealthyWindowMinutes = getConsumerHealthyWindowMinutes(); // RAYAT-FIX
+    const lastMessageDate = mqttRuntime.lastMessageAt ? new Date(mqttRuntime.lastMessageAt) : null; // RAYAT-FIX
+    const lastMessageAgeMinutes = lastMessageDate && !Number.isNaN(lastMessageDate.getTime()) // RAYAT-FIX
+        ? Math.floor((Date.now() - lastMessageDate.getTime()) / 60000) // RAYAT-FIX
+        : null; // RAYAT-FIX
+    const consumerHealthy = Boolean( // RAYAT-FIX
+        mqttRuntime.connected // RAYAT-FIX
+        && mqttRuntime.subscribeOk // RAYAT-FIX
+        && lastMessageAgeMinutes !== null // RAYAT-FIX
+        && lastMessageAgeMinutes < consumerHealthyWindowMinutes // RAYAT-FIX
+    ); // RAYAT-FIX
+
+    return {
+        ...mqttRuntime, // RAYAT-FIX
+        consumerHealthyWindowMinutes, // RAYAT-FIX
+        lastMessageAgeMinutes, // RAYAT-FIX
+        consumerHealthy // RAYAT-FIX
+    };
 }
 
 async function processIncomingMessage(topic, payloadBuffer) {
@@ -239,23 +263,27 @@ function startMqttDirectJob() {
     });
 
     mqttClient.on('connect', () => {
-        mqttRuntime.connected = true;
-        mqttRuntime.lastConnectAt = new Date().toISOString();
-        mqttRuntime.consecutiveErrors = 0;
+        mqttRuntime.connected = true; // RAYAT-FIX
+        mqttRuntime.subscribeOk = false; // RAYAT-FIX
+        mqttRuntime.lastConnectAt = new Date().toISOString(); // RAYAT-FIX
+        mqttRuntime.consecutiveErrors = 0; // RAYAT-FIX
         resetReconnectDelay();
         console.log(`[mqtt-direct] connesso a ${config.brokerUrl}`);
         mqttClient.subscribe(config.topic, { qos: 1 }, (error) => {
             if (error) {
+                mqttRuntime.subscribeOk = false; // RAYAT-FIX
                 console.error(`[mqtt-direct] errore subscribe su ${config.topic}:`, error.message);
                 return;
             }
+            mqttRuntime.subscribeOk = true; // RAYAT-FIX
             console.log(`[mqtt-direct] in ascolto su ${config.topic}`);
         });
     });
 
     mqttClient.on('reconnect', () => {
-        mqttRuntime.connected = false;
-        mqttRuntime.reconnectCount += 1;
+        mqttRuntime.connected = false; // RAYAT-FIX
+        mqttRuntime.subscribeOk = false; // RAYAT-FIX
+        mqttRuntime.reconnectCount += 1; // RAYAT-FIX
         const nextDelay = bumpReconnectDelay();
         console.warn(`[mqtt-direct] broker non disponibile, nuovo tentativo tra ${nextDelay || config.reconnectPeriod}ms...`);
     });
