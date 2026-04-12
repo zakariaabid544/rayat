@@ -38,6 +38,10 @@ function getOfflineAfterMinutes() {
     return getRouterIntervalMinutes() + getOfflineGraceMinutes();
 }
 
+function getGatewayHeartbeatWindowMinutes() { // RAYAT-FIX
+    return parseMinutes(process.env.ROUTER_HEARTBEAT_WINDOW_MINUTES, 5); // RAYAT-FIX
+}
+
 function getMissingDataThresholdMinutes() {
     if (isCentralRouterMonitoringEnabled()) {
         return getRouterIntervalMinutes() + getRouterAlertExtraMinutes();
@@ -46,12 +50,18 @@ function getMissingDataThresholdMinutes() {
     return parseMinutes(process.env.ALERT_MISSING_DATA_THRESHOLD_MINUTES, 45);
 }
 
+function getSensorDataFreshMinutes() { // RAYAT-FIX
+    return getMissingDataThresholdMinutes(); // RAYAT-FIX
+}
+
 function getMonitoringConfig() {
     const routerIntervalMinutes = getRouterIntervalMinutes();
     const offlineGraceMinutes = getOfflineGraceMinutes();
     const offlineAfterMinutes = getOfflineAfterMinutes();
     const alertExtraMinutes = getRouterAlertExtraMinutes();
     const emailAfterMinutes = getMissingDataThresholdMinutes();
+    const gatewayHeartbeatWindowMinutes = getGatewayHeartbeatWindowMinutes(); // RAYAT-FIX
+    const sensorDataFreshMinutes = getSensorDataFreshMinutes(); // RAYAT-FIX
 
     return {
         configSource: isCentralRouterMonitoringEnabled() ? 'router_interval_env' : 'legacy_alert_env',
@@ -61,7 +71,9 @@ function getMonitoringConfig() {
         offlineAfterMinutes,
         alertExtraMinutes,
         emailAfterMinutes,
-        missingDataThresholdMinutes: emailAfterMinutes
+        missingDataThresholdMinutes: emailAfterMinutes,
+        gatewayHeartbeatWindowMinutes, // RAYAT-FIX
+        sensorDataFreshMinutes // RAYAT-FIX
     };
 }
 
@@ -71,6 +83,7 @@ function getPostgresMinuteIntervalLiteral(minutes) {
 }
 
 module.exports = {
+    getGatewayHeartbeatWindowMinutes, // RAYAT-FIX
     getMonitoringConfig,
     getMissingDataThresholdMinutes,
     getOfflineAfterMinutes,
@@ -78,6 +91,7 @@ module.exports = {
     getPostgresMinuteIntervalLiteral,
     getRouterAlertExtraMinutes,
     getRouterIntervalMinutes,
+    getSensorDataFreshMinutes, // RAYAT-FIX
     isCentralRouterMonitoringEnabled,
     parseMinutes
 };

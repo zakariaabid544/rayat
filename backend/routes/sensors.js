@@ -11,9 +11,11 @@ const {
     ingestPublicReadings
 } = require('../utils/sensor-ingest');
 const {
+    getGatewayHeartbeatWindowMinutes, // RAYAT-FIX
     getMonitoringConfig,
     getOfflineAfterMinutes,
-    getPostgresMinuteIntervalLiteral
+    getPostgresMinuteIntervalLiteral,
+    getSensorDataFreshMinutes // RAYAT-FIX
 } = require('../utils/monitoring-config');
 const { cleanString, parseSensorUpdate } = require('../utils/sensor-update-parser');
 
@@ -149,6 +151,123 @@ function resolveHistoryRange(queryParams = {}) {
     return { startDate, endDate };
 }
 
+function normalizeGatewayTimestamp(value) { // RAYAT-FIX
+    if (value instanceof Date) { // RAYAT-FIX
+        return Number.isNaN(value.getTime()) ? null : value.toISOString(); // RAYAT-FIX
+    } // RAYAT-FIX
+
+    const normalized = cleanString(value); // RAYAT-FIX
+    if (!normalized) { // RAYAT-FIX
+        return null; // RAYAT-FIX
+    } // RAYAT-FIX
+
+    const timestamp = new Date(normalized); // RAYAT-FIX
+    return Number.isNaN(timestamp.getTime()) ? null : timestamp.toISOString(); // RAYAT-FIX
+}
+
+function getMostRecentGatewayTimestamp(values = []) { // RAYAT-FIX
+    return values // RAYAT-FIX
+        .map((value) => normalizeGatewayTimestamp(value)) // RAYAT-FIX
+        .filter(Boolean) // RAYAT-FIX
+        .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] || null; // RAYAT-FIX
+}
+
+function isGatewayTimestampFresh(timestamp, thresholdMinutes) { // RAYAT-FIX
+    const normalizedTimestamp = normalizeGatewayTimestamp(timestamp); // RAYAT-FIX
+    if (!normalizedTimestamp) { // RAYAT-FIX
+        return false; // RAYAT-FIX
+    } // RAYAT-FIX
+
+    return (Date.now() - new Date(normalizedTimestamp).getTime()) < (thresholdMinutes * 60 * 1000); // RAYAT-FIX
+}
+
+function buildEmptyGatewayStatus() { // RAYAT-FIX
+    return { // RAYAT-FIX
+        deviceId: null, // RAYAT-FIX
+        deviceName: null, // RAYAT-FIX
+        routerOnline: false, // RAYAT-FIX
+        lastHeartbeatAt: null, // RAYAT-FIX
+        lastBootAt: null, // RAYAT-FIX
+        sensorDataLastAt: null, // RAYAT-FIX
+        sensorDataFresh: false, // RAYAT-FIX
+        lastGatewaySignalAt: null // RAYAT-FIX
+    }; // RAYAT-FIX
+}
+
+function buildGatewayStatusCandidate(row = {}) { // RAYAT-FIX
+    const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {}; // RAYAT-FIX
+    const lastHeartbeatAt = normalizeGatewayTimestamp(metadata.lastHeartbeatAt); // RAYAT-FIX
+    const lastBootAt = normalizeGatewayTimestamp(metadata.lastBootAt); // RAYAT-FIX
+    const sensorDataLastAt = normalizeGatewayTimestamp(row.sensor_data_last_at); // RAYAT-FIX
+    const lastGatewaySignalAt = getMostRecentGatewayTimestamp([lastHeartbeatAt, lastBootAt]); // RAYAT-FIX
+    return { // RAYAT-FIX
+        deviceId: cleanString(row.device_id) || null, // RAYAT-FIX
+        deviceName: cleanString(row.name) || null, // RAYAT-FIX
+        routerOnline: isGatewayTimestampFresh(lastGatewaySignalAt, getGatewayHeartbeatWindowMinutes()), // RAYAT-FIX
+        lastHeartbeatAt, // RAYAT-FIX
+        lastBootAt, // RAYAT-FIX
+        sensorDataLastAt, // RAYAT-FIX
+        sensorDataFresh: isGatewayTimestampFresh(sensorDataLastAt, getSensorDataFreshMinutes()), // RAYAT-FIX
+        lastGatewaySignalAt // RAYAT-FIX
+    }; // RAYAT-FIX
+}
+
+function compareGatewayStatusCandidates(left = {}, right = {}) { // RAYAT-FIX
+    const leftActivity = getMostRecentGatewayTimestamp([left.lastGatewaySignalAt, left.sensorDataLastAt]); // RAYAT-FIX
+    const rightActivity = getMostRecentGatewayTimestamp([right.lastGatewaySignalAt, right.sensorDataLastAt]); // RAYAT-FIX
+    return new Date(rightActivity || 0).getTime() - new Date(leftActivity || 0).getTime(); // RAYAT-FIX
+}
+
+async function getPublicSensorDataLastAt() { // RAYAT-FIX
+    const rows = await query( // RAYAT-FIX
+        `SELECT MAX(timestamp) AS sensor_data_last_at FROM public_sensor_latest` // RAYAT-FIX
+    ); // RAYAT-FIX
+    return normalizeGatewayTimestamp(rows[0]?.sensor_data_last_at); // RAYAT-FIX
+} // RAYAT-FIX
+
+async function resolveGatewayStatusPayload(options = {}) { // RAYAT-FIX
+    const monitoring = getMonitoringConfig(); // RAYAT-FIX
+    const preferredDeviceId = cleanString(options.preferredDeviceId || process.env.PUBLIC_GATEWAY_DEVICE_ID || process.env.MQTT_DEFAULT_DEVICE_ID); // RAYAT-FIX
+    let sql = `
+        SELECT
+            d.id,
+            d.device_id,
+            d.name,
+            d.metadata,
+            MAX(sl.timestamp) AS sensor_data_last_at
+        FROM devices d
+        LEFT JOIN sensors s ON s.device_id = d.id
+           AND s.enabled = TRUE
+        LEFT JOIN sensor_latest sl ON sl.sensor_id = s.id
+    `; // RAYAT-FIX
+    const params = []; // RAYAT-FIX
+
+    if (options.userId) { // RAYAT-FIX
+        sql += ' WHERE d.user_id = ?'; // RAYAT-FIX
+        params.push(options.userId); // RAYAT-FIX
+    } // RAYAT-FIX
+
+    sql += ' GROUP BY d.id, d.device_id, d.name, d.metadata'; // RAYAT-FIX
+    const rows = await query(sql, params); // RAYAT-FIX
+    const candidates = rows.map((row) => buildGatewayStatusCandidate(row)); // RAYAT-FIX
+    const selected = candidates.find((candidate) => candidate.deviceId === preferredDeviceId) // RAYAT-FIX
+        || candidates.sort(compareGatewayStatusCandidates)[0] // RAYAT-FIX
+        || buildEmptyGatewayStatus(); // RAYAT-FIX
+    const publicSensorDataLastAt = !options.userId ? await getPublicSensorDataLastAt() : null; // RAYAT-FIX
+    const resolvedSensorDataLastAt = publicSensorDataLastAt || selected.sensorDataLastAt; // RAYAT-FIX
+    const resolvedSelection = { // RAYAT-FIX
+        ...selected, // RAYAT-FIX
+        sensorDataLastAt: resolvedSensorDataLastAt, // RAYAT-FIX
+        sensorDataFresh: isGatewayTimestampFresh(resolvedSensorDataLastAt, getSensorDataFreshMinutes()) // RAYAT-FIX
+    }; // RAYAT-FIX
+
+    return { // RAYAT-FIX
+        success: true, // RAYAT-FIX
+        data: resolvedSelection, // RAYAT-FIX
+        monitoring // RAYAT-FIX
+    }; // RAYAT-FIX
+}
+
 // GET /api/sensors/public/latest - Ultimi dati pubblici per la demo senza login
 router.get('/public/latest', async (_req, res) => {
     try {
@@ -179,6 +298,15 @@ router.get('/public/latest', async (_req, res) => {
         res.status(500).json({ error: 'Errore nel recupero dati sensori pubblici' });
     }
 });
+
+router.get('/public/status', async (_req, res) => { // RAYAT-FIX
+    try { // RAYAT-FIX
+        res.json(await resolveGatewayStatusPayload({})); // RAYAT-FIX
+    } catch (error) { // RAYAT-FIX
+        console.error('Get public gateway status error:', error); // RAYAT-FIX
+        res.status(500).json({ error: 'Errore nel recupero stato gateway pubblico' }); // RAYAT-FIX
+    } // RAYAT-FIX
+}); // RAYAT-FIX
 
 // GET /api/sensors/public/history - Storico dati pubblici per la demo senza login
 router.get('/public/history', async (req, res) => {
@@ -296,6 +424,15 @@ router.post('/update', async (req, res) => {
         res.status(500).json({ error: 'Errore nel salvataggio dati sensori' });
     }
 });
+
+router.get('/status', authenticateToken, checkSubscription, async (req, res) => { // RAYAT-FIX
+    try { // RAYAT-FIX
+        res.json(await resolveGatewayStatusPayload({ userId: req.user.id })); // RAYAT-FIX
+    } catch (error) { // RAYAT-FIX
+        console.error('Get gateway status error:', error); // RAYAT-FIX
+        res.status(500).json({ error: 'Errore nel recupero stato gateway' }); // RAYAT-FIX
+    } // RAYAT-FIX
+}); // RAYAT-FIX
 
 // GET /api/sensors/latest - Ultimi dati di tutti i sensori dell'utente
 router.get('/latest', authenticateToken, checkSubscription, async (req, res) => {

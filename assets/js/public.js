@@ -13,10 +13,12 @@
             API_BASE_URL: `${API_ORIGIN}/api`,
             REAL_API_URL: `${API_ORIGIN}/api/sensors/simple/latest`,
             PUBLIC_LATEST_URL: `${API_ORIGIN}/api/sensors/public/latest`,
+            PUBLIC_GATEWAY_STATUS_URL: `${API_ORIGIN}/api/sensors/public/status`, // RAYAT-FIX
+            PRIVATE_GATEWAY_STATUS_URL: `${API_ORIGIN}/api/sensors/status`, // RAYAT-FIX
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
-        // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.26';
+        // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
+        const FRONTEND_ASSET_VERSION = '1.1.27'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -26,7 +28,9 @@
             offlineAfterMinutes: 35,
             alertExtraMinutes: 15,
             emailAfterMinutes: 45,
-            missingDataThresholdMinutes: 45
+            missingDataThresholdMinutes: 45,
+            gatewayHeartbeatWindowMinutes: 5, // RAYAT-FIX
+            sensorDataFreshMinutes: 45 // RAYAT-FIX
         });
 
         let isRefreshingData = false;
@@ -57,6 +61,17 @@
             terreno: null,
             clima: null
         };
+        let gatewayStatusState = { // RAYAT-FIX
+            available: false, // RAYAT-FIX
+            deviceId: null, // RAYAT-FIX
+            deviceName: null, // RAYAT-FIX
+            routerOnline: false, // RAYAT-FIX
+            lastHeartbeatAt: null, // RAYAT-FIX
+            lastBootAt: null, // RAYAT-FIX
+            sensorDataLastAt: null, // RAYAT-FIX
+            sensorDataFresh: false // RAYAT-FIX
+        }; // RAYAT-FIX
+        let gatewayStatusSignature = ''; // RAYAT-FIX
 
         let authToken = null;
         let currentRole = 'guest';
@@ -2985,6 +3000,14 @@
                 source.emailAfterMinutes ?? source.missingDataThresholdMinutes,
                 routerIntervalMinutes + alertExtraMinutes
             );
+            const gatewayHeartbeatWindowMinutes = parsePositiveInteger(
+                source.gatewayHeartbeatWindowMinutes,
+                DEFAULT_MONITORING_CONFIG.gatewayHeartbeatWindowMinutes
+            ); // RAYAT-FIX
+            const sensorDataFreshMinutes = parsePositiveInteger(
+                source.sensorDataFreshMinutes ?? source.emailAfterMinutes ?? source.missingDataThresholdMinutes,
+                emailAfterMinutes
+            ); // RAYAT-FIX
 
             return {
                 routerIntervalMinutes,
@@ -2993,7 +3016,9 @@
                 offlineAfterMinutes,
                 alertExtraMinutes,
                 emailAfterMinutes,
-                missingDataThresholdMinutes: emailAfterMinutes
+                missingDataThresholdMinutes: emailAfterMinutes,
+                gatewayHeartbeatWindowMinutes, // RAYAT-FIX
+                sensorDataFreshMinutes // RAYAT-FIX
             };
         }
 
@@ -3004,6 +3029,79 @@
 
         function getSensorOnlineWindowMs() {
             return liveMonitoringConfig.offlineAfterMinutes * 60 * 1000;
+        }
+
+        function normalizeGatewayStatusPayload(payload) { // RAYAT-FIX
+            const source = payload && typeof payload === 'object' ? payload : {}; // RAYAT-FIX
+            return { // RAYAT-FIX
+                available: true, // RAYAT-FIX
+                deviceId: source.deviceId || null, // RAYAT-FIX
+                deviceName: source.deviceName || null, // RAYAT-FIX
+                routerOnline: source.routerOnline === true, // RAYAT-FIX
+                lastHeartbeatAt: source.lastHeartbeatAt || null, // RAYAT-FIX
+                lastBootAt: source.lastBootAt || null, // RAYAT-FIX
+                sensorDataLastAt: source.sensorDataLastAt || null, // RAYAT-FIX
+                sensorDataFresh: source.sensorDataFresh === true // RAYAT-FIX
+            }; // RAYAT-FIX
+        }
+
+        function buildGatewayStatusSignature(status = gatewayStatusState) { // RAYAT-FIX
+            return [ // RAYAT-FIX
+                status.available ? '1' : '0', // RAYAT-FIX
+                status.deviceId || '', // RAYAT-FIX
+                status.routerOnline ? '1' : '0', // RAYAT-FIX
+                status.lastHeartbeatAt || '', // RAYAT-FIX
+                status.lastBootAt || '', // RAYAT-FIX
+                status.sensorDataLastAt || '', // RAYAT-FIX
+                status.sensorDataFresh ? '1' : '0' // RAYAT-FIX
+            ].join('|'); // RAYAT-FIX
+        }
+
+        function resetGatewayStatusState() { // RAYAT-FIX
+            gatewayStatusState = { // RAYAT-FIX
+                available: false, // RAYAT-FIX
+                deviceId: null, // RAYAT-FIX
+                deviceName: null, // RAYAT-FIX
+                routerOnline: false, // RAYAT-FIX
+                lastHeartbeatAt: null, // RAYAT-FIX
+                lastBootAt: null, // RAYAT-FIX
+                sensorDataLastAt: null, // RAYAT-FIX
+                sensorDataFresh: false // RAYAT-FIX
+            }; // RAYAT-FIX
+            gatewayStatusSignature = ''; // RAYAT-FIX
+        }
+
+        function updateGatewayStatusState(payload) { // RAYAT-FIX
+            const nextStatus = normalizeGatewayStatusPayload(payload); // RAYAT-FIX
+            const nextSignature = buildGatewayStatusSignature(nextStatus); // RAYAT-FIX
+            const changed = nextSignature !== gatewayStatusSignature; // RAYAT-FIX
+            gatewayStatusState = nextStatus; // RAYAT-FIX
+            gatewayStatusSignature = nextSignature; // RAYAT-FIX
+            return changed; // RAYAT-FIX
+        }
+
+        async function fetchGatewayStatusPayload(requestScope) { // RAYAT-FIX
+            const isPrivateScope = requestScope === 'private'; // RAYAT-FIX
+            const endpoint = isPrivateScope ? CONFIG.PRIVATE_GATEWAY_STATUS_URL : CONFIG.PUBLIC_GATEWAY_STATUS_URL; // RAYAT-FIX
+            const response = await fetch(`${endpoint}?t=${Date.now()}`, { // RAYAT-FIX
+                cache: 'no-store', // RAYAT-FIX
+                headers: isPrivateScope ? { 'Authorization': `Bearer ${authToken}` } : undefined // RAYAT-FIX
+            }); // RAYAT-FIX
+            if (!response.ok) { // RAYAT-FIX
+                throw new Error(`HTTP ${response.status}`); // RAYAT-FIX
+            } // RAYAT-FIX
+            return response.json(); // RAYAT-FIX
+        }
+
+        function applyGatewayStatusResponse(result) { // RAYAT-FIX
+            if (result?.success && result.data) { // RAYAT-FIX
+                applyMonitoringConfig(result.monitoring); // RAYAT-FIX
+                return updateGatewayStatusState(result.data); // RAYAT-FIX
+            } // RAYAT-FIX
+
+            const hadPreviousState = Boolean(gatewayStatusSignature); // RAYAT-FIX
+            resetGatewayStatusState(); // RAYAT-FIX
+            return hadPreviousState; // RAYAT-FIX
         }
 
         function readSensorCache(cacheKey) {
@@ -3339,6 +3437,99 @@
                     ? t('monitoringOnline')
                     : (state === 'offline' ? t('monitoringOffline') : t('refreshingDataAction'))
             };
+        }
+
+        function formatGatewayStatusTimestamp(timestampValue) { // RAYAT-FIX
+            if (!timestampValue) { // RAYAT-FIX
+                return '--'; // RAYAT-FIX
+            } // RAYAT-FIX
+
+            const timestamp = new Date(timestampValue); // RAYAT-FIX
+            if (Number.isNaN(timestamp.getTime())) { // RAYAT-FIX
+                return '--'; // RAYAT-FIX
+            } // RAYAT-FIX
+
+            return `${formatLocalizedDate(timestamp)} ${formatLocalizedTime(timestamp)}`; // RAYAT-FIX
+        }
+
+        function getGatewayStatusCopy() { // RAYAT-FIX
+            const copyByLang = { // RAYAT-FIX
+                it: { gateway: 'Gateway', gatewayOnline: 'Online', gatewayOffline: 'Offline', gatewayUnknown: 'Stato non disponibile', lastHeartbeat: 'Ultimo heartbeat', lastBoot: 'Ultimo boot', sensorData: 'Dati sensori', sensorFresh: 'Freschi', sensorStale: 'Non aggiornati', lastSensorReading: 'Ultima lettura sensori' }, // RAYAT-FIX
+                en: { gateway: 'Gateway', gatewayOnline: 'Online', gatewayOffline: 'Offline', gatewayUnknown: 'Status unavailable', lastHeartbeat: 'Last heartbeat', lastBoot: 'Last boot', sensorData: 'Sensor data', sensorFresh: 'Fresh', sensorStale: 'Not fresh', lastSensorReading: 'Last sensor reading' }, // RAYAT-FIX
+                fr: { gateway: 'Gateway', gatewayOnline: 'En ligne', gatewayOffline: 'Hors ligne', gatewayUnknown: 'Statut indisponible', lastHeartbeat: 'Dernier heartbeat', lastBoot: 'Dernier boot', sensorData: 'Donnees capteurs', sensorFresh: 'Fraiches', sensorStale: 'Non fraiches', lastSensorReading: 'Derniere lecture capteurs' }, // RAYAT-FIX
+                ar: { gateway: 'البوابة', gatewayOnline: 'متصلة', gatewayOffline: 'غير متصلة', gatewayUnknown: 'الحالة غير متاحة', lastHeartbeat: 'آخر نبضة', lastBoot: 'آخر تشغيل', sensorData: 'بيانات المستشعرات', sensorFresh: 'محدثة', sensorStale: 'غير محدثة', lastSensorReading: 'آخر قراءة مستشعرات' }, // RAYAT-FIX
+                ber: { gateway: 'Gateway', gatewayOnline: 'Online', gatewayOffline: 'Offline', gatewayUnknown: 'Status ur yelli', lastHeartbeat: 'Last heartbeat', lastBoot: 'Last boot', sensorData: 'Sensor data', sensorFresh: 'Fresh', sensorStale: 'Not fresh', lastSensorReading: 'Last sensor reading' }, // RAYAT-FIX
+                zgh: { gateway: 'Gateway', gatewayOnline: 'Online', gatewayOffline: 'Offline', gatewayUnknown: 'Status ur yelli', lastHeartbeat: 'Last heartbeat', lastBoot: 'Last boot', sensorData: 'Sensor data', sensorFresh: 'Fresh', sensorStale: 'Not fresh', lastSensorReading: 'Last sensor reading' } // RAYAT-FIX
+            }; // RAYAT-FIX
+            return copyByLang[currentLang] || copyByLang.fr; // RAYAT-FIX
+        }
+
+        function getGatewayOnlineMeta() { // RAYAT-FIX
+            const copy = getGatewayStatusCopy(); // RAYAT-FIX
+            if (!gatewayStatusState.available) { // RAYAT-FIX
+                return { className: 'is-loading', label: copy.gatewayUnknown }; // RAYAT-FIX
+            } // RAYAT-FIX
+            return gatewayStatusState.routerOnline // RAYAT-FIX
+                ? { className: 'is-online', label: copy.gatewayOnline } // RAYAT-FIX
+                : { className: 'is-offline', label: copy.gatewayOffline }; // RAYAT-FIX
+        }
+
+        function getSensorFreshnessMeta() { // RAYAT-FIX
+            const copy = getGatewayStatusCopy(); // RAYAT-FIX
+            if (!gatewayStatusState.available) { // RAYAT-FIX
+                return { className: 'is-loading', label: copy.gatewayUnknown }; // RAYAT-FIX
+            } // RAYAT-FIX
+            return gatewayStatusState.sensorDataFresh // RAYAT-FIX
+                ? { className: 'is-online', label: copy.sensorFresh } // RAYAT-FIX
+                : { className: 'is-offline', label: copy.sensorStale }; // RAYAT-FIX
+        }
+
+        function renderGatewayStatusPanel() { // RAYAT-FIX
+            const copy = getGatewayStatusCopy(); // RAYAT-FIX
+            const gatewayMeta = getGatewayOnlineMeta(); // RAYAT-FIX
+            const sensorFreshnessMeta = getSensorFreshnessMeta(); // RAYAT-FIX
+            const gatewayIdentity = gatewayStatusState.deviceName || gatewayStatusState.deviceId || '--'; // RAYAT-FIX
+            return `<!-- RAYAT-FIX -->
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8"> <!-- RAYAT-FIX -->
+                    <article class="rounded-[2rem] bg-slate-950 text-white p-6 shadow-2xl"> <!-- RAYAT-FIX -->
+                        <div class="flex items-center justify-between gap-4"> <!-- RAYAT-FIX -->
+                            <div> <!-- RAYAT-FIX -->
+                                <p class="text-[11px] font-black uppercase tracking-[0.3em] text-white/55">${escapeHtml(copy.gateway)}</p> <!-- RAYAT-FIX -->
+                                <h3 class="text-2xl font-black mt-2">${escapeHtml(gatewayIdentity)}</h3> <!-- RAYAT-FIX -->
+                            </div> <!-- RAYAT-FIX -->
+                            <div class="inline-flex items-center gap-3 rounded-full px-4 py-2 bg-white/10"> <!-- RAYAT-FIX -->
+                                <span class="rayat-demo-section-heading__status ${gatewayMeta.className}" aria-hidden="true"></span> <!-- RAYAT-FIX -->
+                                <span class="text-sm font-bold uppercase tracking-[0.2em]">${escapeHtml(gatewayMeta.label)}</span> <!-- RAYAT-FIX -->
+                            </div> <!-- RAYAT-FIX -->
+                        </div> <!-- RAYAT-FIX -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6"> <!-- RAYAT-FIX -->
+                            <div class="rounded-[1.5rem] bg-white/8 px-4 py-4"> <!-- RAYAT-FIX -->
+                                <p class="text-[11px] font-black uppercase tracking-[0.24em] text-white/45">${escapeHtml(copy.lastHeartbeat)}</p> <!-- RAYAT-FIX -->
+                                <p class="text-base font-semibold mt-2">${escapeHtml(formatGatewayStatusTimestamp(gatewayStatusState.lastHeartbeatAt))}</p> <!-- RAYAT-FIX -->
+                            </div> <!-- RAYAT-FIX -->
+                            <div class="rounded-[1.5rem] bg-white/8 px-4 py-4"> <!-- RAYAT-FIX -->
+                                <p class="text-[11px] font-black uppercase tracking-[0.24em] text-white/45">${escapeHtml(copy.lastBoot)}</p> <!-- RAYAT-FIX -->
+                                <p class="text-base font-semibold mt-2">${escapeHtml(formatGatewayStatusTimestamp(gatewayStatusState.lastBootAt))}</p> <!-- RAYAT-FIX -->
+                            </div> <!-- RAYAT-FIX -->
+                        </div> <!-- RAYAT-FIX -->
+                    </article> <!-- RAYAT-FIX -->
+                    <article class="rounded-[2rem] bg-white border border-slate-200 p-6 shadow-xl"> <!-- RAYAT-FIX -->
+                        <div class="flex items-center justify-between gap-4"> <!-- RAYAT-FIX -->
+                            <div> <!-- RAYAT-FIX -->
+                                <p class="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400">${escapeHtml(copy.sensorData)}</p> <!-- RAYAT-FIX -->
+                                <h3 class="text-2xl font-black mt-2 text-slate-900">${escapeHtml(sensorFreshnessMeta.label)}</h3> <!-- RAYAT-FIX -->
+                            </div> <!-- RAYAT-FIX -->
+                            <div class="inline-flex items-center gap-3 rounded-full px-4 py-2 bg-slate-100"> <!-- RAYAT-FIX -->
+                                <span class="rayat-demo-section-heading__status ${sensorFreshnessMeta.className}" aria-hidden="true"></span> <!-- RAYAT-FIX -->
+                                <span class="text-sm font-bold uppercase tracking-[0.2em] text-slate-700">${escapeHtml(sensorFreshnessMeta.label)}</span> <!-- RAYAT-FIX -->
+                            </div> <!-- RAYAT-FIX -->
+                        </div> <!-- RAYAT-FIX -->
+                        <div class="rounded-[1.5rem] bg-slate-50 px-4 py-4 mt-6"> <!-- RAYAT-FIX -->
+                            <p class="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">${escapeHtml(copy.lastSensorReading)}</p> <!-- RAYAT-FIX -->
+                            <p class="text-base font-semibold mt-2 text-slate-800">${escapeHtml(formatGatewayStatusTimestamp(gatewayStatusState.sensorDataLastAt))}</p> <!-- RAYAT-FIX -->
+                        </div> <!-- RAYAT-FIX -->
+                    </article> <!-- RAYAT-FIX -->
+                </div> <!-- RAYAT-FIX -->`; // RAYAT-FIX
         }
 
         function renderSensorMetricGrid(sensorKey, group, className = '') {
@@ -4318,41 +4509,55 @@
                 if (requestScope === 'public') {
                     hideSubscriptionExpiredModal();
                     try {
-                        const response = await fetch(`${CONFIG.PUBLIC_LATEST_URL}?t=${Date.now()}`, {
-                            cache: 'no-store'
-                        });
-                        if (response.ok) {
-                            const result = await response.json();
-                            if (result.success && Array.isArray(result.data)) {
-                                const data = result.data;
-                                const monitoring = applyMonitoringConfig(result.monitoring);
-                                writeSensorCache(PUBLIC_SENSOR_CACHE_KEY, data, monitoring);
-                                const didRender = updateSensorData(data, true);
-                                dataError = false;
-                                setOfflineBannerVisibility(false);
-                                return didRender;
-                            }
-                        }
+                        const [sensorResponse, gatewayStatusResult] = await Promise.allSettled([ // RAYAT-FIX
+                            fetch(`${CONFIG.PUBLIC_LATEST_URL}?t=${Date.now()}`, { cache: 'no-store' }), // RAYAT-FIX
+                            fetchGatewayStatusPayload('public') // RAYAT-FIX
+                        ]); // RAYAT-FIX
+                        const gatewayStatusChanged = gatewayStatusResult.status === 'fulfilled' // RAYAT-FIX
+                            ? applyGatewayStatusResponse(gatewayStatusResult.value) // RAYAT-FIX
+                            : applyGatewayStatusResponse(null); // RAYAT-FIX
+                        if (sensorResponse.status === 'fulfilled' && sensorResponse.value.ok) { // RAYAT-FIX
+                            const result = await sensorResponse.value.json(); // RAYAT-FIX
+                            if (result.success && Array.isArray(result.data)) { // RAYAT-FIX
+                                const data = result.data; // RAYAT-FIX
+                                const monitoring = applyMonitoringConfig(result.monitoring); // RAYAT-FIX
+                                writeSensorCache(PUBLIC_SENSOR_CACHE_KEY, data, monitoring); // RAYAT-FIX
+                                const didRender = updateSensorData(data, true); // RAYAT-FIX
+                                dataError = false; // RAYAT-FIX
+                                setOfflineBannerVisibility(false); // RAYAT-FIX
+                                if (!didRender && gatewayStatusChanged) { // RAYAT-FIX
+                                    render(); // RAYAT-FIX
+                                } // RAYAT-FIX
+                                return didRender || gatewayStatusChanged; // RAYAT-FIX
+                            } // RAYAT-FIX
+                        } // RAYAT-FIX
                     } catch (error) { }
 
                     const cached = readSensorCache(PUBLIC_SENSOR_CACHE_KEY);
                     if (cached?.data) {
-                        applyMonitoringConfig(cached.monitoring);
-                        const didRender = updateSensorData(cached.data, true);
-                        dataError = false;
-                        setOfflineBannerVisibility(true, t('usingCache'));
-                        return didRender;
+                        const hadGatewayState = Boolean(gatewayStatusSignature); // RAYAT-FIX
+                        resetGatewayStatusState(); // RAYAT-FIX
+                        applyMonitoringConfig(cached.monitoring); // RAYAT-FIX
+                        const didRender = updateSensorData(cached.data, true); // RAYAT-FIX
+                        dataError = false; // RAYAT-FIX
+                        setOfflineBannerVisibility(true, t('usingCache')); // RAYAT-FIX
+                        if (!didRender && hadGatewayState) { // RAYAT-FIX
+                            render(); // RAYAT-FIX
+                        } // RAYAT-FIX
+                        return didRender || hadGatewayState; // RAYAT-FIX
                     }
 
                     const hadRenderedData = Boolean(lastSensorPayloadSignature);
+                    const hadGatewayState = Boolean(gatewayStatusSignature); // RAYAT-FIX
                     lastSensorPayloadSignature = '';
                     resetSensorConnectionState();
                     resetLiveSensorDisplayData();
+                    resetGatewayStatusState(); // RAYAT-FIX
                     dataError = false;
-                    if (hadRenderedData) {
+                    if (hadRenderedData || hadGatewayState) { // RAYAT-FIX
                         render();
                     }
-                    return hadRenderedData;
+                    return hadRenderedData || hadGatewayState; // RAYAT-FIX
                 }
 
                 if (subscriptionUiState.expired) {
@@ -4363,9 +4568,19 @@
                 }
 
                 try {
-                    const response = await fetch(`${CONFIG.API_BASE_URL}/sensors/latest`, {
-                        headers: { 'Authorization': `Bearer ${authToken}` }
-                    });
+                    const [sensorResponse, gatewayStatusResult] = await Promise.allSettled([ // RAYAT-FIX
+                        fetch(`${CONFIG.API_BASE_URL}/sensors/latest`, { headers: { 'Authorization': `Bearer ${authToken}` } }), // RAYAT-FIX
+                        fetchGatewayStatusPayload('private') // RAYAT-FIX
+                    ]); // RAYAT-FIX
+                    const gatewayStatusChanged = gatewayStatusResult.status === 'fulfilled' // RAYAT-FIX
+                        ? applyGatewayStatusResponse(gatewayStatusResult.value) // RAYAT-FIX
+                        : applyGatewayStatusResponse(null); // RAYAT-FIX
+
+                    if (sensorResponse.status !== 'fulfilled') { // RAYAT-FIX
+                        throw new Error('sensor_fetch_failed'); // RAYAT-FIX
+                    } // RAYAT-FIX
+
+                    const response = sensorResponse.value; // RAYAT-FIX
 
                     if (response.status === 401 || response.status === 403) {
                         const errorData = await response.json().catch(() => ({}));
@@ -4392,7 +4607,10 @@
                             const didRender = updateSensorData(result.data);
                             dataError = false;
                             setOfflineBannerVisibility(false);
-                            return didRender;
+                            if (!didRender && gatewayStatusChanged) { // RAYAT-FIX
+                                render(); // RAYAT-FIX
+                            } // RAYAT-FIX
+                            return didRender || gatewayStatusChanged; // RAYAT-FIX
                         }
                     }
                 } catch (error) { }
@@ -4401,21 +4619,28 @@
 
                 const cached = readSensorCache(PRIVATE_SENSOR_CACHE_KEY);
                 if (cached?.data) {
+                    const hadGatewayState = Boolean(gatewayStatusSignature); // RAYAT-FIX
+                    resetGatewayStatusState(); // RAYAT-FIX
                     applyMonitoringConfig(cached.monitoring);
                     const didRender = updateSensorData(cached.data, true);
                     dataError = false;
                     setOfflineBannerVisibility(true, t('usingCache'));
-                    return didRender;
+                    if (!didRender && hadGatewayState) { // RAYAT-FIX
+                        render(); // RAYAT-FIX
+                    } // RAYAT-FIX
+                    return didRender || hadGatewayState; // RAYAT-FIX
                 }
 
                 const hadRenderedData = Boolean(lastSensorPayloadSignature);
+                const hadGatewayState = Boolean(gatewayStatusSignature); // RAYAT-FIX
                 lastSensorPayloadSignature = '';
                 resetSensorConnectionState();
                 resetLiveSensorDisplayData();
-                if (hadRenderedData) {
+                resetGatewayStatusState(); // RAYAT-FIX
+                if (hadRenderedData || hadGatewayState) { // RAYAT-FIX
                     render();
                 }
-                return hadRenderedData;
+                return hadRenderedData || hadGatewayState; // RAYAT-FIX
             })();
 
             activeSensorLoadPromise = sensorPromise;
@@ -6452,6 +6677,7 @@
                 <div class="rayat-demo-shell container mx-auto px-4 max-w-[1300px]">
                     ${renderSubscriptionWarningBanner()}
                     ${renderMonitoringHeaderBlock()}
+                    ${renderGatewayStatusPanel()}
                     <div class="rayat-demo-nav-grid grid grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
                         ${Object.keys(sensorData).map(key => {
                 const isSel = selectedSensor === key;

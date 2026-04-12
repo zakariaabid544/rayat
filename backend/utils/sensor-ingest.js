@@ -257,6 +257,54 @@ function normalizeTimestamp(timestamp) {
     return readingTimestamp;
 }
 
+function normalizeGatewaySignalEvent(event) { // RAYAT-FIX
+    const normalizedEvent = cleanString(event).toLowerCase(); // RAYAT-FIX
+    return normalizedEvent === 'boot' || normalizedEvent === 'heartbeat' ? normalizedEvent : ''; // RAYAT-FIX
+}
+
+function buildGatewayMetadataPatch(signal = {}) { // RAYAT-FIX
+    const patch = { // RAYAT-FIX
+        lastGatewaySignalAt: signal.receivedAt, // RAYAT-FIX
+        lastGatewaySignalEvent: signal.event, // RAYAT-FIX
+        lastGatewaySignalTopic: cleanString(signal.topic) || null // RAYAT-FIX
+    }; // RAYAT-FIX
+
+    if (signal.event === 'heartbeat') { // RAYAT-FIX
+        patch.lastHeartbeatAt = signal.receivedAt; // RAYAT-FIX
+    } // RAYAT-FIX
+
+    if (signal.event === 'boot') { // RAYAT-FIX
+        patch.lastBootAt = signal.receivedAt; // RAYAT-FIX
+    } // RAYAT-FIX
+
+    if (signal.sentAt) { // RAYAT-FIX
+        patch.lastGatewaySignalSentAt = signal.sentAt; // RAYAT-FIX
+    } // RAYAT-FIX
+
+    if (cleanString(signal.bootId)) { // RAYAT-FIX
+        patch.lastGatewayBootId = cleanString(signal.bootId); // RAYAT-FIX
+    } // RAYAT-FIX
+
+    if (cleanString(signal.fwVersion)) { // RAYAT-FIX
+        patch.lastGatewayFwVersion = cleanString(signal.fwVersion); // RAYAT-FIX
+    } // RAYAT-FIX
+
+    if (cleanString(signal.clientId)) { // RAYAT-FIX
+        patch.lastGatewayClientId = cleanString(signal.clientId); // RAYAT-FIX
+    } // RAYAT-FIX
+
+    if (cleanString(signal.routerId)) { // RAYAT-FIX
+        patch.lastGatewayRouterId = cleanString(signal.routerId); // RAYAT-FIX
+    } // RAYAT-FIX
+
+    const numericRssi = Number.parseFloat(signal.rssi); // RAYAT-FIX
+    if (Number.isFinite(numericRssi)) { // RAYAT-FIX
+        patch.lastGatewayRssi = numericRssi; // RAYAT-FIX
+    } // RAYAT-FIX
+
+    return patch; // RAYAT-FIX
+}
+
 function normalizeReadings(readings) {
     if (!Array.isArray(readings)) {
         throw createHttpError(400, 'Le letture devono essere un array');
@@ -473,6 +521,32 @@ async function persistReadingsForDevice(execute, device, normalizedReadings, rea
     };
 }
 
+async function persistGatewaySignalForDevice(execute, device, signal) { // RAYAT-FIX
+    const metadataPatch = JSON.stringify(buildGatewayMetadataPatch(signal)); // RAYAT-FIX
+    await execute( // RAYAT-FIX
+        `UPDATE devices
+         SET last_seen = ?,
+             status = 'active',
+             metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb,
+             updated_at = NOW()
+         WHERE id = ?`,
+        [signal.receivedAt, metadataPatch, device.id] // RAYAT-FIX
+    ); // RAYAT-FIX
+
+    return { // RAYAT-FIX
+        mode: 'gateway_signal', // RAYAT-FIX
+        deviceId: device.device_id, // RAYAT-FIX
+        userId: device.user_id, // RAYAT-FIX
+        insertedReadings: [], // RAYAT-FIX
+        gatewaySignal: { // RAYAT-FIX
+            event: signal.event, // RAYAT-FIX
+            topic: signal.topic || null, // RAYAT-FIX
+            receivedAt: signal.receivedAt, // RAYAT-FIX
+            sentAt: signal.sentAt || null // RAYAT-FIX
+        } // RAYAT-FIX
+    }; // RAYAT-FIX
+}
+
 async function triggerAlerts(result) {
     if (!result.userId) {
         return;
@@ -670,6 +744,33 @@ async function ingestPublicReadings({ timestamp, readings }) {
     };
 }
 
+async function recordGatewaySignal({ deviceId, event, receivedAt, sentAt, topic, bootId, fwVersion, rssi, clientId, routerId }) { // RAYAT-FIX
+    const resolvedDeviceId = cleanString(deviceId || clientId || routerId); // RAYAT-FIX
+    const normalizedEvent = normalizeGatewaySignalEvent(event); // RAYAT-FIX
+    if (!resolvedDeviceId || !normalizedEvent) { // RAYAT-FIX
+        throw createHttpError(400, 'Segnale gateway non valido'); // RAYAT-FIX
+    } // RAYAT-FIX
+
+    const receivedAtIso = normalizeTimestamp(receivedAt).toISOString(); // RAYAT-FIX
+    const sentAtIso = cleanString(sentAt) ? normalizeTimestamp(sentAt).toISOString() : null; // RAYAT-FIX
+
+    return withTransaction(async (connection) => { // RAYAT-FIX
+        const execute = createExecutor(connection); // RAYAT-FIX
+        const device = await findDeviceById(execute, resolvedDeviceId); // RAYAT-FIX
+        return persistGatewaySignalForDevice(execute, device, { // RAYAT-FIX
+            event: normalizedEvent, // RAYAT-FIX
+            topic: cleanString(topic), // RAYAT-FIX
+            receivedAt: receivedAtIso, // RAYAT-FIX
+            sentAt: sentAtIso, // RAYAT-FIX
+            bootId, // RAYAT-FIX
+            fwVersion, // RAYAT-FIX
+            rssi, // RAYAT-FIX
+            clientId, // RAYAT-FIX
+            routerId // RAYAT-FIX
+        }); // RAYAT-FIX
+    }); // RAYAT-FIX
+}
+
 module.exports = {
     VALID_SENSOR_TYPES,
     DEFAULT_SENSOR_PROFILES,
@@ -682,5 +783,6 @@ module.exports = {
     prepareIncomingSensorPayload,
     ingestDeviceReadings,
     ingestTrustedReadings,
-    ingestPublicReadings
+    ingestPublicReadings,
+    recordGatewaySignal // RAYAT-FIX
 };
