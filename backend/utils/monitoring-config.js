@@ -25,6 +25,10 @@ function getOfflineGraceMinutes() {
     return parseMinutes(process.env.ROUTER_OFFLINE_GRACE_MINUTES, 5);
 }
 
+function getRouterHeartbeatIntervalMinutes() {
+    return parseMinutes(process.env.ROUTER_HEARTBEAT_INTERVAL_MINUTES, 10);
+}
+
 function getRouterAlertExtraMinutes() {
     if (isCentralRouterMonitoringEnabled()) {
         return parseMinutes(process.env.ROUTER_ALERT_EXTRA_MINUTES, 15);
@@ -39,7 +43,10 @@ function getOfflineAfterMinutes() {
 }
 
 function getGatewayHeartbeatWindowMinutes() { // RAYAT-FIX
-    return parseMinutes(process.env.ROUTER_HEARTBEAT_WINDOW_MINUTES, 5); // RAYAT-FIX
+    return parseMinutes( // RAYAT-FIX
+        process.env.ROUTER_HEARTBEAT_WINDOW_MINUTES,
+        getRouterHeartbeatIntervalMinutes() + 2
+    ); // RAYAT-FIX
 }
 
 function getMissingDataThresholdMinutes() {
@@ -60,12 +67,14 @@ function getMonitoringConfig() {
     const offlineAfterMinutes = getOfflineAfterMinutes();
     const alertExtraMinutes = getRouterAlertExtraMinutes();
     const emailAfterMinutes = getMissingDataThresholdMinutes();
+    const routerHeartbeatIntervalMinutes = getRouterHeartbeatIntervalMinutes();
     const gatewayHeartbeatWindowMinutes = getGatewayHeartbeatWindowMinutes(); // RAYAT-FIX
     const sensorDataFreshMinutes = getSensorDataFreshMinutes(); // RAYAT-FIX
 
     return {
         configSource: isCentralRouterMonitoringEnabled() ? 'router_interval_env' : 'legacy_alert_env',
         routerIntervalMinutes,
+        routerHeartbeatIntervalMinutes,
         expectedDataMinutes: routerIntervalMinutes,
         offlineGraceMinutes,
         offlineAfterMinutes,
@@ -90,6 +99,7 @@ module.exports = {
     getOfflineGraceMinutes,
     getPostgresMinuteIntervalLiteral,
     getRouterAlertExtraMinutes,
+    getRouterHeartbeatIntervalMinutes,
     getRouterIntervalMinutes,
     getSensorDataFreshMinutes, // RAYAT-FIX
     isCentralRouterMonitoringEnabled,

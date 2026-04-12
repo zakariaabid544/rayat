@@ -8,7 +8,8 @@ const {
     createHttpError,
     ingestDeviceReadings,
     ingestTrustedReadings,
-    ingestPublicReadings
+    ingestPublicReadings,
+    recordGatewaySignal
 } = require('../utils/sensor-ingest');
 const {
     getGatewayHeartbeatWindowMinutes, // RAYAT-FIX
@@ -17,7 +18,7 @@ const {
     getPostgresMinuteIntervalLiteral,
     getSensorDataFreshMinutes // RAYAT-FIX
 } = require('../utils/monitoring-config');
-const { cleanString, parseSensorUpdate } = require('../utils/sensor-update-parser');
+const { cleanString, parseGatewaySignalUpdate, parseSensorUpdate } = require('../utils/sensor-update-parser');
 
 const DEFAULT_BRIDGE_TOKEN_HEADER = 'x-rayat-bridge-token';
 
@@ -372,6 +373,23 @@ router.get('/public/history', async (req, res) => {
 router.post('/update', async (req, res) => {
     try {
         const bridgeAuth = getBridgeAuthorization(req);
+        const gatewaySignal = parseGatewaySignalUpdate(req.body);
+
+        if (gatewaySignal) {
+            if (bridgeAuth.tokenConfigured && !bridgeAuth.trustedBridge) {
+                return res.status(401).json({ error: 'Bridge token non valido' });
+            }
+
+            const result = await recordGatewaySignal(gatewaySignal);
+            return res.json({
+                success: true,
+                device_id: result.deviceId || null,
+                mode: result.mode || 'gateway_signal',
+                readings_count: result.insertedReadings.length,
+                timestamp: new Date().toISOString()
+            });
+        }
+
         const prepared = parseSensorUpdate(req.body);
         let result;
 

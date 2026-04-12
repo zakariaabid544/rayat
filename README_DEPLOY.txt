@@ -49,6 +49,8 @@ RAYAT - README DEPLOY
   EMAIL_TO
   ALERT_JOB_CRON
   ROUTER_INTERVAL_MINUTES
+  ROUTER_HEARTBEAT_INTERVAL_MINUTES
+  ROUTER_HEARTBEAT_WINDOW_MINUTES
   ROUTER_OFFLINE_GRACE_MINUTES
   ROUTER_ALERT_EXTRA_MINUTES
   ALERT_NOTIFICATION_COOLDOWN_MINUTES
@@ -71,10 +73,14 @@ RAYAT - README DEPLOY
 - Set `MQTT_DIRECT_ENABLED=true`
 - Set `MQTT_BROKER` to your broker address, for example `mqtt://45.63.114.40:8080`
 - Set `MQTT_TOPIC="sensors/#"` unless your router publishes on a different topic
+- Keep telemetry on `sensors/<device_id>/telemetry`
+- Publish boot and heartbeat on `sensors/<device_id>/status` with a lightweight JSON payload containing `event` and `sentAt`
 - If the broker is protected, set `MQTT_USERNAME` and `MQTT_PASSWORD`
 - Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
 - Configure `ALERT_EMAILS=zakariaabid544@gmail.com`
 - Set `ROUTER_INTERVAL_MINUTES=30`
+- Set `ROUTER_HEARTBEAT_INTERVAL_MINUTES=10`
+- Set `ROUTER_HEARTBEAT_WINDOW_MINUTES=12` so routerOnline stays green between two 10-minute heartbeats
 - Set `ROUTER_OFFLINE_GRACE_MINUTES=5` so the site shows red after 35 minutes without data
 - Set `ROUTER_ALERT_EXTRA_MINUTES=15` so the email goes out at 45 minutes without data
 - Set `ALERT_JOB_CRON=* * * * *` so the server also runs the minute sync that protects the exact timer

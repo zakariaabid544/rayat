@@ -8,7 +8,7 @@ const {
     ingestPublicReadings,
     recordGatewaySignal // RAYAT-FIX
 } = require('../../utils/sensor-ingest');
-const { cleanString, parseSensorUpdate } = require('../../utils/sensor-update-parser');
+const { cleanString, parseGatewaySignalUpdate, parseSensorUpdate } = require('../../utils/sensor-update-parser');
 
 const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
 
@@ -111,54 +111,6 @@ function buildIncomingBody(topic, parsedPayload) {
     };
 }
 
-function parseTopicSegments(topic) { // RAYAT-FIX
-    return cleanString(topic).replace(/^\/+|\/+$/g, '').split('/').filter(Boolean); // RAYAT-FIX
-}
-
-function normalizeGatewaySignalEvent(value) { // RAYAT-FIX
-    const normalizedEvent = cleanString(value).toLowerCase(); // RAYAT-FIX
-    return normalizedEvent === 'boot' || normalizedEvent === 'heartbeat' ? normalizedEvent : ''; // RAYAT-FIX
-}
-
-function resolveGatewaySignalDeviceId(topic, body = {}) { // RAYAT-FIX
-    const segments = parseTopicSegments(topic); // RAYAT-FIX
-    const strippedSegments = segments[0] === 'sensors' ? segments.slice(1) : segments; // RAYAT-FIX
-    if (strippedSegments.length >= 2) { // RAYAT-FIX
-        return cleanString(strippedSegments[0]); // RAYAT-FIX
-    } // RAYAT-FIX
-    return cleanString(body.device_id || body.routerId || body.router_id || body.clientId || body.client_id); // RAYAT-FIX
-}
-
-function buildGatewaySignalPayload(topic, body = {}) { // RAYAT-FIX
-    const topicSegments = parseTopicSegments(topic); // RAYAT-FIX
-    const topicEvent = normalizeGatewaySignalEvent(topicSegments[topicSegments.length - 1]); // RAYAT-FIX
-    const payloadEvent = normalizeGatewaySignalEvent(body.event || body.gateway_event || body.signal || body.eventType || body.type); // RAYAT-FIX
-    const event = payloadEvent || topicEvent; // RAYAT-FIX
-    if (!event) { // RAYAT-FIX
-        return null; // RAYAT-FIX
-    } // RAYAT-FIX
-
-    const deviceId = cleanString( // RAYAT-FIX
-        body.device_id || body.routerId || body.router_id || body.clientId || body.client_id || resolveGatewaySignalDeviceId(topic, body) // RAYAT-FIX
-    ); // RAYAT-FIX
-    if (!deviceId) { // RAYAT-FIX
-        return null; // RAYAT-FIX
-    } // RAYAT-FIX
-
-    return { // RAYAT-FIX
-        deviceId, // RAYAT-FIX
-        event, // RAYAT-FIX
-        topic: cleanString(topic), // RAYAT-FIX
-        receivedAt: new Date().toISOString(), // RAYAT-FIX
-        sentAt: cleanString(body.sentAt || body.sent_at || body.timestamp), // RAYAT-FIX
-        bootId: cleanString(body.bootId || body.boot_id), // RAYAT-FIX
-        fwVersion: cleanString(body.fwVersion || body.fw_version), // RAYAT-FIX
-        rssi: body.rssi, // RAYAT-FIX
-        clientId: cleanString(body.clientId || body.client_id), // RAYAT-FIX
-        routerId: cleanString(body.routerId || body.router_id) // RAYAT-FIX
-    }; // RAYAT-FIX
-}
-
 function getMqttConfig() {
     const hasExplicitEnabled = String(process.env.MQTT_DIRECT_ENABLED || '').trim() !== '';
     const defaultEnabled = process.env.NODE_ENV === 'production';
@@ -240,7 +192,7 @@ function getMqttRuntimeStatus() {
 async function processIncomingMessage(topic, payloadBuffer) {
     const parsedPayload = parsePayload(payloadBuffer);
     const body = buildIncomingBody(topic, parsedPayload);
-    const gatewaySignal = buildGatewaySignalPayload(topic, body); // RAYAT-FIX
+    const gatewaySignal = parseGatewaySignalUpdate(body); // RAYAT-FIX
     let result;
 
     if (gatewaySignal) { // RAYAT-FIX

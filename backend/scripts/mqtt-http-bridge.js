@@ -71,7 +71,6 @@ function buildRequestBody(topic, parsedPayload) {
     if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
         return {
             sensor_id: topic,
-            timestamp: payload.timestamp || now,
             ...payload
         };
     }
@@ -134,7 +133,7 @@ async function forwardMessage(topic, payloadBuffer) {
 
 client.on('connect', () => {
     console.log(`[bridge] connesso a ${config.mqttUrl}`);
-    client.subscribe(config.mqttTopic, { qos: 0 }, (error) => {
+    client.subscribe(config.mqttTopic, { qos: 1 }, (error) => {
         if (error) {
             console.error(`[bridge] errore subscribe su ${config.mqttTopic}:`, error.message);
             return;

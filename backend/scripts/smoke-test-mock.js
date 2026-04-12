@@ -75,6 +75,36 @@ function parseInlineLimit(sql, fallbackLimit = 25, fallbackOffset = 0) {
   };
 }
 
+function parseJsonObject(value) {
+  if (!value) {
+    return {};
+  }
+
+  if (typeof value === 'object') {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return {};
+  }
+}
+
+function getDeviceSensorDataLastAt(deviceRowId) {
+  const sensorIds = state.sensors
+    .filter((sensor) => sensor.device_id === deviceRowId && sensor.enabled !== false)
+    .map((sensor) => sensor.id);
+
+  const latestTimestamps = state.sensorLatest
+    .filter((entry) => sensorIds.includes(entry.sensor_id))
+    .map((entry) => entry.timestamp)
+    .filter(Boolean)
+    .sort((left, right) => new Date(right) - new Date(left));
+
+  return latestTimestamps[0] || null;
+}
+
 function buildDeviceMetrics(device) {
   const sensors = state.sensors.filter(
     (sensor) => sensor.device_id === device.id && sensor.enabled !== false
@@ -310,11 +340,43 @@ async function fakeQuery(sql, params = []) {
       .map((device) => ({ id: device.id, user_id: device.user_id }));
   }
 
+  if (text.startsWith('SELECT id, user_id, device_id FROM devices WHERE device_id = ? OR COALESCE(metadata->>\'clientId\'')) {
+    const targetDeviceId = params[0];
+    return state.devices
+      .filter((device) => {
+        const metadata = parseJsonObject(device.metadata);
+        return device.device_id === targetDeviceId || metadata.clientId === targetDeviceId;
+      })
+      .sort((left, right) => (left.device_id === targetDeviceId ? -1 : 1) - (right.device_id === targetDeviceId ? -1 : 1))
+      .slice(0, 1)
+      .map((device) => ({
+        id: device.id,
+        user_id: device.user_id,
+        device_id: device.device_id
+      }));
+  }
+
   if (text.startsWith(`UPDATE devices SET last_seen = NOW(), status = 'active'`)) {
     const device = state.devices.find((row) => row.id === Number(params[0]));
     if (device) {
       device.last_seen = '2026-03-22 12:10:00';
       device.status = 'active';
+    }
+    return { affectedRows: device ? 1 : 0 };
+  }
+
+  if (text.startsWith(`UPDATE devices SET last_seen = ?, status = 'active', metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb, updated_at = NOW() WHERE id = ?`)) {
+    const device = state.devices.find((row) => row.id === Number(params[2]));
+    if (device) {
+      const currentMetadata = parseJsonObject(device.metadata);
+      const metadataPatch = parseJsonObject(params[1]);
+      device.last_seen = params[0];
+      device.status = 'active';
+      device.metadata = {
+        ...currentMetadata,
+        ...metadataPatch
+      };
+      device.updated_at = params[0];
     }
     return { affectedRows: device ? 1 : 0 };
   }
@@ -430,6 +492,29 @@ async function fakeQuery(sql, params = []) {
       }));
   }
 
+  if (text === 'SELECT MAX(timestamp) AS sensor_data_last_at FROM public_sensor_latest') {
+    const lastTimestamp = state.publicLatest
+      .map((row) => row.timestamp)
+      .filter(Boolean)
+      .sort((left, right) => new Date(right) - new Date(left))[0] || null;
+
+    return [{ sensor_data_last_at: lastTimestamp }];
+  }
+
+  if (text.startsWith('SELECT d.id, d.device_id, d.name, d.metadata, MAX(sl.timestamp) AS sensor_data_last_at FROM devices d LEFT JOIN sensors s ON s.device_id = d.id')) {
+    const scopedUserId = text.includes('WHERE d.user_id = ?') ? Number(params[0]) : null;
+
+    return state.devices
+      .filter((device) => (scopedUserId ? device.user_id === scopedUserId : true))
+      .map((device) => ({
+        id: device.id,
+        device_id: device.device_id,
+        name: device.name,
+        metadata: parseJsonObject(device.metadata),
+        sensor_data_last_at: getDeviceSensorDataLastAt(device.id)
+      }));
+  }
+
   if (text.startsWith('SELECT s.subtype, sr.value FROM sensor_readings sr INNER JOIN sensors s ON sr.sensor_id = s.id WHERE sr.timestamp = ( SELECT MAX(timestamp) FROM sensor_readings WHERE sensor_id = s.id )')) {
     return state.sensors
       .map((sensor) => {
@@ -518,6 +603,7 @@ async function run() {
   const iotRouter = require('../routes/iot');
   const simpleRouter = require('../routes/simple');
   const sensorsRouter = require('../routes/sensors');
+  const { processIncomingMessage } = require('../src/jobs/mqttDirectJob');
 
   const app = express();
   const publicIndexPath = path.resolve(__dirname, '../../index.html');
@@ -767,6 +853,30 @@ async function run() {
           assert.equal(rawFrameRes.status, 200);
         }
 
+        const bootRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sensor_id: 'sensors/GW-001/status',
+            event: 'boot',
+            clientId: 'GW-001',
+            sentAt: new Date(Date.now() - 120000).toISOString()
+          })
+        });
+        assert.equal(bootRes.status, 200);
+        const bootJson = await bootRes.json();
+        assert.equal(bootJson.mode, 'gateway_signal');
+        assert.equal(bootJson.readings_count, 0);
+
+        await processIncomingMessage(
+          'sensors/GW-001/status',
+          Buffer.from(JSON.stringify({
+            event: 'heartbeat',
+            clientId: 'GW-001',
+            sentAt: new Date(Date.now() - 60000).toISOString()
+          }))
+        );
+
         const publicLatestRes = await fetch(`http://127.0.0.1:${port}/api/sensors/public/latest`);
         assert.equal(publicLatestRes.status, 200);
         const publicLatestJson = await publicLatestRes.json();
@@ -786,6 +896,18 @@ async function run() {
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_p' && Number(row.value) === 26));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_k' && Number(row.value) === 138));
         assert.ok(publicLatestJson.data.every((row) => row.online_status === 'online'));
+
+        const publicStatusRes = await fetch(`http://127.0.0.1:${port}/api/sensors/public/status`);
+        assert.equal(publicStatusRes.status, 200);
+        const publicStatusJson = await publicStatusRes.json();
+        assert.equal(publicStatusJson.success, true);
+        assert.equal(publicStatusJson.data.deviceId, 'GW-001');
+        assert.equal(publicStatusJson.data.routerOnline, true);
+        assert.ok(publicStatusJson.data.lastBootAt);
+        assert.ok(publicStatusJson.data.lastHeartbeatAt);
+        assert.ok(new Date(publicStatusJson.data.lastHeartbeatAt).getTime() >= new Date(publicStatusJson.data.lastBootAt).getTime());
+        assert.equal(publicStatusJson.monitoring.routerHeartbeatIntervalMinutes, 10);
+        assert.equal(publicStatusJson.monitoring.gatewayHeartbeatWindowMinutes, 12);
 
         const publicHistoryRes = await fetch(`http://127.0.0.1:${port}/api/sensors/public/history?type=terreno&days=30`);
         assert.equal(publicHistoryRes.status, 200);

@@ -57,6 +57,15 @@ function isPlainObject(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function parseTopicSegments(topic) {
+    return cleanString(topic).replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+}
+
+function normalizeGatewaySignalEvent(value) {
+    const normalizedEvent = cleanString(value).toLowerCase();
+    return normalizedEvent === 'boot' || normalizedEvent === 'heartbeat' ? normalizedEvent : '';
+}
+
 function normalizeKey(value) {
     return cleanString(value)
         .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
@@ -164,6 +173,85 @@ function parseSensorTopic(topic) {
         subtype,
         unit: profile.unit,
         name: profile.name
+    };
+}
+
+function resolveGatewaySignalDeviceId(topic, source = {}) {
+    const segments = parseTopicSegments(topic);
+    const strippedSegments = segments[0] === 'sensors' ? segments.slice(1) : segments;
+
+    if (strippedSegments.length >= 2) {
+        return cleanString(strippedSegments[0]);
+    }
+
+    return cleanString(
+        source.device_id
+        || source.deviceId
+        || source.routerId
+        || source.router_id
+        || source.clientId
+        || source.client_id
+    );
+}
+
+function parseGatewaySignalUpdate(body = {}) {
+    const source = isPlainObject(body) ? body : {};
+    const payloadObject = isPlainObject(source.payload)
+        ? source.payload
+        : isPlainObject(source.value)
+            ? source.value
+            : null;
+    const topic = cleanString(source.sensor_id || source.topic);
+    const topicSegments = parseTopicSegments(topic);
+    const topicEvent = normalizeGatewaySignalEvent(topicSegments[topicSegments.length - 1]);
+    const event = normalizeGatewaySignalEvent(
+        source.event
+        || source.gateway_event
+        || source.signal
+        || source.eventType
+        || source.event_type
+        || payloadObject?.event
+        || payloadObject?.gateway_event
+        || payloadObject?.signal
+        || payloadObject?.eventType
+        || payloadObject?.event_type
+        || topicEvent
+    );
+
+    if (!event) {
+        return null;
+    }
+
+    const deviceId = cleanString(
+        source.device_id
+        || source.deviceId
+        || payloadObject?.device_id
+        || payloadObject?.deviceId
+        || resolveGatewaySignalDeviceId(topic, payloadObject || source)
+    );
+
+    if (!deviceId) {
+        return null;
+    }
+
+    return {
+        deviceId,
+        event,
+        topic,
+        receivedAt: new Date().toISOString(),
+        sentAt: cleanString(
+            source.sentAt
+            || source.sent_at
+            || payloadObject?.sentAt
+            || payloadObject?.sent_at
+            || source.timestamp
+            || payloadObject?.timestamp
+        ),
+        bootId: cleanString(source.bootId || source.boot_id || payloadObject?.bootId || payloadObject?.boot_id),
+        fwVersion: cleanString(source.fwVersion || source.fw_version || payloadObject?.fwVersion || payloadObject?.fw_version),
+        rssi: source.rssi ?? payloadObject?.rssi ?? null,
+        clientId: cleanString(source.clientId || source.client_id || payloadObject?.clientId || payloadObject?.client_id),
+        routerId: cleanString(source.routerId || source.router_id || payloadObject?.routerId || payloadObject?.router_id)
     };
 }
 
@@ -320,5 +408,6 @@ function parseSensorUpdate(body = {}) {
 
 module.exports = {
     cleanString,
+    parseGatewaySignalUpdate,
     parseSensorUpdate
 };
