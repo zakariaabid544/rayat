@@ -1,3 +1,4 @@
+# // RAYAT-FIX: never commit real environment files.
 .env
 **/.env
 node_modules

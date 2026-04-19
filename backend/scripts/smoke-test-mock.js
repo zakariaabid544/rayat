@@ -5,6 +5,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'rayat-test-secret';
+process.env.MQTT_INGEST_TOKEN = process.env.MQTT_INGEST_TOKEN || 'rayat-test-ingest-token'; // RAYAT-FIX
+process.env.SENSOR_AGGREGATION_WINDOW_SECONDS = '0.05'; // RAYAT-FIX
 
 const state = {
   users: [
@@ -401,8 +403,10 @@ async function fakeQuery(sql, params = []) {
   if (text.startsWith('INSERT INTO sensor_latest')) {
     const existing = state.sensorLatest.find((row) => row.sensor_id === Number(params[0]));
     if (existing) {
-      existing.value = Number(params[1]);
-      existing.timestamp = params[2];
+      if (new Date(existing.timestamp) <= new Date(params[2])) { // RAYAT-FIX
+        existing.value = Number(params[1]); // RAYAT-FIX
+        existing.timestamp = params[2]; // RAYAT-FIX
+      } // RAYAT-FIX
     } else {
       state.sensorLatest.push({
         sensor_id: Number(params[0]),
@@ -416,10 +420,12 @@ async function fakeQuery(sql, params = []) {
   if (text.startsWith('INSERT INTO public_sensor_latest')) {
     const existing = state.publicLatest.find((row) => row.sensor_subtype === params[1]);
     if (existing) {
-      existing.sensor_type = params[0];
-      existing.value = Number(params[2]);
-      existing.topic = params[3];
-      existing.timestamp = params[4];
+      if (new Date(existing.timestamp) <= new Date(params[4])) { // RAYAT-FIX
+        existing.sensor_type = params[0]; // RAYAT-FIX
+        existing.value = Number(params[2]); // RAYAT-FIX
+        existing.topic = params[3]; // RAYAT-FIX
+        existing.timestamp = params[4]; // RAYAT-FIX
+      } // RAYAT-FIX
     } else {
       state.publicLatest.push({
         sensor_type: params[0],
@@ -561,6 +567,7 @@ async function run() {
     loaded: true,
     exports: {
       query: fakeQuery,
+      getDatabaseHealth: async () => ({ db: 'ok' }), // RAYAT-FIX
       getTableColumns: async (table) =>
         table === 'users'
           ? new Set([
@@ -598,6 +605,18 @@ async function run() {
     exports: { checkAlerts: async () => {} }
   };
 
+  const alertJobPath = path.resolve(__dirname, '../src/jobs/alertJob.js'); // RAYAT-FIX
+  require.cache[alertJobPath] = { // RAYAT-FIX
+    id: alertJobPath, // RAYAT-FIX
+    filename: alertJobPath, // RAYAT-FIX
+    loaded: true, // RAYAT-FIX
+    exports: { // RAYAT-FIX
+      notifyMissingDataHeartbeat: () => {}, // RAYAT-FIX
+      getMissingDataAlertRuntimeStatus: async () => ({ enabled: false, runtime: 'mock' }), // RAYAT-FIX
+      startMissingDataAlertJob: () => {} // RAYAT-FIX
+    } // RAYAT-FIX
+  }; // RAYAT-FIX
+
   const authRouter = require('../routes/auth');
   const adminRouter = require('../routes/admin');
   const iotRouter = require('../routes/iot');
@@ -634,6 +653,9 @@ async function run() {
   app.use('/api/iot', iotRouter);
   app.use('/api/sensors/simple', simpleRouter);
   app.use('/api/sensors', sensorsRouter);
+  app.get(['/api/health', '/health'], (_req, res) => { // RAYAT-FIX
+    res.json({ status: 'ok' }); // RAYAT-FIX
+  }); // RAYAT-FIX
   app.get(['/demo', '/demo/'], (_req, res) => {
     res.redirect(302, '/dashboard');
   });
@@ -765,6 +787,21 @@ async function run() {
         const clientAdminSessionJson = await clientAdminSessionRes.json();
         assert.equal(clientAdminSessionJson.errorCode, 'admin_access_denied');
 
+        const publicHealthRes = await fetch(`http://127.0.0.1:${port}/api/health`); // RAYAT-FIX
+        assert.equal(publicHealthRes.status, 200); // RAYAT-FIX
+        assert.deepEqual(await publicHealthRes.json(), { status: 'ok' }); // RAYAT-FIX
+
+        const adminHealthWithoutTokenRes = await fetch(`http://127.0.0.1:${port}/api/admin/health`); // RAYAT-FIX
+        assert.equal(adminHealthWithoutTokenRes.status, 401); // RAYAT-FIX
+
+        const adminHealthRes = await fetch(`http://127.0.0.1:${port}/api/admin/health`, { // RAYAT-FIX
+          headers: { Authorization: `Bearer ${reloginJson.token}` } // RAYAT-FIX
+        }); // RAYAT-FIX
+        assert.equal(adminHealthRes.status, 200); // RAYAT-FIX
+        const adminHealthJson = await adminHealthRes.json(); // RAYAT-FIX
+        assert.equal(adminHealthJson.db, 'ok'); // RAYAT-FIX
+        assert.ok(adminHealthJson.mqttDirect); // RAYAT-FIX
+
         const clientsRes = await fetch(`http://127.0.0.1:${port}/api/admin/clients?page=1&pageSize=25`, {
           headers: { Authorization: `Bearer ${reloginJson.token}` }
         });
@@ -816,6 +853,26 @@ async function run() {
         const uploadJson = await uploadRes.json();
         assert.equal(uploadJson.readings_count, 10);
 
+        const unauthorizedUpdateRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, { // RAYAT-FIX
+          method: 'POST', // RAYAT-FIX
+          headers: { 'Content-Type': 'application/json' }, // RAYAT-FIX
+          body: JSON.stringify({ // RAYAT-FIX
+            sensor_id: 'sensors/GW-001/clima/temperature', // RAYAT-FIX
+            value: 18.1 // RAYAT-FIX
+          }) // RAYAT-FIX
+        }); // RAYAT-FIX
+        assert.equal(unauthorizedUpdateRes.status, 401); // RAYAT-FIX
+
+        const invalidApiKeyUpdateRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, { // RAYAT-FIX
+          method: 'POST', // RAYAT-FIX
+          headers: { 'Content-Type': 'application/json' }, // RAYAT-FIX
+          body: JSON.stringify({ // RAYAT-FIX
+            sensor_id: 'sensors/GW-001/clima/temperature', // RAYAT-FIX
+            api_key: 'wrong-key' // RAYAT-FIX
+          }) // RAYAT-FIX
+        }); // RAYAT-FIX
+        assert.equal(invalidApiKeyUpdateRes.status, 401); // RAYAT-FIX
+
         const bridgeUpdateRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -830,7 +887,7 @@ async function run() {
         const bridgeUpdateJson = await bridgeUpdateRes.json();
         assert.equal(bridgeUpdateJson.readings_count, 1);
 
-        const rawFrameTimestamp = new Date(Date.now() - 60 * 1000).toISOString();
+        const rawFrameTimestamp = new Date().toISOString(); // RAYAT-FIX
         const rawFrames = [
           '01030400d403357aec',
           '0203020117bdda',
@@ -853,9 +910,22 @@ async function run() {
           assert.equal(rawFrameRes.status, 200);
         }
 
+        const staleLatestRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, { // RAYAT-FIX
+          method: 'POST', // RAYAT-FIX
+          headers: { 'Content-Type': 'application/json' }, // RAYAT-FIX
+          body: JSON.stringify({ // RAYAT-FIX
+            sensor_id: 'sensors/GW-001/clima/temperature', // RAYAT-FIX
+            device_id: 'GW-001', // RAYAT-FIX
+            api_key: createdDevice.api_key, // RAYAT-FIX
+            timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString(), // RAYAT-FIX
+            value: 99.9 // RAYAT-FIX
+          }) // RAYAT-FIX
+        }); // RAYAT-FIX
+        assert.equal(staleLatestRes.status, 200); // RAYAT-FIX
+
         const bootRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-rayat-bridge-token': process.env.MQTT_INGEST_TOKEN }, // RAYAT-FIX
           body: JSON.stringify({
             sensor_id: 'sensors/GW-001/status',
             event: 'boot',
@@ -943,6 +1013,25 @@ async function run() {
         const iotDevicesJson = await iotDevicesRes.json();
         assert.equal(iotDevicesJson.data.length, 1);
         assert.equal(iotDevicesJson.data[0].sensor_count, 11);
+
+        const aggregationStartIndex = state.publicSensorReadings.length; // RAYAT-FIX
+        const aggregationTimestamp = new Date().toISOString(); // RAYAT-FIX
+        const aggregationFirst = processIncomingMessage( // RAYAT-FIX
+          'sensors/GW-001/clima/temperature', // RAYAT-FIX
+          Buffer.from(JSON.stringify({ timestamp: aggregationTimestamp, temperature: 31.4, humidity: 52.2 })) // RAYAT-FIX
+        ); // RAYAT-FIX
+        assert.equal(state.publicSensorReadings.length, aggregationStartIndex); // RAYAT-FIX
+        const aggregationSecond = processIncomingMessage( // RAYAT-FIX
+          'sensors/GW-001/clima/co2', // RAYAT-FIX
+          Buffer.from(JSON.stringify({ timestamp: new Date(new Date(aggregationTimestamp).getTime() + 60000).toISOString(), co2: 333 })) // RAYAT-FIX
+        ); // RAYAT-FIX
+        await Promise.all([aggregationFirst, aggregationSecond]); // RAYAT-FIX
+        const aggregatedClimateRows = state.publicSensorReadings.slice(aggregationStartIndex).filter((row) => row.sensor_type === 'clima'); // RAYAT-FIX
+        assert.equal(aggregatedClimateRows.length, 3); // RAYAT-FIX
+        assert.equal(new Set(aggregatedClimateRows.map((row) => row.timestamp)).size, 1); // RAYAT-FIX
+        assert.ok(aggregatedClimateRows.some((row) => row.sensor_subtype === 'clima_temperature' && Number(row.value) === 31.4)); // RAYAT-FIX
+        assert.ok(aggregatedClimateRows.some((row) => row.sensor_subtype === 'clima_humidity' && Number(row.value) === 52.2)); // RAYAT-FIX
+        assert.ok(aggregatedClimateRows.some((row) => row.sensor_subtype === 'clima_co2' && Number(row.value) === 333)); // RAYAT-FIX
 
         console.log('SMOKE_TEST_OK');
         server.close(resolve);

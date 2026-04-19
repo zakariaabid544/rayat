@@ -6,7 +6,9 @@ const {
     ingestDeviceReadings,
     ingestTrustedReadings,
     ingestPublicReadings,
-    recordGatewaySignal // RAYAT-FIX
+    recordGatewaySignal, // RAYAT-FIX
+    getAggregationGroupForReadings, // RAYAT-FIX
+    mergeReadingsBySubtype // RAYAT-FIX
 } = require('../../utils/sensor-ingest');
 const { cleanString, parseGatewaySignalUpdate, parseSensorUpdate } = require('../../utils/sensor-update-parser');
 
@@ -17,6 +19,7 @@ let mqttConfigSnapshot = null;
 let reconnectDelayMs = 0;
 let inFlightMessages = 0;
 let shutdownPromise = null;
+const sensorAggregationBuckets = new Map(); // RAYAT-FIX
 
 // RAYAT-FIX: expose live MQTT runtime diagnostics to health checks and logs.
 const mqttRuntime = {
@@ -189,9 +192,130 @@ function getMqttRuntimeStatus() {
     };
 }
 
+function getSensorAggregationWindowMs() { // RAYAT-FIX
+    const seconds = Number(process.env.SENSOR_AGGREGATION_WINDOW_SECONDS || 90); // RAYAT-FIX
+    return Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds * 1000) : 0; // RAYAT-FIX
+} // RAYAT-FIX
+
+function getEarlierTimestamp(left, right) { // RAYAT-FIX
+    const leftDate = left ? new Date(left) : null; // RAYAT-FIX
+    const rightDate = right ? new Date(right) : null; // RAYAT-FIX
+    const leftTime = leftDate && !Number.isNaN(leftDate.getTime()) ? leftDate.getTime() : null; // RAYAT-FIX
+    const rightTime = rightDate && !Number.isNaN(rightDate.getTime()) ? rightDate.getTime() : null; // RAYAT-FIX
+    if (leftTime === null) { // RAYAT-FIX
+        return right || left; // RAYAT-FIX
+    } // RAYAT-FIX
+    if (rightTime === null) { // RAYAT-FIX
+        return left; // RAYAT-FIX
+    } // RAYAT-FIX
+    return rightTime < leftTime ? right : left; // RAYAT-FIX
+} // RAYAT-FIX
+
+function buildAggregationBucketKey(prepared, group) { // RAYAT-FIX
+    const authScope = prepared.apiKey ? `api:${prepared.apiKey}` : 'trusted'; // RAYAT-FIX
+    const deviceScope = cleanString(prepared.deviceId) || cleanString(process.env.MQTT_DEFAULT_DEVICE_ID) || 'default'; // RAYAT-FIX
+    return [authScope, deviceScope, group.type].join('::'); // RAYAT-FIX
+} // RAYAT-FIX
+
+async function persistPreparedSensorUpdate(prepared) { // RAYAT-FIX
+    let result; // RAYAT-FIX
+    if (prepared.apiKey) { // RAYAT-FIX
+        result = await ingestDeviceReadings({ // RAYAT-FIX
+            deviceId: prepared.deviceId, // RAYAT-FIX
+            apiKey: prepared.apiKey, // RAYAT-FIX
+            timestamp: prepared.timestamp, // RAYAT-FIX
+            readings: prepared.readings // RAYAT-FIX
+        }); // RAYAT-FIX
+    } else { // RAYAT-FIX
+        try { // RAYAT-FIX
+            result = await ingestTrustedReadings({ // RAYAT-FIX
+                deviceId: prepared.deviceId, // RAYAT-FIX
+                timestamp: prepared.timestamp, // RAYAT-FIX
+                readings: prepared.readings // RAYAT-FIX
+            }); // RAYAT-FIX
+        } catch (error) { // RAYAT-FIX
+            if ( // RAYAT-FIX
+                error.statusCode === 400 // RAYAT-FIX
+                && /Più clienti attivi trovati|Nessun cliente attivo trovato/i.test(error.message || '') // RAYAT-FIX
+            ) { // RAYAT-FIX
+                result = await ingestPublicReadings({ // RAYAT-FIX
+                    timestamp: prepared.timestamp, // RAYAT-FIX
+                    readings: prepared.readings // RAYAT-FIX
+                }); // RAYAT-FIX
+            } else { // RAYAT-FIX
+                throw error; // RAYAT-FIX
+            } // RAYAT-FIX
+        } // RAYAT-FIX
+    } // RAYAT-FIX
+    return result; // RAYAT-FIX
+} // RAYAT-FIX
+
+async function flushSensorAggregationBucket(key) { // RAYAT-FIX
+    const bucket = sensorAggregationBuckets.get(key); // RAYAT-FIX
+    if (!bucket) { // RAYAT-FIX
+        return null; // RAYAT-FIX
+    } // RAYAT-FIX
+
+    sensorAggregationBuckets.delete(key); // RAYAT-FIX
+    clearTimeout(bucket.timer); // RAYAT-FIX
+
+    try { // RAYAT-FIX
+        const result = await persistPreparedSensorUpdate({ // RAYAT-FIX
+            ...bucket.prepared, // RAYAT-FIX
+            readings: bucket.readings // RAYAT-FIX
+        }); // RAYAT-FIX
+        bucket.waiters.forEach(({ resolve }) => resolve(result)); // RAYAT-FIX
+        return result; // RAYAT-FIX
+    } catch (error) { // RAYAT-FIX
+        bucket.waiters.forEach(({ reject }) => reject(error)); // RAYAT-FIX
+        throw error; // RAYAT-FIX
+    } // RAYAT-FIX
+} // RAYAT-FIX
+
+function queueAggregatedSensorUpdate(prepared, group, windowMs) { // RAYAT-FIX
+    const key = buildAggregationBucketKey(prepared, group); // RAYAT-FIX
+    let bucket = sensorAggregationBuckets.get(key); // RAYAT-FIX
+
+    if (!bucket) { // RAYAT-FIX
+        bucket = { // RAYAT-FIX
+            prepared: { ...prepared, readings: [] }, // RAYAT-FIX
+            readings: [], // RAYAT-FIX
+            waiters: [], // RAYAT-FIX
+            timer: setTimeout(() => { void flushSensorAggregationBucket(key).catch(() => {}); }, windowMs) // RAYAT-FIX
+        }; // RAYAT-FIX
+        sensorAggregationBuckets.set(key, bucket); // RAYAT-FIX
+    } // RAYAT-FIX
+
+    bucket.prepared.deviceId = cleanString(bucket.prepared.deviceId) || cleanString(prepared.deviceId); // RAYAT-FIX
+    bucket.prepared.apiKey = cleanString(bucket.prepared.apiKey) || cleanString(prepared.apiKey); // RAYAT-FIX
+    bucket.prepared.timestamp = getEarlierTimestamp(bucket.prepared.timestamp, prepared.timestamp); // RAYAT-FIX
+    bucket.readings = mergeReadingsBySubtype(bucket.readings, prepared.readings); // RAYAT-FIX
+
+    return new Promise((resolve, reject) => { // RAYAT-FIX
+        bucket.waiters.push({ resolve, reject }); // RAYAT-FIX
+        const nextGroup = getAggregationGroupForReadings(bucket.readings); // RAYAT-FIX
+        if (nextGroup?.complete) { // RAYAT-FIX
+            void flushSensorAggregationBucket(key); // RAYAT-FIX
+        } // RAYAT-FIX
+    }); // RAYAT-FIX
+} // RAYAT-FIX
+
+async function persistOrQueuePreparedSensorUpdate(prepared) { // RAYAT-FIX
+    const group = getAggregationGroupForReadings(prepared.readings); // RAYAT-FIX
+    const windowMs = getSensorAggregationWindowMs(); // RAYAT-FIX
+    if (!group || group.complete || windowMs <= 0) { // RAYAT-FIX
+        return persistPreparedSensorUpdate(prepared); // RAYAT-FIX
+    } // RAYAT-FIX
+    return queueAggregatedSensorUpdate(prepared, group, windowMs); // RAYAT-FIX
+} // RAYAT-FIX
+
+async function flushSensorAggregationBuckets() { // RAYAT-FIX
+    await Promise.all([...sensorAggregationBuckets.keys()].map((key) => flushSensorAggregationBucket(key))); // RAYAT-FIX
+} // RAYAT-FIX
+
 async function processIncomingMessage(topic, payloadBuffer) {
-    const parsedPayload = parsePayload(payloadBuffer);
-    const body = buildIncomingBody(topic, parsedPayload);
+    const parsedPayload = parsePayload(payloadBuffer); // RAYAT-FIX
+    const body = buildIncomingBody(topic, parsedPayload); // RAYAT-FIX
     const gatewaySignal = parseGatewaySignalUpdate(body); // RAYAT-FIX
     let result;
 
@@ -203,44 +327,16 @@ async function processIncomingMessage(topic, payloadBuffer) {
         return result; // RAYAT-FIX
     } // RAYAT-FIX
 
-    const prepared = parseSensorUpdate(body);
+    const prepared = parseSensorUpdate(body); // RAYAT-FIX
+    result = await persistOrQueuePreparedSensorUpdate(prepared); // RAYAT-FIX
 
-    if (prepared.apiKey) {
-        result = await ingestDeviceReadings({
-            deviceId: prepared.deviceId,
-            apiKey: prepared.apiKey,
-            timestamp: prepared.timestamp,
-            readings: prepared.readings
-        });
-    } else {
-        try {
-            result = await ingestTrustedReadings({
-                deviceId: prepared.deviceId,
-                timestamp: prepared.timestamp,
-                readings: prepared.readings
-            });
-        } catch (error) {
-            if (
-                error.statusCode === 400 &&
-                /Più clienti attivi trovati|Nessun cliente attivo trovato/i.test(error.message || '')
-            ) {
-                result = await ingestPublicReadings({
-                    timestamp: prepared.timestamp,
-                    readings: prepared.readings
-                });
-            } else {
-                throw error;
-            }
-        }
-    }
-
-    mqttRuntime.lastPersistOkAt = new Date().toISOString();
-    mqttRuntime.consecutiveErrors = 0;
+    mqttRuntime.lastPersistOkAt = new Date().toISOString(); // RAYAT-FIX
+    mqttRuntime.consecutiveErrors = 0; // RAYAT-FIX
 
     // RAYAT-FIX: structured topic/timestamp success log for production correlation.
     console.log(
-        `[mqtt-direct] topic=${topic} timestamp=${prepared.timestamp || mqttRuntime.lastMessageAt} salvato con successo (${result.insertedReadings.length} letture)`
-    );
+        `[mqtt-direct] topic=${topic} timestamp=${prepared.timestamp || mqttRuntime.lastMessageAt} salvato con successo (${result.insertedReadings.length} letture)` // RAYAT-FIX
+    ); // RAYAT-FIX
 }
 
 function startMqttDirectJob() {
@@ -356,6 +452,7 @@ async function stopMqttDirectJob() {
     const client = mqttClient;
 
     shutdownPromise = (async () => {
+        await flushSensorAggregationBuckets(); // RAYAT-FIX
         await waitForInFlightMessages();
 
         await new Promise((resolve) => {

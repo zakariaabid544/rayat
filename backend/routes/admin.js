@@ -14,8 +14,11 @@ const jwt = require('jsonwebtoken');
 const {
     query,
     getTableColumns,
-    withTransaction
+    withTransaction,
+    getDatabaseHealth // RAYAT-FIX
 } = require('../config/database');
+const { getMissingDataAlertRuntimeStatus } = require('../src/jobs/alertJob'); // RAYAT-FIX
+const { getMqttConfig, getMqttRuntimeStatus } = require('../src/jobs/mqttDirectJob'); // RAYAT-FIX
 const {
     getOfflineAfterMinutes,
     getPostgresMinuteIntervalLiteral
@@ -628,6 +631,36 @@ const isSuperAdmin = (req, res, next) => {
     }
     return sendAdminError(res, 403, 'Accesso riservato al Super Admin.', 'admin_super_required');
 };
+
+async function buildAdminHealthPayload() { // RAYAT-FIX
+    const health = await getDatabaseHealth(); // RAYAT-FIX
+    const mqttConfig = getMqttConfig(); // RAYAT-FIX
+    const alertMonitoring = await getMissingDataAlertRuntimeStatus({ forceRefresh: true }); // RAYAT-FIX
+    const mqttRuntime = getMqttRuntimeStatus(); // RAYAT-FIX
+
+    return { // RAYAT-FIX
+        ...health, // RAYAT-FIX
+        app: 'ok', // RAYAT-FIX
+        uptimeSeconds: Math.floor(process.uptime()), // RAYAT-FIX
+        alertMonitoring, // RAYAT-FIX
+        mqttDirect: { // RAYAT-FIX
+            enabled: mqttConfig.enabled, // RAYAT-FIX
+            brokerConfigured: Boolean(mqttConfig.brokerUrl), // RAYAT-FIX
+            topic: mqttConfig.topic, // RAYAT-FIX
+            runtime: mqttRuntime // RAYAT-FIX
+        } // RAYAT-FIX
+    }; // RAYAT-FIX
+} // RAYAT-FIX
+
+router.get('/health', isAdminRole, async (_req, res) => { // RAYAT-FIX
+    try { // RAYAT-FIX
+        const payload = await buildAdminHealthPayload(); // RAYAT-FIX
+        res.status(payload.db === 'ok' ? 200 : 503).json(payload); // RAYAT-FIX
+    } catch (error) { // RAYAT-FIX
+        console.error('Admin health error:', error); // RAYAT-FIX
+        res.status(500).json({ error: 'Errore interno del server' }); // RAYAT-FIX
+    } // RAYAT-FIX
+}); // RAYAT-FIX
 
 // ─── AUTH ──────────────────────────────────────────────────────────────────────
 

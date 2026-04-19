@@ -125,6 +125,10 @@ const GLOBAL_ALIAS_TO_SUBTYPE = {
     wind_speed: 'clima_wind_speed'
 };
 
+const SENSOR_AGGREGATION_GROUPS = { // RAYAT-FIX
+    clima: new Set(['clima_temperature', 'clima_humidity', 'clima_co2']) // RAYAT-FIX
+}; // RAYAT-FIX
+
 const CONTROL_PAYLOAD_KEYS = new Set([
     'sensor_id',
     'topic',
@@ -329,6 +333,44 @@ function normalizeReadings(readings) {
     return normalizedReadings;
 }
 
+function getAggregationGroupForReadings(readings = []) { // RAYAT-FIX
+    const normalizedReadings = Array.isArray(readings) ? readings : []; // RAYAT-FIX
+    const types = new Set(normalizedReadings.map((reading) => cleanString(reading?.type)).filter(Boolean)); // RAYAT-FIX
+    if (types.size !== 1) { // RAYAT-FIX
+        return null; // RAYAT-FIX
+    } // RAYAT-FIX
+
+    const type = [...types][0]; // RAYAT-FIX
+    const expectedSubtypes = SENSOR_AGGREGATION_GROUPS[type]; // RAYAT-FIX
+    if (!expectedSubtypes) { // RAYAT-FIX
+        return null; // RAYAT-FIX
+    } // RAYAT-FIX
+
+    const observedSubtypes = new Set(normalizedReadings.map((reading) => cleanString(reading?.subtype)).filter(Boolean)); // RAYAT-FIX
+    const hasAggregatedSubtype = [...observedSubtypes].some((subtype) => expectedSubtypes.has(subtype)); // RAYAT-FIX
+    if (!hasAggregatedSubtype) { // RAYAT-FIX
+        return null; // RAYAT-FIX
+    } // RAYAT-FIX
+
+    return { // RAYAT-FIX
+        type, // RAYAT-FIX
+        expectedSubtypes, // RAYAT-FIX
+        observedSubtypes, // RAYAT-FIX
+        complete: [...expectedSubtypes].every((subtype) => observedSubtypes.has(subtype)) // RAYAT-FIX
+    }; // RAYAT-FIX
+} // RAYAT-FIX
+
+function mergeReadingsBySubtype(existingReadings = [], incomingReadings = []) { // RAYAT-FIX
+    const mergedBySubtype = new Map(); // RAYAT-FIX
+    [...existingReadings, ...incomingReadings].forEach((reading) => { // RAYAT-FIX
+        const subtype = cleanString(reading?.subtype); // RAYAT-FIX
+        if (subtype) { // RAYAT-FIX
+            mergedBySubtype.set(subtype, reading); // RAYAT-FIX
+        } // RAYAT-FIX
+    }); // RAYAT-FIX
+    return [...mergedBySubtype.values()]; // RAYAT-FIX
+} // RAYAT-FIX
+
 function buildReadingsFromFlatPayload(payload) {
     if (!isPlainObject(payload)) {
         return [];
@@ -437,7 +479,9 @@ async function persistPublicSensorLatest(execute, normalizedReadings, readingTim
                  value = EXCLUDED.value,
                  topic = EXCLUDED.topic,
                  timestamp = EXCLUDED.timestamp,
-                 updated_at = CURRENT_TIMESTAMP`,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE public_sensor_latest.timestamp IS NULL
+                OR public_sensor_latest.timestamp <= EXCLUDED.timestamp`,
             [reading.type, reading.subtype, reading.value, topic, readingTimestamp]
         );
     }
@@ -496,9 +540,12 @@ async function persistReadingsForDevice(execute, device, normalizedReadings, rea
         await execute(
             `INSERT INTO sensor_latest (sensor_id, value, timestamp)
              VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE
-                value = VALUES(value),
-                timestamp = VALUES(timestamp)`,
+             ON CONFLICT (sensor_id) DO UPDATE
+             SET value = EXCLUDED.value,
+                 timestamp = EXCLUDED.timestamp,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE sensor_latest.timestamp IS NULL
+                OR sensor_latest.timestamp <= EXCLUDED.timestamp`,
             [sensorId, reading.value, readingTimestamp]
         );
 
@@ -695,6 +742,21 @@ async function ingestDeviceReadings({ deviceId, apiKey, timestamp, readings }) {
     return result;
 }
 
+async function validateDeviceCredentials({ deviceId, apiKey }) { // RAYAT-FIX
+    const cleanDeviceId = cleanString(deviceId); // RAYAT-FIX
+    const cleanApiKey = cleanString(apiKey); // RAYAT-FIX
+
+    if (!cleanDeviceId || !cleanApiKey) { // RAYAT-FIX
+        throw createHttpError(401, 'Non autorizzato'); // RAYAT-FIX
+    } // RAYAT-FIX
+
+    return withTransaction(async (connection) => { // RAYAT-FIX
+        const execute = createExecutor(connection); // RAYAT-FIX
+        await findDeviceByCredentials(execute, cleanDeviceId, cleanApiKey); // RAYAT-FIX
+        return true; // RAYAT-FIX
+    }); // RAYAT-FIX
+} // RAYAT-FIX
+
 async function ingestTrustedReadings({ deviceId, timestamp, readings }) {
     const normalizedReadings = normalizeReadings(readings);
     const readingTimestamp = normalizeTimestamp(timestamp);
@@ -779,9 +841,12 @@ module.exports = {
     normalizeReading,
     normalizeReadings,
     normalizeKey,
+    getAggregationGroupForReadings, // RAYAT-FIX
+    mergeReadingsBySubtype, // RAYAT-FIX
     buildReadingsFromFlatPayload,
     prepareIncomingSensorPayload,
     ingestDeviceReadings,
+    validateDeviceCredentials, // RAYAT-FIX
     ingestTrustedReadings,
     ingestPublicReadings,
     recordGatewaySignal // RAYAT-FIX

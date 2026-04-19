@@ -9,7 +9,8 @@ const {
     ingestDeviceReadings,
     ingestTrustedReadings,
     ingestPublicReadings,
-    recordGatewaySignal
+    recordGatewaySignal,
+    validateDeviceCredentials // RAYAT-FIX
 } = require('../utils/sensor-ingest');
 const {
     getGatewayHeartbeatWindowMinutes, // RAYAT-FIX
@@ -21,6 +22,7 @@ const {
 const { cleanString, parseGatewaySignalUpdate, parseSensorUpdate } = require('../utils/sensor-update-parser');
 
 const DEFAULT_BRIDGE_TOKEN_HEADER = 'x-rayat-bridge-token';
+const SENSOR_UPDATE_UNAUTHORIZED = { error: 'Non autorizzato' }; // RAYAT-FIX
 
 function parseNumericValue(value) {
     const numeric = Number.parseFloat(value);
@@ -98,19 +100,61 @@ function normalizeSoilReadingPairs(readings = [], options = {}) {
 function getBridgeAuthorization(req) {
     const configuredToken = cleanString(process.env.MQTT_INGEST_TOKEN);
     const headerName = cleanString(process.env.MQTT_INGEST_TOKEN_HEADER) || DEFAULT_BRIDGE_TOKEN_HEADER;
+    const providedToken = cleanString(req.get(headerName) || req.get(DEFAULT_BRIDGE_TOKEN_HEADER)); // RAYAT-FIX
 
     if (!configuredToken) {
         return {
             tokenConfigured: false,
-            trustedBridge: false
+            trustedBridge: false // RAYAT-FIX
         };
     }
 
     return {
         tokenConfigured: true,
-        trustedBridge: cleanString(req.get(headerName)) === configuredToken
+        trustedBridge: providedToken === configuredToken // RAYAT-FIX
     };
 }
+
+function sendSensorUpdateUnauthorized(res) { // RAYAT-FIX
+    return res.status(401).json(SENSOR_UPDATE_UNAUTHORIZED); // RAYAT-FIX
+} // RAYAT-FIX
+
+function extractUpdateApiKey(body = {}) { // RAYAT-FIX
+    const payload = body && typeof body.payload === 'object' ? body.payload : {}; // RAYAT-FIX
+    const value = body && typeof body.value === 'object' ? body.value : {}; // RAYAT-FIX
+    return cleanString(body.api_key || payload.api_key || value.api_key); // RAYAT-FIX
+} // RAYAT-FIX
+
+function extractTopicDeviceId(topic) { // RAYAT-FIX
+    const segments = cleanString(topic).replace(/^\/+|\/+$/g, '').split('/').filter(Boolean); // RAYAT-FIX
+    const strippedSegments = segments[0] === 'sensors' ? segments.slice(1) : segments; // RAYAT-FIX
+    const firstSegment = cleanString(strippedSegments[0]); // RAYAT-FIX
+    return strippedSegments.length > 1 && !VALID_SENSOR_TYPES.has(firstSegment) ? firstSegment : ''; // RAYAT-FIX
+} // RAYAT-FIX
+
+function extractUpdateDeviceId(body = {}) { // RAYAT-FIX
+    const payload = body && typeof body.payload === 'object' ? body.payload : {}; // RAYAT-FIX
+    const value = body && typeof body.value === 'object' ? body.value : {}; // RAYAT-FIX
+    const topic = cleanString(body.sensor_id || body.topic || payload.sensor_id || payload.topic || value.sensor_id || value.topic); // RAYAT-FIX
+    return cleanString(body.device_id || body.deviceId || payload.device_id || payload.deviceId || value.device_id || value.deviceId) // RAYAT-FIX
+        || extractTopicDeviceId(topic); // RAYAT-FIX
+} // RAYAT-FIX
+
+async function hasValidUpdateApiKey(deviceId, apiKey) { // RAYAT-FIX
+    if (!deviceId || !apiKey) { // RAYAT-FIX
+        return false; // RAYAT-FIX
+    } // RAYAT-FIX
+
+    try { // RAYAT-FIX
+        await validateDeviceCredentials({ deviceId, apiKey }); // RAYAT-FIX
+        return true; // RAYAT-FIX
+    } catch (error) { // RAYAT-FIX
+        if ([400, 401, 404].includes(error.statusCode)) { // RAYAT-FIX
+            return false; // RAYAT-FIX
+        } // RAYAT-FIX
+        throw error; // RAYAT-FIX
+    } // RAYAT-FIX
+} // RAYAT-FIX
 
 function parseHistoryDate(value, endOfDay = false) {
     const normalized = cleanString(value);
@@ -373,12 +417,21 @@ router.get('/public/history', async (req, res) => {
 router.post('/update', async (req, res) => {
     try {
         const bridgeAuth = getBridgeAuthorization(req);
+        const updateApiKey = extractUpdateApiKey(req.body); // RAYAT-FIX
+
+        if (!updateApiKey && !bridgeAuth.trustedBridge) { // RAYAT-FIX
+            return sendSensorUpdateUnauthorized(res); // RAYAT-FIX
+        } // RAYAT-FIX
+
         const gatewaySignal = parseGatewaySignalUpdate(req.body);
 
         if (gatewaySignal) {
-            if (bridgeAuth.tokenConfigured && !bridgeAuth.trustedBridge) {
-                return res.status(401).json({ error: 'Bridge token non valido' });
-            }
+            const apiKeyAuthorized = !bridgeAuth.trustedBridge // RAYAT-FIX
+                ? await hasValidUpdateApiKey(gatewaySignal.deviceId, updateApiKey) // RAYAT-FIX
+                : false; // RAYAT-FIX
+            if (!bridgeAuth.trustedBridge && !apiKeyAuthorized) { // RAYAT-FIX
+                return sendSensorUpdateUnauthorized(res); // RAYAT-FIX
+            } // RAYAT-FIX
 
             const result = await recordGatewaySignal(gatewaySignal);
             return res.json({
@@ -389,6 +442,13 @@ router.post('/update', async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
+
+        if (!bridgeAuth.trustedBridge) { // RAYAT-FIX
+            const apiKeyAuthorized = await hasValidUpdateApiKey(extractUpdateDeviceId(req.body), updateApiKey); // RAYAT-FIX
+            if (!apiKeyAuthorized) { // RAYAT-FIX
+                return sendSensorUpdateUnauthorized(res); // RAYAT-FIX
+            } // RAYAT-FIX
+        } // RAYAT-FIX
 
         const prepared = parseSensorUpdate(req.body);
         let result;
@@ -401,9 +461,9 @@ router.post('/update', async (req, res) => {
                 readings: prepared.readings
             });
         } else {
-            if (bridgeAuth.tokenConfigured && !bridgeAuth.trustedBridge) {
-                return res.status(401).json({ error: 'Bridge token non valido' });
-            }
+            if (!bridgeAuth.trustedBridge) { // RAYAT-FIX
+                return sendSensorUpdateUnauthorized(res); // RAYAT-FIX
+            } // RAYAT-FIX
 
             try {
                 result = await ingestTrustedReadings({
@@ -434,6 +494,10 @@ router.post('/update', async (req, res) => {
             timestamp: new Date().toISOString()
         });
     } catch (error) {
+        if (error.statusCode === 401) { // RAYAT-FIX
+            return sendSensorUpdateUnauthorized(res); // RAYAT-FIX
+        } // RAYAT-FIX
+
         if (error.statusCode) {
             return res.status(error.statusCode).json({ error: error.message });
         }

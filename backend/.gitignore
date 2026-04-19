@@ -1,3 +1,4 @@
+# // RAYAT-FIX: keep production secrets out of source exports.
 .env
 node_modules/
 *.log

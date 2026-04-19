@@ -1,21 +1,19 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet'); // RAYAT-FIX
 const path = require('path');
 const jwt = require('jsonwebtoken');
 require('./config/env');
-const { getDatabaseHealth, testConnection, query } = require('./config/database');
+const { testConnection, query } = require('./config/database'); // RAYAT-FIX
 const { ensurePlatformSchema } = require('./utils/platform-schema');
 const { ensureSuperAdmin } = require('./utils/super-admin');
 const {
-    getMissingDataAlertRuntimeStatus,
     startMissingDataAlertJob
-} = require('./src/jobs/alertJob');
+} = require('./src/jobs/alertJob'); // RAYAT-FIX
 const {
-    getMqttConfig,
-    getMqttRuntimeStatus,
     startMqttDirectJob,
     stopMqttDirectJob
-} = require('./src/jobs/mqttDirectJob');
+} = require('./src/jobs/mqttDirectJob'); // RAYAT-FIX
 const {
     extractAdminSessionToken,
     isPrivilegedAdminRole,
@@ -29,6 +27,25 @@ let httpServer = null;
 let shutdownInProgress = false;
 
 // Middleware
+app.disable('x-powered-by'); // RAYAT-FIX
+app.use(helmet({ // RAYAT-FIX
+    contentSecurityPolicy: { // RAYAT-FIX
+        useDefaults: false, // RAYAT-FIX
+        directives: { // RAYAT-FIX
+            defaultSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", '*'] // RAYAT-FIX
+        } // RAYAT-FIX
+    }, // RAYAT-FIX
+    strictTransportSecurity: { // RAYAT-FIX
+        maxAge: 31536000 // RAYAT-FIX
+    }, // RAYAT-FIX
+    xContentTypeOptions: true, // RAYAT-FIX
+    xFrameOptions: { // RAYAT-FIX
+        action: 'deny' // RAYAT-FIX
+    }, // RAYAT-FIX
+    referrerPolicy: { // RAYAT-FIX
+        policy: 'strict-origin-when-cross-origin' // RAYAT-FIX
+    } // RAYAT-FIX
+})); // RAYAT-FIX
 app.use(cors({
     origin: process.env.CORS_ORIGIN || '*',
     credentials: true
@@ -135,6 +152,11 @@ app.use(express.static(path.join(__dirname, '../'), {
     index: false  // we handle / manually below
 }));
 
+// RAYAT-FIX: public health check intentionally exposes no operational detail.
+app.get(['/api/health', '/health'], (_req, res) => { // RAYAT-FIX
+    res.json({ status: 'ok' }); // RAYAT-FIX
+}); // RAYAT-FIX
+
 app.get(['/demo', '/demo/'], (_req, res) => {
     res.redirect(302, '/dashboard');
 });
@@ -182,27 +204,6 @@ app.get('/api', (req, res) => {
             auth: '/api/auth',
             sensors: '/api/sensors',
             iot: '/api/iot'
-        }
-    });
-});
-
-// Health check endpoint
-app.get(['/api/health', '/health'], async (req, res) => {
-    const health = await getDatabaseHealth();
-    const mqttConfig = getMqttConfig();
-    const alertMonitoring = await getMissingDataAlertRuntimeStatus({ forceRefresh: true });
-    const mqttRuntime = getMqttRuntimeStatus(); // RAYAT-FIX
-
-    res.status(health.db === 'ok' ? 200 : 503).json({
-        ...health,
-        app: 'ok',
-        uptimeSeconds: Math.floor(process.uptime()),
-        alertMonitoring,
-        mqttDirect: {
-            enabled: mqttConfig.enabled,
-            brokerConfigured: Boolean(mqttConfig.brokerUrl),
-            topic: mqttConfig.topic,
-            runtime: mqttRuntime // RAYAT-FIX
         }
     });
 });
