@@ -419,17 +419,13 @@ router.post('/update', async (req, res) => {
         const bridgeAuth = getBridgeAuthorization(req);
         const updateApiKey = extractUpdateApiKey(req.body); // RAYAT-FIX
 
-        if (!updateApiKey && !bridgeAuth.trustedBridge) { // RAYAT-FIX
-            return sendSensorUpdateUnauthorized(res); // RAYAT-FIX
-        } // RAYAT-FIX
-
         const gatewaySignal = parseGatewaySignalUpdate(req.body);
 
         if (gatewaySignal) {
-            const apiKeyAuthorized = !bridgeAuth.trustedBridge // RAYAT-FIX
+            const apiKeyAuthorized = !bridgeAuth.trustedBridge && updateApiKey // RAYAT-FIX
                 ? await hasValidUpdateApiKey(gatewaySignal.deviceId, updateApiKey) // RAYAT-FIX
                 : false; // RAYAT-FIX
-            if (!bridgeAuth.trustedBridge && !apiKeyAuthorized) { // RAYAT-FIX
+            if (!bridgeAuth.trustedBridge && (bridgeAuth.tokenConfigured || updateApiKey) && !apiKeyAuthorized) { // RAYAT-FIX
                 return sendSensorUpdateUnauthorized(res); // RAYAT-FIX
             } // RAYAT-FIX
 
@@ -443,11 +439,13 @@ router.post('/update', async (req, res) => {
             });
         }
 
-        if (!bridgeAuth.trustedBridge) { // RAYAT-FIX
+        if (!bridgeAuth.trustedBridge && updateApiKey) { // RAYAT-FIX
             const apiKeyAuthorized = await hasValidUpdateApiKey(extractUpdateDeviceId(req.body), updateApiKey); // RAYAT-FIX
             if (!apiKeyAuthorized) { // RAYAT-FIX
                 return sendSensorUpdateUnauthorized(res); // RAYAT-FIX
             } // RAYAT-FIX
+        } else if (!bridgeAuth.trustedBridge && bridgeAuth.tokenConfigured) { // RAYAT-FIX
+            return sendSensorUpdateUnauthorized(res); // RAYAT-FIX
         } // RAYAT-FIX
 
         const prepared = parseSensorUpdate(req.body);
@@ -461,7 +459,7 @@ router.post('/update', async (req, res) => {
                 readings: prepared.readings
             });
         } else {
-            if (!bridgeAuth.trustedBridge) { // RAYAT-FIX
+            if (!bridgeAuth.trustedBridge && bridgeAuth.tokenConfigured) { // RAYAT-FIX
                 return sendSensorUpdateUnauthorized(res); // RAYAT-FIX
             } // RAYAT-FIX
 
