@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Deployment helper package for the Rayat production export",
   "scripts": {
+    "postinstall": "npm run install:backend",
     "install:backend": "npm --prefix backend install",
     "start": "npm --prefix backend start",
     "dev": "npm --prefix backend run dev",
