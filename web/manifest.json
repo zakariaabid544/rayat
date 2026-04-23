@@ -1,0 +1,59 @@
+{
+    "id": "/",
+    "name": "Rayat Smart Monitoring",
+    "short_name": "Rayat",
+    "description": "Monitoraggio agricolo intelligente 24/7 - Suolo, Acqua, Energia, Clima",
+    "start_url": "/?source=pwa",
+    "scope": "/",
+    "display": "standalone",
+    "display_override": [
+        "standalone",
+        "minimal-ui",
+        "browser"
+    ],
+    "background_color": "#064e3b",
+    "theme_color": "#064e3b",
+    "orientation": "portrait-primary",
+    "lang": "it",
+    "dir": "ltr",
+    "prefer_related_applications": false,
+    "categories": [
+        "agriculture",
+        "productivity",
+        "utilities"
+    ],
+    "icons": [
+        {
+            "src": "/icons/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Home",
+            "short_name": "Home",
+            "url": "/",
+            "description": "Apri la homepage Rayat"
+        },
+        {
+            "name": "Dashboard",
+            "short_name": "Demo",
+            "url": "/dashboard",
+            "description": "Apri la dashboard sensori"
+        },
+        {
+            "name": "Contatti",
+            "short_name": "Contatti",
+            "url": "/contatti",
+            "description": "Apri la pagina contatti"
+        }
+    ]
+}

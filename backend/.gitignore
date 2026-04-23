@@ -1,0 +1,10 @@
+# // RAYAT-FIX: keep production secrets out of source exports.
+.env
+node_modules/
+*.log
+logs/
+.DS_Store
+._*
+*.swp
+*~
+.AppleDouble

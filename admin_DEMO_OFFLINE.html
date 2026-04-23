@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rayat Admin Panel (DEMO)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --green-900: #064e3b;
+            --green-800: #065f46;
+            --green-700: #047857;
+            --silver: #C0C0C0;
+            --sidebar-w: 240px;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #f0f4f0;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        #sidebar {
+            width: var(--sidebar-w);
+            background: #064e3b;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 40;
+        }
+
+        #main-content {
+            margin-left: var(--sidebar-w);
+            flex: 1;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #topbar {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 0 1.5rem;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1.25rem;
+            cursor: pointer;
+            border-radius: 0.75rem;
+            margin: 0.2rem 0.75rem;
+            color: rgba(255, 255, 255, 0.75);
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .nav-item.active {
+            background: rgba(255, 255, 255, 0.18);
+            color: white;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 1rem;
+            padding: 1.25rem 1.5rem;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .badge-green {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .badge-silver {
+            background: #f4f4f4;
+            color: #718096;
+        }
+    </style>
+</head>
+
+<body>
+    <div style="display: flex; min-height: 100vh;">
+        <nav id="sidebar">
+            <div class="flex items-center gap-3 px-5 py-5 border-b border-white/10">
+                <img src="icons/tree-silver.png" alt="Rayat Silver Tree Logo" class="h-8 w-auto" />
+                <div>
+                    <div class="font-black text-lg tracking-tighter" style="color:#C0C0C0;">RAYAT</div>
+                    <div class="text-[9px] text-green-300 uppercase tracking-widest font-bold">Demo Panel (Offline)
+                    </div>
+                </div>
+            </div>
+            <div class="flex-1 py-4">
+                <div class="nav-item active">📊 Dashboard</div>
+                <div class="nav-item">👤 Clienti</div>
+                <div class="nav-item">📡 Sensori IoT</div>
+            </div>
+            <div class="p-4 bg-red-900/20 m-2 rounded-lg border border-red-900/30">
+                <p class="text-[10px] uppercase font-bold text-red-100">Attenzione</p>
+                <p class="text-[11px] text-red-200 mt-1">Questa è una **DEMO OFFLINE** perché non hai Node.js installato
+                    sul Mac.</p>
+            </div>
+        </nav>
+        <div id="main-content">
+            <div id="topbar"><span class="font-black text-gray-800 text-lg">Dashboard (Dati Simulati)</span></div>
+            <div class="p-6">
+                <div class="mb-6 bg-yellow-50 border-1 border-yellow-200 p-4 rounded-xl flex items-center gap-4">
+                    <span class="text-2xl">💡</span>
+                    <p class="text-sm text-yellow-800 leading-tight">
+                        <strong>Hai inserito le credenziali zakariaabid@hotmail.it.</strong><br>
+                        Per far funzionare il login reale e vedere i dati veri, devi installare Node.js e avviare il
+                        server.
+                    </p>
+                </div>
+                <div class="grid grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                    <div class="stat-card">
+                        <div class="text-2xl font-black text-gray-800">12</div>
+                        <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Clienti Demo</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-2xl font-black text-gray-800">25</div>
+                        <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Kit Simulati</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-2xl font-black text-green-700">8 Online</div>
+                        <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Stato Sistema</div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                    <div class="px-5 py-4 border-b border-gray-100 font-bold text-gray-700">Anteprima Sensori Recenti
+                    </div>
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-gray-50 text-[10px] uppercase font-bold text-gray-400">
+                            <tr>
+                                <th class="px-5 py-3">Stato</th>
+                                <th class="px-5 py-3">Tipo</th>
+                                <th class="px-5 py-3">Cliente</th>
+                                <th class="px-5 py-3">Valore</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <tr>
+                                <td class="px-5 py-4"><span class="badge badge-green">● Online</span></td>
+                                <td class="px-5 py-4 font-bold">Umidità Suolo</td>
+                                <td class="px-5 py-4">Agri Souss</td>
+                                <td class="px-5 py-4"><strong>24.5</strong> %</td>
+                            </tr>
+                            <tr>
+                                <td class="px-5 py-4"><span class="badge badge-green">● Online</span></td>
+                                <td class="px-5 py-4 font-bold">Temperatura</td>
+                                <td class="px-5 py-4">Ferme Azzedine</td>
+                                <td class="px-5 py-4"><strong>28.2</strong> °C</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
