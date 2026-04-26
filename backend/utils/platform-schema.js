@@ -49,6 +49,30 @@ async function ensureColumn(tableName, columnName, definition) {
   return true;
 }
 
+async function ensureColumnNullable(tableName, columnName) {
+  if (!(await tableExists(tableName))) {
+    return false;
+  }
+
+  const rows = await query(
+    `SELECT is_nullable
+     FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = ?
+       AND column_name = ?
+     LIMIT 1`,
+    [tableName, columnName]
+  );
+
+  if (!rows.length || rows[0].is_nullable === 'YES') {
+    return false;
+  }
+
+  await query(`ALTER TABLE ${tableName} ALTER COLUMN ${columnName} DROP NOT NULL`);
+  clearSchemaCache();
+  return true;
+}
+
 async function ensureIndex(tableName, indexName, createSql) {
   if (!(await tableExists(tableName))) {
     return false;
@@ -110,7 +134,7 @@ async function ensureCoreTables(changes) {
       `CREATE TABLE IF NOT EXISTS devices (
          id SERIAL PRIMARY KEY,
          device_id VARCHAR(100) UNIQUE NOT NULL,
-         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
          name TEXT,
          api_key TEXT NOT NULL,
          location TEXT,
@@ -351,6 +375,10 @@ async function ensurePlatformSchema() {
   const changes = [];
 
   await ensureCoreTables(changes);
+
+  if (await ensureColumnNullable('devices', 'user_id')) {
+    changes.push('devices.user_id nullable');
+  }
 
   if (await ensureColumn('users', 'client_code', 'VARCHAR(20)')) {
     changes.push('users.client_code');

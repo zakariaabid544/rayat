@@ -6,6 +6,11 @@ const { ingestDeviceReadings, prepareIncomingSensorPayload } = require('../utils
 
 const router = express.Router();
 
+function getRequestIp(req) {
+    const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    return (forwarded || String(req.ip || '').trim()).replace(/^::ffff:/, '');
+}
+
 // POST /api/iot/upload - Endpoint per dispositivi IoT (HTTP POST)
 router.post('/upload', async (req, res) => {
     try {
@@ -17,10 +22,10 @@ router.post('/upload', async (req, res) => {
             readings
         } = prepared;
 
-        if (!device_id || !api_key || !readings.length) {
+        if (!device_id || !readings.length) {
             return res.status(400).json({
                 error: 'Dati mancanti o non validi',
-                required: ['device_id', 'api_key', 'readings | flat_payload']
+                required: ['device_id', 'readings | flat_payload']
             });
         }
 
@@ -31,7 +36,8 @@ router.post('/upload', async (req, res) => {
             deviceId: device_id,
             apiKey: api_key,
             timestamp,
-            readings
+            readings,
+            requestIp: getRequestIp(req)
         });
 
         res.json({

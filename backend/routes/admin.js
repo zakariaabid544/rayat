@@ -148,6 +148,13 @@ function createExecutor(connection) {
     };
 }
 
+async function lockDeviceSerial(executor, serialNumber) {
+    await executor(
+        `SELECT pg_advisory_xact_lock(hashtext(?))`,
+        [String(serialNumber || '')]
+    );
+}
+
 async function ensureClientExists(clientId, executor = query) {
     if (!clientId) {
         return null;
@@ -444,6 +451,7 @@ function buildDeviceWhereClause(req, flags) {
     const searchTerm = (req.query.q || '').trim();
     const clientId = req.query.client_id || req.query.clientId;
     const type = req.query.type;
+    const status = String(req.query.status || '').trim();
 
     if (searchTerm) {
         const like = `%${searchTerm}%`;
@@ -471,6 +479,13 @@ function buildDeviceWhereClause(req, flags) {
     if (type && VALID_SENSOR_TYPES.has(type)) {
         where.push('(sm.primary_type = ? OR FIND_IN_SET(?, sm.sensor_types))');
         params.push(type, type);
+    }
+
+    if (status === 'unassigned') {
+        where.push(`(d.user_id IS NULL OR d.status = 'unassigned')`);
+    } else if (['active', 'inactive', 'error'].includes(status)) {
+        where.push('d.status = ?');
+        params.push(status);
     }
 
     return {
@@ -512,6 +527,39 @@ async function createManagedDevice({ serialNumber, type, clientId, deviceName },
     }
 
     await ensureClientExists(clientId, executor);
+    await lockDeviceSerial(executor, cleanSerial);
+
+    const existingDevices = await executor(
+        `SELECT id, api_key
+         FROM devices
+         WHERE device_id = ?
+         LIMIT 1`,
+        [cleanSerial]
+    );
+
+    if (existingDevices.length) {
+        const existingDevice = existingDevices[0];
+        await executor(
+            `UPDATE devices
+             SET user_id = ?,
+                 status = ?,
+                 name = COALESCE(NULLIF(name, ''), ?),
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [
+                clientId || null,
+                clientId ? 'active' : 'unassigned',
+                deviceName || buildDeviceName(cleanSerial, type),
+                existingDevice.id
+            ]
+        );
+        await syncPrimarySensorForDevice(existingDevice.id, type, connection);
+
+        return {
+            id: existingDevice.id,
+            apiKey: existingDevice.api_key
+        };
+    }
 
     const apiKey = crypto.randomBytes(24).toString('hex');
     const profile = getSensorProfile(type);
@@ -522,8 +570,15 @@ async function createManagedDevice({ serialNumber, type, clientId, deviceName },
 
     const deviceResult = await executor(
         `INSERT INTO devices (device_id, user_id, name, api_key, status, metadata)
-         VALUES (?, ?, ?, ?, 'inactive', ?)`,
-        [cleanSerial, clientId || null, deviceName || buildDeviceName(cleanSerial, type), apiKey, metadata]
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+            cleanSerial,
+            clientId || null,
+            deviceName || buildDeviceName(cleanSerial, type),
+            apiKey,
+            clientId ? 'inactive' : 'unassigned',
+            metadata
+        ]
     );
 
     await executor(
@@ -1603,7 +1658,7 @@ router.get('/sensors', isAdminRole, async (req, res) => {
                 d.id AS device_row_id,
                 d.device_id,
                 d.name AS device_name,
-                d.status AS device_status,
+                CASE WHEN d.user_id IS NULL THEN 'unassigned' ELSE d.status END AS device_status,
                 d.last_seen,
                 u.id AS client_id,
                 u.name AS client_name,
@@ -1681,10 +1736,15 @@ router.get('/devices', isAdminRole, async (req, res) => {
             `SELECT
                 d.id,
                 d.device_id AS serial_number,
+                d.device_id,
                 d.name,
-                d.status,
+                CASE WHEN d.user_id IS NULL THEN 'unassigned' ELSE d.status END AS status,
                 d.last_seen,
+                d.last_seen AS last_seen_at,
+                COALESCE(d.metadata->>'last_seen_ip', d.metadata->>'first_seen_ip') AS last_seen_ip,
                 d.created_at,
+                d.updated_at,
+                d.metadata,
                 d.user_id AS client_id,
                 u.name AS client_name,
                 ${resolvedClientCodeExpr(flags)} AS client_code,
@@ -1818,15 +1878,23 @@ router.put('/devices/:id', isAdminRole, async (req, res) => {
             }
 
             await ensureClientExists(client_id || null, executor);
+            await lockDeviceSerial(executor, serial_number.trim());
 
             await executor(
                 `UPDATE devices
                  SET device_id = ?,
                      user_id = ?,
-                     name = COALESCE(name, ?),
+                     status = ?,
+                     name = COALESCE(NULLIF(name, ''), ?),
                      updated_at = NOW()
                  WHERE id = ?`,
-                [serial_number.trim(), client_id || null, buildDeviceName(serial_number.trim(), type), deviceId]
+                [
+                    serial_number.trim(),
+                    client_id || null,
+                    client_id ? 'active' : 'unassigned',
+                    buildDeviceName(serial_number.trim(), type),
+                    deviceId
+                ]
             );
 
             await syncPrimarySensorForDevice(deviceId, type, connection);

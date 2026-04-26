@@ -11,14 +11,24 @@ const {
 } = require('../../utils/monitoring-config');
 
 const ALERT_TYPE = 'missing_sensor_data';
+const RECOVERY_ALERT_TYPE = 'missing_sensor_data_recovered';
 const ALERT_SUBJECT = '⚠️ RAYAT – Nessun dato ricevuto';
+const RECOVERY_ALERT_SUBJECT = '✅ RAYAT – Sistema tornato online';
 const DEFAULT_PRIMARY_EMAIL = 'zakariaabid544@gmail.com';
 const DEFAULT_FALLBACK_EMAIL = 'zakariaabid544@gmail.com';
 
 const inMemoryNotificationState = {
-  missing_sensor_data: {
+  [ALERT_TYPE]: {
     createdAt: null,
-    lastUpdateIso: null
+    lastUpdateIso: null,
+    alertLastUpdateIso: null,
+    recoveredAtIso: null
+  },
+  [RECOVERY_ALERT_TYPE]: {
+    createdAt: null,
+    lastUpdateIso: null,
+    alertLastUpdateIso: null,
+    recoveredAtIso: null
   }
 };
 
@@ -96,6 +106,10 @@ function buildAlertSubject(options = {}) {
   return options.isTest ? `[TEST] ${ALERT_SUBJECT}` : ALERT_SUBJECT;
 }
 
+function buildRecoverySubject(options = {}) {
+  return options.isTest ? `[TEST] ${RECOVERY_ALERT_SUBJECT}` : RECOVERY_ALERT_SUBJECT;
+}
+
 function isMissingRelationError(error) {
   return error?.code === '42P01' || /does not exist/i.test(String(error?.message || ''));
 }
@@ -167,6 +181,8 @@ function scheduleExactAlertTimeout(lastUpdate, options = {}) {
 }
 
 async function getLastUpdateTimestamp() {
+  const sensorUpdateSources = [];
+
   if (hasLegacySensorDataTable === null) {
     const rows = await query(
       `SELECT EXISTS (
@@ -180,31 +196,40 @@ async function getLastUpdateTimestamp() {
   }
 
   if (hasLegacySensorDataTable) {
-    try {
-      const rows = await query('SELECT MAX(created_at) AS last_update FROM sensor_data');
-      const directMatch = toDateOrNull(rows?.[0]?.last_update);
-      if (directMatch) {
-        return directMatch;
-      }
-    } catch (error) {
-      if (!isMissingRelationError(error)) {
-        throw error;
-      }
-
-      hasLegacySensorDataTable = false;
-    }
+    sensorUpdateSources.push('SELECT MAX(created_at) AS last_update FROM sensor_data');
   }
 
-  const rows = await query(
-    `SELECT MAX(last_update) AS last_update
-     FROM (
-       SELECT MAX(created_at) AS last_update FROM public_sensor_readings
-       UNION ALL
-       SELECT MAX(timestamp) AS last_update FROM sensor_readings
-     ) AS sensor_updates`
+  sensorUpdateSources.push(
+    'SELECT MAX(created_at) AS last_update FROM public_sensor_readings',
+    'SELECT MAX(timestamp) AS last_update FROM sensor_readings'
   );
 
-  return toDateOrNull(rows?.[0]?.last_update);
+  try {
+    const rows = await query(
+      `SELECT MAX(last_update) AS last_update
+       FROM (
+         ${sensorUpdateSources.join('\n         UNION ALL\n         ')}
+       ) AS sensor_updates`
+    );
+
+    return toDateOrNull(rows?.[0]?.last_update);
+  } catch (error) {
+    if (!hasLegacySensorDataTable || !isMissingRelationError(error)) {
+      throw error;
+    }
+
+    hasLegacySensorDataTable = false;
+    const rows = await query(
+      `SELECT MAX(last_update) AS last_update
+       FROM (
+         SELECT MAX(created_at) AS last_update FROM public_sensor_readings
+         UNION ALL
+         SELECT MAX(timestamp) AS last_update FROM sensor_readings
+       ) AS sensor_updates`
+    );
+
+    return toDateOrNull(rows?.[0]?.last_update);
+  }
 }
 
 async function getLastNotificationTimestamp(lastUpdate) {
@@ -254,18 +279,134 @@ async function getLastNotificationTimestamp(lastUpdate) {
   return null;
 }
 
-async function rememberNotification(recipient, metadata = {}) {
+async function hasRecoveryNotificationForAlert(alertLastUpdate) {
+  const alertLastUpdateIso = toIsoOrNull(alertLastUpdate);
+  if (!alertLastUpdateIso) {
+    return false;
+  }
+
+  try {
+    const rows = await query(
+      `SELECT created_at
+       FROM notification_log
+       WHERE notification_type = ?
+         AND channel = 'email'
+         AND COALESCE(metadata->>'alertLastUpdate', '') = ?
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [RECOVERY_ALERT_TYPE, alertLastUpdateIso]
+    );
+
+    if (toDateOrNull(rows?.[0]?.created_at)) {
+      return true;
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[alert-job] notification_log recovery non disponibile, uso fallback in memoria:', error.message);
+    }
+  }
+
+  const memoryState = inMemoryNotificationState[RECOVERY_ALERT_TYPE];
+  return Boolean(memoryState?.alertLastUpdateIso && memoryState.alertLastUpdateIso === alertLastUpdateIso);
+}
+
+async function getPendingRecoveryAlert(recoveredAt) {
+  const recoveredAtIso = toIsoOrNull(recoveredAt);
+  if (!recoveredAtIso) {
+    return null;
+  }
+
+  try {
+    const rows = await query(
+      `SELECT metadata->>'lastUpdate' AS last_update,
+              MAX(created_at) AS alerted_at
+       FROM notification_log
+       WHERE notification_type = ?
+         AND channel = 'email'
+         AND COALESCE(metadata->>'lastUpdate', '') <> ''
+         AND (metadata->>'lastUpdate')::timestamptz < ?::timestamptz
+       GROUP BY metadata->>'lastUpdate'
+       ORDER BY MAX((metadata->>'lastUpdate')::timestamptz) DESC
+       LIMIT 1`,
+      [ALERT_TYPE, recoveredAtIso]
+    );
+
+    const alertLastUpdate = toDateOrNull(rows?.[0]?.last_update);
+    if (alertLastUpdate) {
+      if (await hasRecoveryNotificationForAlert(alertLastUpdate)) {
+        return null;
+      }
+
+      return {
+        alertLastUpdate,
+        alertedAt: toDateOrNull(rows?.[0]?.alertedAt || rows?.[0]?.alerted_at)
+      };
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[alert-job] impossibile leggere l’alert pendente di recovery, uso fallback in memoria:', error.message);
+    }
+  }
+
+  try {
+    const rows = await query(
+      `SELECT created_at AS alerted_at
+       FROM notification_log
+       WHERE notification_type = ?
+         AND channel = 'email'
+         AND created_at < ?::timestamptz
+         AND (
+           metadata IS NULL
+           OR COALESCE(metadata->>'lastUpdate', '') = ''
+         )
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [ALERT_TYPE, recoveredAtIso]
+    );
+
+    const alertedAt = toDateOrNull(rows?.[0]?.alerted_at);
+    if (alertedAt && !(await hasRecoveryNotificationForAlert(alertedAt))) {
+      return {
+        alertLastUpdate: alertedAt,
+        alertedAt
+      };
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[alert-job] impossibile leggere fallback recovery legacy:', error.message);
+    }
+  }
+
+  const memoryState = inMemoryNotificationState[ALERT_TYPE];
+  const alertLastUpdate = toDateOrNull(memoryState?.lastUpdateIso);
+  if (!alertLastUpdate || alertLastUpdate.getTime() >= recoveredAt.getTime()) {
+    return null;
+  }
+
+  if (await hasRecoveryNotificationForAlert(alertLastUpdate)) {
+    return null;
+  }
+
+  return {
+    alertLastUpdate,
+    alertedAt: toDateOrNull(memoryState?.createdAt)
+  };
+}
+
+async function rememberNotification(notificationType, recipient, metadata = {}) {
   const now = new Date();
-  inMemoryNotificationState[ALERT_TYPE] = {
+  inMemoryNotificationState[notificationType] = {
     createdAt: now.toISOString(),
-    lastUpdateIso: toIsoOrNull(metadata.lastUpdate)
+    lastUpdateIso: toIsoOrNull(metadata.lastUpdate),
+    alertLastUpdateIso: toIsoOrNull(metadata.alertLastUpdate),
+    recoveredAtIso: toIsoOrNull(metadata.recoveredAt)
   };
 
   try {
     await query(
       `INSERT INTO notification_log (notification_type, channel, recipient, metadata, created_at)
        VALUES (?, 'email', ?, ?, ?)`,
-      [ALERT_TYPE, recipient, JSON.stringify(metadata), now.toISOString()]
+      [notificationType, recipient, JSON.stringify(metadata), now.toISOString()]
     );
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {
@@ -291,6 +432,37 @@ function buildAlertText(lastUpdate, minutesSinceLastData, options = {}) {
 
   if (options.isTest) {
     lines.unshift('Questo è un messaggio di prova inviato manualmente per verificare il canale di alert del router.', '');
+  }
+
+  return lines.join('\n');
+}
+
+function getRecoveryDowntimeMinutes(alertLastUpdate, recoveredAt) {
+  if (!alertLastUpdate || !recoveredAt) {
+    return null;
+  }
+
+  return Math.max(1, Math.round((recoveredAt.getTime() - alertLastUpdate.getTime()) / 60000));
+}
+
+function buildRecoveryText(alertLastUpdate, recoveredAt, options = {}) {
+  const alertLastUpdateText = alertLastUpdate ? alertLastUpdate.toISOString() : 'non disponibile';
+  const recoveredAtText = recoveredAt ? recoveredAt.toISOString() : 'non disponibile';
+  const downtimeMinutes = getRecoveryDowntimeMinutes(alertLastUpdate, recoveredAt);
+  const lines = [
+    'RAYAT ha rilevato la ripresa della ricezione dati sensore.',
+    '',
+    `Ultimo dato ricevuto prima dell’interruzione: ${alertLastUpdateText}`,
+    `Primo nuovo dato ricevuto: ${recoveredAtText}`,
+    `Durata stimata dell’interruzione: ${downtimeMinutes ?? 'non disponibile'} minuti`,
+    `Intervallo router previsto: ${getExpectedDataMinutes()} minuti`,
+    `Soglia email alert: ${getMissingDataThresholdMinutes()} minuti`,
+    '',
+    'Il sistema risulta di nuovo online e sta ricevendo nuovi dati.'
+  ];
+
+  if (options.isTest) {
+    lines.unshift('Questo è un messaggio di prova inviato manualmente per verificare il canale di recovery del router.', '');
   }
 
   return lines.join('\n');
@@ -464,22 +636,17 @@ async function hasConfiguredSmtp(options = {}) {
   );
 }
 
-async function deliverAlertEmail(lastUpdate, minutesSinceLastData, options = {}) {
+async function deliverNotificationEmail(notificationType, subject, body, metadata = {}, options = {}) {
   const recipients = getAlertRecipients();
-  const subject = buildAlertSubject(options);
-  const body = buildAlertText(lastUpdate, minutesSinceLastData, options);
-  const alertDueAt = getAlertDueDate(lastUpdate);
 
   if (!options.forceSmtp && process.env.NODE_ENV !== 'production') {
     console.log(`[alert-job] [DEV] ${subject}`);
     console.log(`[alert-job] [DEV] Destinatari: ${recipients.recipients.join(', ') || 'nessuno configurato'}`);
     console.log(body);
     for (const recipient of recipients.recipients) {
-      await rememberNotification(recipient, {
+      await rememberNotification(notificationType, recipient, {
+        ...metadata,
         mode: options.isTest ? 'development_test' : 'development',
-        minutesSinceLastData,
-        lastUpdate: lastUpdate ? lastUpdate.toISOString() : null,
-        alertDueAt: alertDueAt ? alertDueAt.toISOString() : null,
         isTest: Boolean(options.isTest),
         trigger: options.trigger || 'development'
       });
@@ -502,11 +669,9 @@ async function deliverAlertEmail(lastUpdate, minutesSinceLastData, options = {})
       subject,
       text: body
     });
-    await rememberNotification(recipient, {
+    await rememberNotification(notificationType, recipient, {
+      ...metadata,
       mode: options.isTest ? 'smtp_test' : 'smtp',
-      minutesSinceLastData,
-      lastUpdate: lastUpdate ? lastUpdate.toISOString() : null,
-      alertDueAt: alertDueAt ? alertDueAt.toISOString() : null,
       isTest: Boolean(options.isTest),
       trigger: options.trigger || 'smtp'
     });
@@ -522,21 +687,81 @@ async function deliverAlertEmail(lastUpdate, minutesSinceLastData, options = {})
   for (const recipient of recipients.recipients) {
     try {
       await sendEmail(recipient);
-      console.log(`[alert-job] Alert email inviato a ${recipient}`);
+      console.log(`[alert-job] Notifica email (${notificationType}) inviata a ${recipient}`);
     } catch (error) {
       failedRecipients.push({ recipient, error });
-      console.warn(`[alert-job] Invio alert fallito per ${recipient}:`, error.message);
+      console.warn(`[alert-job] Invio notifica (${notificationType}) fallito per ${recipient}:`, error.message);
     }
   }
 
   if (failedRecipients.length === recipients.recipients.length) {
-    const aggregatedError = new Error('Invio alert fallito per tutti i destinatari configurati.');
+    const aggregatedError = new Error(`Invio notifica ${notificationType} fallito per tutti i destinatari configurati.`);
     aggregatedError.details = failedRecipients.map(({ recipient, error }) => ({
       recipient,
       message: error.message
     }));
     throw aggregatedError;
   }
+}
+
+async function deliverAlertEmail(lastUpdate, minutesSinceLastData, options = {}) {
+  const subject = buildAlertSubject(options);
+  const body = buildAlertText(lastUpdate, minutesSinceLastData, options);
+  const alertDueAt = getAlertDueDate(lastUpdate);
+
+  await deliverNotificationEmail(
+    ALERT_TYPE,
+    subject,
+    body,
+    {
+      minutesSinceLastData,
+      lastUpdate: lastUpdate ? lastUpdate.toISOString() : null,
+      alertDueAt: alertDueAt ? alertDueAt.toISOString() : null
+    },
+    options
+  );
+}
+
+async function deliverRecoveryEmail(alertLastUpdate, recoveredAt, options = {}) {
+  const subject = buildRecoverySubject(options);
+  const body = buildRecoveryText(alertLastUpdate, recoveredAt, options);
+  const downtimeMinutes = getRecoveryDowntimeMinutes(alertLastUpdate, recoveredAt);
+  const metadata = {
+    alertLastUpdate: alertLastUpdate ? alertLastUpdate.toISOString() : null,
+    recoveredAt: recoveredAt ? recoveredAt.toISOString() : null,
+    downtimeMinutes
+  };
+
+  if (options.readingTimestamp) {
+    metadata.readingTimestamp = options.readingTimestamp;
+  }
+
+  await deliverNotificationEmail(
+    RECOVERY_ALERT_TYPE,
+    subject,
+    body,
+    metadata,
+    options
+  );
+}
+
+async function maybeSendRecoveryEmail(recoveredAt, options = {}) {
+  const normalizedRecoveredAt = toDateOrNull(recoveredAt);
+  if (!normalizedRecoveredAt) {
+    return false;
+  }
+
+  const pendingAlert = await getPendingRecoveryAlert(normalizedRecoveredAt);
+  if (!pendingAlert?.alertLastUpdate) {
+    return false;
+  }
+
+  await deliverRecoveryEmail(pendingAlert.alertLastUpdate, normalizedRecoveredAt, {
+    ...options,
+    trigger: options.trigger || 'recovery'
+  });
+
+  return true;
 }
 
 async function sendMissingDataTestEmail(options = {}) {
@@ -580,6 +805,10 @@ async function syncMissingDataAlertSchedule(options = {}) {
       return;
     }
 
+    await maybeSendRecoveryEmail(lastUpdate, {
+      trigger: options.trigger ? `${options.trigger}_recovery` : 'sync_recovery'
+    });
+
     if (runtimeState.scheduledForLastUpdate !== lastUpdateIso) {
       scheduleExactAlertTimeout(lastUpdate, {
         trigger: options.trigger || 'sync'
@@ -601,13 +830,20 @@ async function syncMissingDataAlertSchedule(options = {}) {
   }
 }
 
-function notifyMissingDataHeartbeat(timestamp) {
-  const lastUpdate = toDateOrNull(timestamp) || new Date();
+async function notifyMissingDataHeartbeat(timestamp) {
+  const receivedAt = new Date();
+  const readingTimestamp = toDateOrNull(timestamp);
+  const lastUpdate = receivedAt;
   const currentLastKnown = toDateOrNull(runtimeState.lastKnownDataAt);
 
   if (currentLastKnown && lastUpdate.getTime() < currentLastKnown.getTime()) {
     return;
   }
+
+  await maybeSendRecoveryEmail(lastUpdate, {
+    trigger: 'ingest_recovery',
+    readingTimestamp: readingTimestamp ? readingTimestamp.toISOString() : null
+  });
 
   scheduleExactAlertTimeout(lastUpdate, { trigger: 'ingest' });
 }
@@ -720,8 +956,11 @@ function startMissingDataAlertJob() {
 module.exports = {
   buildAlertText,
   buildAlertSubject,
+  buildRecoveryText,
+  buildRecoverySubject,
   getMissingDataAlertRuntimeStatus,
   hasConfiguredSmtp,
+  maybeSendRecoveryEmail,
   notifyMissingDataHeartbeat,
   runMissingDataAlertCheck,
   sendMissingDataTestEmail,

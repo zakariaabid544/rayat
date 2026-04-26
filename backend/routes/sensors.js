@@ -9,8 +9,7 @@ const {
     ingestDeviceReadings,
     ingestTrustedReadings,
     ingestPublicReadings,
-    recordGatewaySignal,
-    validateDeviceCredentials // RAYAT-FIX
+    recordGatewaySignal
 } = require('../utils/sensor-ingest');
 const {
     getGatewayHeartbeatWindowMinutes, // RAYAT-FIX
@@ -140,14 +139,28 @@ function extractUpdateDeviceId(body = {}) { // RAYAT-FIX
         || extractTopicDeviceId(topic); // RAYAT-FIX
 } // RAYAT-FIX
 
+function getRequestIp(req) {
+    const forwarded = cleanString(String(req.headers['x-forwarded-for'] || '').split(',')[0]);
+    return (forwarded || cleanString(req.ip)).replace(/^::ffff:/, '');
+}
+
 async function hasValidUpdateApiKey(deviceId, apiKey) { // RAYAT-FIX
     if (!deviceId || !apiKey) { // RAYAT-FIX
         return false; // RAYAT-FIX
     } // RAYAT-FIX
 
     try { // RAYAT-FIX
-        await validateDeviceCredentials({ deviceId, apiKey }); // RAYAT-FIX
-        return true; // RAYAT-FIX
+        const devices = await query( // RAYAT-FIX
+            `SELECT api_key
+             FROM devices
+             WHERE device_id = ?
+                OR COALESCE(metadata->>'clientId', '') = ?
+             ORDER BY CASE WHEN device_id = ? THEN 0 ELSE 1 END
+             LIMIT 1`, // RAYAT-FIX
+            [deviceId, deviceId, deviceId] // RAYAT-FIX
+        ); // RAYAT-FIX
+
+        return devices.length > 0 && devices[0].api_key === apiKey; // RAYAT-FIX
     } catch (error) { // RAYAT-FIX
         if ([400, 401, 404].includes(error.statusCode)) { // RAYAT-FIX
             return false; // RAYAT-FIX
@@ -418,6 +431,7 @@ router.post('/update', async (req, res) => {
     try {
         const bridgeAuth = getBridgeAuthorization(req);
         const updateApiKey = extractUpdateApiKey(req.body); // RAYAT-FIX
+        const requestIp = getRequestIp(req);
 
         const gatewaySignal = parseGatewaySignalUpdate(req.body);
 
@@ -429,7 +443,10 @@ router.post('/update', async (req, res) => {
                 return sendSensorUpdateUnauthorized(res); // RAYAT-FIX
             } // RAYAT-FIX
 
-            const result = await recordGatewaySignal(gatewaySignal);
+            const result = await recordGatewaySignal({
+                ...gatewaySignal,
+                requestIp
+            });
             return res.json({
                 success: true,
                 device_id: result.deviceId || null,
@@ -456,7 +473,8 @@ router.post('/update', async (req, res) => {
                 deviceId: prepared.deviceId,
                 apiKey: prepared.apiKey,
                 timestamp: prepared.timestamp,
-                readings: prepared.readings
+                readings: prepared.readings,
+                requestIp
             });
         } else {
             if (!bridgeAuth.trustedBridge && bridgeAuth.tokenConfigured) { // RAYAT-FIX
@@ -467,7 +485,8 @@ router.post('/update', async (req, res) => {
                 result = await ingestTrustedReadings({
                     deviceId: bridgeAuth.trustedBridge ? prepared.deviceId : '',
                     timestamp: prepared.timestamp,
-                    readings: prepared.readings
+                    readings: prepared.readings,
+                    requestIp
                 });
             } catch (error) {
                 if (
