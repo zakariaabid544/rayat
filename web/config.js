@@ -6,8 +6,7 @@
  */
 window.RAYAT_RUNTIME_CONFIG = {
     productionApiBaseUrl: 'https://rayat.ma/api',
-    developmentApiBaseUrl: 'http://localhost:3000/api',
-    useDevelopmentApiOnLocalhost: true,
+    useDevelopmentApiOnLocalhost: false,
     publicSiteUrl: 'https://rayat.ma',
     analyticsDomain: 'rayat.ma',
     enablePlausible: true

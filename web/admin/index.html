@@ -16,10 +16,10 @@
     <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png">
     <link rel="shortcut icon" href="/favicon.ico">
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
-    <script src="/vendor/tailwind/tailwindcss-cdn.js?v=1.1.30"></script>
-    <link rel="stylesheet" href="/vendor/leaflet/1.9.4/leaflet.css?v=1.1.30" />
-    <script src="/vendor/leaflet/1.9.4/leaflet.js?v=1.1.30"></script>
-    <script src="/config.js?v=1.1.30"></script>
+    <script src="/vendor/tailwind/tailwindcss-cdn.js?v=1.1.32"></script>
+    <link rel="stylesheet" href="/vendor/leaflet/1.9.4/leaflet.css?v=1.1.32" />
+    <script src="/vendor/leaflet/1.9.4/leaflet.js?v=1.1.32"></script>
+    <script src="/config.js?v=1.1.32"></script>
     <style>
         :root {
             --green-900: #064e3b;
@@ -799,7 +799,11 @@
                         <div class="page-title mb-0" id="devices-page-title">Dispositivi</div>
                         <p class="text-sm text-gray-400" id="devices-page-subtitle">Panoramica dei dispositivi assegnati ai clienti</p>
                     </div>
-                    <button onclick="loadDeviceRegistry(1)" class="btn btn-outline" id="devices-refresh-btn">↻ Aggiorna</button>
+                    <div class="flex items-center gap-2 flex-wrap justify-end">
+                        <button onclick="setDeviceRegistryStatus('')" class="btn btn-outline btn-sm" id="devices-filter-all-btn">Tutti i Router/Device</button>
+                        <button onclick="setDeviceRegistryStatus('unassigned')" class="btn btn-outline btn-sm" id="devices-filter-unassigned-btn">Router non assegnati</button>
+                        <button onclick="loadDeviceRegistry(1)" class="btn btn-outline" id="devices-refresh-btn">↻ Aggiorna</button>
+                    </div>
                 </div>
 
                 <div class="section-card overflow-x-auto">
@@ -833,12 +837,15 @@
             <!-- ── SENSORS ─────────────────────────────────────────────── -->
             <div id="tab-sensors" class="hidden fade-in">
                 <!-- Header -->
-                <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center justify-between mb-6 gap-3 flex-wrap">
                     <div>
                         <div class="page-title mb-0">📡 Gestione Sensori IoT</div>
                         <p class="text-sm text-gray-400">Aggiungi, modifica e monitora i sensori collegati ai clienti</p>
                     </div>
-                    <button onclick="openAddSensorModal()" class="btn btn-primary">+ Aggiungi Sensore</button>
+                    <div class="flex flex-col items-end gap-2">
+                        <button onclick="openAddSensorModal()" class="btn btn-primary">+ Aggiungi Sensore</button>
+                        <span class="text-xs text-gray-400" id="sensor-assign-helper">Usa questa funzione anche per assegnare un router già rilevato.</span>
+                    </div>
                 </div>
 
                 <!-- Filters -->
@@ -1350,7 +1357,7 @@
             <div class="form-field">
                 <label class="form-label">Ruolo *</label>
                 <select id="uf-role" class="form-input" required>
-                    <option value="operator_admin">Admin Operatore</option>
+                    <option value="admin">Admin Operatore</option>
                     <option value="super_admin">Super Admin</option>
                 </select>
             </div>
@@ -1394,22 +1401,24 @@
         }
     }
 
-    function isLocalHttpRuntime() {
-        const protocol = window.location?.protocol || '';
-        const hostname = window.location?.hostname || '';
-        return ['http:', 'https:'].includes(protocol) && ['localhost', '127.0.0.1', '0.0.0.0', ''].includes(hostname);
+    function isCapacitorNativeRuntime() {
+        const capacitor = window.Capacitor;
+        if (!capacitor) return false;
+        if (typeof capacitor.isNativePlatform === 'function') return capacitor.isNativePlatform();
+        if (typeof capacitor.getPlatform === 'function') return capacitor.getPlatform() !== 'web';
+        return window.location?.protocol === 'capacitor:';
     }
 
     function resolveApiBaseUrl() {
+        if (isCapacitorNativeRuntime()) {
+            return normalizeApiBaseUrl(RAYAT_RUNTIME_CONFIG.productionApiBaseUrl || 'https://rayat.ma/api');
+        }
+
         const override = readStoredApiBaseUrlOverride();
         if (override) return normalizeApiBaseUrl(override);
 
         const explicit = RAYAT_RUNTIME_CONFIG.apiBaseUrl || RAYAT_RUNTIME_CONFIG.API_BASE_URL;
         if (explicit) return normalizeApiBaseUrl(explicit);
-
-        if (RAYAT_RUNTIME_CONFIG.useDevelopmentApiOnLocalhost !== false && isLocalHttpRuntime()) {
-            return normalizeApiBaseUrl(RAYAT_RUNTIME_CONFIG.developmentApiBaseUrl || 'http://localhost:3000/api');
-        }
 
         return normalizeApiBaseUrl(RAYAT_RUNTIME_CONFIG.productionApiBaseUrl || 'https://rayat.ma/api');
     }
@@ -1433,13 +1442,13 @@
     let registrationSearchTimer = null;
     let deviceClientSearchTimer = null;
     let sensorModalClientSearchTimer = null;
-    const PRIVILEGED_ADMIN_ROLES = new Set(['super_admin', 'operator_admin']);
+    const PRIVILEGED_ADMIN_ROLES = new Set(['super_admin', 'admin', 'operator_admin', 'operator']);
     const DEFAULT_ADMIN_TAB = 'dashboard';
     const DEFAULT_MAP_CENTER = [30.4727, -8.8770];
     const clientListState = { page: 1, pageSize: 25, total: 0, totalPages: 1, query: '' };
     const registrationListState = { page: 1, pageSize: 20, total: 0, totalPages: 1, query: '', status: '' };
     const deviceListState = { page: 1, pageSize: 50, total: 0, totalPages: 1, query: '', clientId: '', type: '' };
-    const deviceRegistryState = { page: 1, pageSize: 25, total: 0, totalPages: 1 };
+    const deviceRegistryState = { page: 1, pageSize: 25, total: 0, totalPages: 1, status: '' };
     const locationPickers = {
         client: {
             map: null,
@@ -1610,6 +1619,9 @@
             devicesPageTitle: 'Dispositivi',
             devicesSubtitle: 'Panoramica dei dispositivi assegnati ai clienti',
             addSensor: '+ Aggiungi Sensore',
+            allRouterDevices: 'Tutti i Router/Device',
+            unassignedRouters: 'Router non assegnati',
+            sensorAssignHelper: 'Usa questa funzione anche per assegnare un router già rilevato.',
             searchSerialPlaceholder: '🔍 Cerca seriale o tipo...',
             searchClientCodePlaceholder: '🔍 #0001...',
             allClients: '— Tutti i clienti —',
@@ -1631,9 +1643,10 @@
             lastSeen: 'Ultima attività',
             lastSensorReading: 'Ultima Lettura',
             addedAt: 'Aggiunto il',
+            assignToClient: 'Assegna a cliente',
             editSensorTitle: '✏️ Modifica Sensore',
             addSensorsTitle: '📡 Aggiungi Sensori',
-            addSensorsHelp: 'Puoi aggiungere più sensori insieme in una sola operazione',
+            addSensorsHelp: 'Puoi aggiungere più sensori insieme in una sola operazione. Usa questa funzione anche per assegnare un router già rilevato.',
             assignedClientCommon: 'Cliente Assegnato (comune a tutti)',
             searchClientPlaceholder: '🔍 Cerca cliente per nome, email, telefono o codice...',
             noClient: '— Nessun cliente —',
@@ -1844,6 +1857,9 @@
             devicesPageTitle: 'Devices',
             devicesSubtitle: 'Overview of devices assigned to clients',
             addSensor: '+ Add Sensor',
+            allRouterDevices: 'All Router/Devices',
+            unassignedRouters: 'Unassigned Routers',
+            sensorAssignHelper: 'Use this flow to assign a router that has already contacted the server.',
             searchSerialPlaceholder: '🔍 Search serial or type...',
             searchClientCodePlaceholder: '🔍 #0001...',
             allClients: '— All clients —',
@@ -1865,9 +1881,10 @@
             lastSeen: 'Last activity',
             lastSensorReading: 'Latest Reading',
             addedAt: 'Added on',
+            assignToClient: 'Assign to client',
             editSensorTitle: '✏️ Edit Sensor',
             addSensorsTitle: '📡 Add Sensors',
-            addSensorsHelp: 'You can add multiple sensors in a single operation',
+            addSensorsHelp: 'You can add multiple sensors in a single operation. Use this flow to assign a router that has already contacted the server.',
             assignedClientCommon: 'Assigned Client (same for all)',
             searchClientPlaceholder: '🔍 Search client by name, email, phone or code...',
             noClient: '— No client —',
@@ -2078,6 +2095,9 @@
             devicesPageTitle: 'Appareils',
             devicesSubtitle: 'Vue d’ensemble des appareils attribués aux clients',
             addSensor: '+ Ajouter Capteur',
+            allRouterDevices: 'Tous les routeurs/appareils',
+            unassignedRouters: 'Routeurs non attribués',
+            sensorAssignHelper: 'Utilisez aussi cette fonction pour attribuer un routeur déjà détecté.',
             searchSerialPlaceholder: '🔍 Rechercher série ou type...',
             searchClientCodePlaceholder: '🔍 #0001...',
             allClients: '— Tous les clients —',
@@ -2099,9 +2119,10 @@
             lastSeen: 'Dernière activité',
             lastSensorReading: 'Dernière lecture',
             addedAt: 'Ajouté le',
+            assignToClient: 'Attribuer au client',
             editSensorTitle: '✏️ Modifier Capteur',
             addSensorsTitle: '📡 Ajouter des Capteurs',
-            addSensorsHelp: 'Vous pouvez ajouter plusieurs capteurs en une seule opération',
+            addSensorsHelp: 'Vous pouvez ajouter plusieurs capteurs en une seule opération. Utilisez aussi cette fonction pour attribuer un routeur déjà détecté.',
             assignedClientCommon: 'Client attribué (commun à tous)',
             searchClientPlaceholder: '🔍 Rechercher client par nom, email, téléphone ou code...',
             noClient: '— Aucun client —',
@@ -2312,6 +2333,9 @@
             devicesPageTitle: 'الأجهزة',
             devicesSubtitle: 'نظرة عامة على الأجهزة المرتبطة بالعملاء',
             addSensor: '+ إضافة حساس',
+            allRouterDevices: 'كل الراوترات/الأجهزة',
+            unassignedRouters: 'راوترات غير مخصصة',
+            sensorAssignHelper: 'استخدم هذه الوظيفة أيضًا لإسناد راوتر تم اكتشافه مسبقًا.',
             searchSerialPlaceholder: '🔍 ابحث بالرقم التسلسلي أو النوع...',
             searchClientCodePlaceholder: '🔍 #0001...',
             allClients: '— كل العملاء —',
@@ -2333,9 +2357,10 @@
             lastSeen: 'آخر نشاط',
             lastSensorReading: 'آخر قراءة',
             addedAt: 'تاريخ الإضافة',
+            assignToClient: 'إسناد إلى عميل',
             editSensorTitle: '✏️ تعديل الحساس',
             addSensorsTitle: '📡 إضافة حساسات',
-            addSensorsHelp: 'يمكنك إضافة عدة حساسات دفعة واحدة',
+            addSensorsHelp: 'يمكنك إضافة عدة حساسات دفعة واحدة. استخدم هذه الوظيفة أيضًا لإسناد راوتر تم اكتشافه مسبقًا.',
             assignedClientCommon: 'العميل المعيّن (مشترك للجميع)',
             searchClientPlaceholder: '🔍 ابحث عن عميل بالاسم أو البريد أو الهاتف أو الرمز...',
             noClient: '— بدون عميل —',
@@ -2466,6 +2491,8 @@
         ['#registrations-next', 'next'],
         ['#devices-page-title', 'devicesPageTitle'],
         ['#devices-page-subtitle', 'devicesSubtitle'],
+        ['#devices-filter-all-btn', 'allRouterDevices'],
+        ['#devices-filter-unassigned-btn', 'unassignedRouters'],
         ['#devices-refresh-btn', 'refresh'],
         ['#devices-th-serial', 'serialNumber'],
         ['#devices-th-client', 'client'],
@@ -2479,6 +2506,7 @@
         ['#tab-sensors .page-title', 'sensorsTitle'],
         ['#tab-sensors > div:nth-child(1) p', 'sensorsSubtitle'],
         ['#tab-sensors > div:nth-child(1) .btn-primary', 'addSensor'],
+        ['#sensor-assign-helper', 'sensorAssignHelper'],
         ['#tab-sensors .section-card .btn-outline', 'refresh'],
         ['#sensors-prev', 'previous'],
         ['#sensors-next', 'next'],
@@ -2712,11 +2740,11 @@
     }
 
     function roleLabel(role) {
-        return role === 'operator_admin' ? t('operatorAdmin') : t('superAdmin');
+        return role === 'super_admin' ? t('superAdmin') : t('operatorAdmin');
     }
 
     function roleBadgeLabel(role) {
-        return role === 'operator_admin' ? t('roleBadgeOperator') : t('roleBadgeSuper');
+        return role === 'super_admin' ? t('roleBadgeSuper') : t('roleBadgeOperator');
     }
 
     function sensorTypeOptionList(includeEmpty = false) {
@@ -2777,7 +2805,7 @@
         if (userRole) {
             const value = userRole.value;
             userRole.innerHTML = `
-                <option value="operator_admin">${t('operatorAdmin')}</option>
+                <option value="admin">${t('operatorAdmin')}</option>
                 <option value="super_admin">${t('superAdmin')}</option>
             `;
             userRole.value = value;
@@ -3916,6 +3944,9 @@
                 page: String(page),
                 pageSize: String(deviceRegistryState.pageSize)
             });
+            if (deviceRegistryState.status) {
+                params.set('status', deviceRegistryState.status);
+            }
             const data = await api('/devices?' + params.toString());
             if (!data) return;
 
@@ -3925,17 +3956,57 @@
                 return loadDeviceRegistry(pagination.totalPages);
             }
 
-            allDevices = devices;
+            deviceRegistryDevices = devices;
             deviceRegistryState.page = pagination.page || page;
             deviceRegistryState.total = pagination.total || devices.length;
             deviceRegistryState.totalPages = pagination.totalPages || 1;
 
             renderDeviceRegistryTable(devices);
             renderDeviceRegistryPagination();
+            updateDeviceRegistryFilterButtons();
         } catch (err) {
             document.getElementById('devices-body').innerHTML = `<tr><td colspan="7" class="text-center text-red-400 py-8">${err.message}</td></tr>`;
             document.getElementById('devices-summary').textContent = t('loadSensorsError');
         }
+    }
+
+    function updateDeviceRegistryFilterButtons() {
+        const activeStatus = deviceRegistryState.status || '';
+        const variants = [
+            ['devices-filter-all-btn', ''],
+            ['devices-filter-unassigned-btn', 'unassigned']
+        ];
+
+        variants.forEach(([id, status]) => {
+            const button = document.getElementById(id);
+            if (!button) return;
+            const isActive = activeStatus === status;
+            button.classList.toggle('btn-primary', isActive);
+            button.classList.toggle('btn-outline', !isActive);
+        });
+    }
+
+    function setDeviceRegistryStatus(status = '') {
+        deviceRegistryState.status = status || '';
+        deviceRegistryState.page = 1;
+        updateDeviceRegistryFilterButtons();
+        loadDeviceRegistry(1);
+    }
+
+    function findManagedDeviceById(id) {
+        return deviceRegistryDevices.find((device) => device.id === id)
+            || allDevices.find((device) => device.id === id)
+            || null;
+    }
+
+    function openAssignExistingDeviceModal(id) {
+        const device = findManagedDeviceById(id);
+        if (!device) return;
+
+        openAddSensorModal(null, {
+            serialNumber: device.serial_number || device.device_id || '',
+            type: device.type || 'clima'
+        });
     }
 
     function renderDeviceRegistryTable(devices) {
@@ -3943,6 +4014,7 @@
             <tr>
                 <td>
                     <div class="font-semibold text-gray-800">${esc(device.serial_number || device.device_id || '—')}</div>
+                    <div class="text-xs text-gray-400 mt-1">${esc(device.status || '—')}</div>
                 </td>
                 <td>
                     <div class="font-semibold text-gray-800">${device.client_name ? esc(device.client_name) : '—'}</div>
@@ -3950,10 +4022,14 @@
                 </td>
                 <td><span class="badge badge-silver">${sensorTypeLabel(device.type)}</span></td>
                 <td><span class="badge badge-blue">${t('sensorsCount', { count: device.sensor_count || 0 })}</span></td>
-                <td class="text-xs text-gray-500">${fmtDate(device.last_seen || device.last_reading)}</td>
+                <td class="text-xs text-gray-500">
+                    <div>${fmtDate(device.last_seen_at || device.last_seen || device.last_reading)}</div>
+                    ${device.last_seen_ip ? `<div class="text-[11px] text-gray-400 mt-1">IP ${esc(device.last_seen_ip)}</div>` : ''}
+                </td>
                 <td class="text-xs text-gray-500">${fmtDate(device.created_at)}</td>
                 <td>
                     <div class="admin-action-row">
+                        ${!device.client_id ? `<button onclick="openAssignExistingDeviceModal(${device.id})" class="btn btn-primary btn-sm">${t('assignToClient')}</button>` : ''}
                         <button onclick="openEditDevice(${device.id})" class="btn btn-outline btn-sm">✏️ ${t('edit')}</button>
                         <button onclick="deleteDevice(${device.id})" class="btn btn-danger btn-sm">🗑</button>
                     </div>
@@ -4040,6 +4116,7 @@
 
     // ─── SENSORS MANAGEMENT TAB ─────────────────────────────────────────
     let allDevices = [];
+    let deviceRegistryDevices = [];
 
     function populateDeviceClientFilterOptions(clients, preserveValue = '') {
         const select = document.getElementById('sensor-client-filter');
@@ -4224,7 +4301,7 @@
     }
 
     async function openEditDevice(id) {
-        const d = allDevices.find(x => x.id === id);
+        const d = findManagedDeviceById(id);
         if (!d) return;
         document.getElementById('es-id').value = id;
         document.getElementById('es-serial').value = d.serial_number || d.device_id || '';
@@ -4319,6 +4396,7 @@
         updateBulkCount();
         // Scroll to bottom so user sees new row
         list.scrollTop = list.scrollHeight;
+        return row;
     }
 
     function updateBulkCount() {
@@ -4368,7 +4446,7 @@
         }, 250);
     }
 
-    async function openAddSensorModal(preselectedClientId = null) {
+    async function openAddSensorModal(preselectedClientId = null, options = {}) {
         // Reset form
         const sel = document.getElementById('sf-client-select');
         if (sel) sel.innerHTML = `<option value="">${t('loadingClients')}</option>`;
@@ -4377,7 +4455,27 @@
         document.getElementById('sensor-modal-error').classList.add('hidden');
         document.getElementById('bulk-sensor-rows').innerHTML = '';
         document.getElementById('bulk-count-label').textContent = '';
-        addBulkSensorRow();
+        const prefilledRows = Array.isArray(options.devices)
+            ? options.devices
+            : ((options.serialNumber || options.type) ? [options] : []);
+
+        if (prefilledRows.length) {
+            prefilledRows.forEach((rowData, index) => {
+                const row = addBulkSensorRow();
+                if (rowData.type) {
+                    row.querySelector('.bulk-type').value = rowData.type;
+                }
+                if (rowData.serialNumber) {
+                    row.querySelector('.bulk-serial').value = rowData.serialNumber;
+                }
+                if (index === 0) {
+                    row.querySelector('.bulk-serial')?.focus();
+                }
+            });
+            updateBulkCount();
+        } else {
+            addBulkSensorRow();
+        }
         openModal('sensor-modal');
 
         // Fetch and populate clients

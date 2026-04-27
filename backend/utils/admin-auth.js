@@ -3,17 +3,14 @@ const jwt = require('jsonwebtoken');
 const ADMIN_SESSION_COOKIE = 'rayat_admin_session';
 
 function normalizeAdminRole(role) {
-    if (role === 'admin') {
-        return 'super_admin';
-    }
-    if (role === 'operator') {
-        return 'operator_admin';
+    if (role === 'operator' || role === 'operator_admin') {
+        return 'admin';
     }
     return role;
 }
 
 function isPrivilegedAdminRole(role) {
-    return ['super_admin', 'operator_admin'].includes(normalizeAdminRole(role));
+    return ['super_admin', 'admin'].includes(normalizeAdminRole(role));
 }
 
 function parseCookieHeader(cookieHeader = '') {

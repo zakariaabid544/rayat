@@ -266,6 +266,23 @@ function normalizeGatewaySignalEvent(event) { // RAYAT-FIX
     return normalizedEvent === 'boot' || normalizedEvent === 'heartbeat' ? normalizedEvent : ''; // RAYAT-FIX
 }
 
+function normalizeRequestIp(value) {
+    return cleanString(value).replace(/^::ffff:/, '');
+}
+
+function buildSeenMetadataPatch(seenAt, requestIp = '') {
+    const patch = {
+        last_seen_at: seenAt
+    };
+
+    const normalizedRequestIp = normalizeRequestIp(requestIp);
+    if (normalizedRequestIp) {
+        patch.last_seen_ip = normalizedRequestIp;
+    }
+
+    return patch;
+}
+
 function buildGatewayMetadataPatch(signal = {}) { // RAYAT-FIX
     const patch = { // RAYAT-FIX
         lastGatewaySignalAt: signal.receivedAt, // RAYAT-FIX
@@ -487,14 +504,17 @@ async function persistPublicSensorLatest(execute, normalizedReadings, readingTim
     }
 }
 
-async function persistReadingsForDevice(execute, device, normalizedReadings, readingTimestamp) {
+async function persistReadingsForDevice(execute, device, normalizedReadings, readingTimestamp, options = {}) {
+    const seenAt = normalizeTimestamp(options.seenAt || new Date()).toISOString();
+    const metadataPatch = JSON.stringify(buildSeenMetadataPatch(seenAt, options.requestIp));
     await execute(
         `UPDATE devices
-         SET last_seen = NOW(),
-             status = 'active',
+         SET last_seen = ?,
+             status = CASE WHEN user_id IS NULL THEN 'unassigned' ELSE 'active' END,
+             metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb,
              updated_at = NOW()
          WHERE id = ?`,
-        [device.id]
+        [seenAt, metadataPatch, device.id]
     );
 
     const existingSensors = await execute(
@@ -569,11 +589,14 @@ async function persistReadingsForDevice(execute, device, normalizedReadings, rea
 }
 
 async function persistGatewaySignalForDevice(execute, device, signal) { // RAYAT-FIX
-    const metadataPatch = JSON.stringify(buildGatewayMetadataPatch(signal)); // RAYAT-FIX
+    const metadataPatch = JSON.stringify({
+        ...buildSeenMetadataPatch(signal.receivedAt, signal.requestIp),
+        ...buildGatewayMetadataPatch(signal)
+    }); // RAYAT-FIX
     await execute( // RAYAT-FIX
         `UPDATE devices
          SET last_seen = ?,
-             status = 'active',
+             status = CASE WHEN user_id IS NULL THEN 'unassigned' ELSE 'active' END,
              metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb,
              updated_at = NOW()
          WHERE id = ?`,
@@ -612,7 +635,89 @@ async function triggerAlerts(result) {
     );
 }
 
-async function findDeviceByCredentials(execute, deviceId, apiKey) {
+async function lockDeviceKey(execute, deviceId) {
+    await execute(
+        `SELECT pg_advisory_xact_lock(hashtext(?))`,
+        [String(deviceId || '')]
+    );
+}
+
+async function createUnassignedDevice(execute, deviceId, options = {}) {
+    const cleanDeviceId = cleanString(deviceId);
+    if (!cleanDeviceId) {
+        throw createHttpError(400, 'device_id è obbligatorio');
+    }
+
+    const seenAt = normalizeTimestamp(options.seenAt || new Date()).toISOString();
+    const requestIp = normalizeRequestIp(options.requestIp);
+    const apiKey = crypto.randomBytes(24).toString('hex');
+    const metadata = JSON.stringify({
+        created_from: 'auto_ingest',
+        auto_created: true,
+        first_seen_at: seenAt,
+        last_seen_at: seenAt,
+        ...(requestIp ? {
+            first_seen_ip: requestIp,
+            last_seen_ip: requestIp
+        } : {})
+    });
+
+    await lockDeviceKey(execute, cleanDeviceId);
+
+    const existingDevice = await execute(
+        `SELECT id, user_id, device_id
+         FROM devices
+         WHERE device_id = ?
+         LIMIT 1`,
+        [cleanDeviceId]
+    );
+
+    if (existingDevice.length) {
+        return {
+            id: existingDevice[0].id,
+            user_id: existingDevice[0].user_id,
+            device_id: existingDevice[0].device_id
+        };
+    }
+
+    try {
+        const result = await execute(
+            `INSERT INTO devices (device_id, user_id, status, api_key, metadata, created_at, updated_at)
+             VALUES (?, NULL, 'unassigned', ?, ?, NOW(), NOW())`,
+            [cleanDeviceId, apiKey, metadata]
+        );
+
+        return {
+            id: result.insertId,
+            user_id: null,
+            device_id: cleanDeviceId
+        };
+    } catch (error) {
+        if (error.code !== 'ER_DUP_ENTRY' && error.code !== '23505') {
+            throw error;
+        }
+
+        const duplicateDevice = await execute(
+            `SELECT id, user_id, device_id
+             FROM devices
+             WHERE device_id = ?
+             LIMIT 1`,
+            [cleanDeviceId]
+        );
+
+        if (!duplicateDevice.length) {
+            throw error;
+        }
+
+        return {
+            id: duplicateDevice[0].id,
+            user_id: duplicateDevice[0].user_id,
+            device_id: duplicateDevice[0].device_id
+        };
+    }
+}
+
+async function findDeviceByCredentials(execute, deviceId, apiKey, options = {}) {
     const devices = await execute(
         `SELECT id, user_id
          FROM devices
@@ -622,6 +727,18 @@ async function findDeviceByCredentials(execute, deviceId, apiKey) {
     );
 
     if (!devices.length) {
+        const existing = await execute(
+            `SELECT id
+             FROM devices
+             WHERE device_id = ?
+             LIMIT 1`,
+            [deviceId]
+        );
+
+        if (!existing.length) {
+            return createUnassignedDevice(execute, deviceId, options);
+        }
+
         throw createHttpError(401, 'Device non autorizzato');
     }
 
@@ -632,7 +749,7 @@ async function findDeviceByCredentials(execute, deviceId, apiKey) {
     };
 }
 
-async function findDeviceById(execute, deviceId) {
+async function findDeviceById(execute, deviceId, options = {}) {
     // RAYAT-FIX: allow the real gateway MQTT clientId stored in metadata to resolve
     // the same physical device without changing the live topic-based device_id.
     const devices = await execute(
@@ -646,6 +763,10 @@ async function findDeviceById(execute, deviceId) {
     );
 
     if (!devices.length) {
+        if (options.autoRegisterUnassigned) {
+            return createUnassignedDevice(execute, deviceId, options);
+        }
+
         throw createHttpError(404, 'Dispositivo non trovato');
     }
 
@@ -720,12 +841,13 @@ async function ensureBridgeGatewayDevice(execute) {
     };
 }
 
-async function ingestDeviceReadings({ deviceId, apiKey, timestamp, readings }) {
+async function ingestDeviceReadings({ deviceId, apiKey, timestamp, readings, requestIp = '' }) {
     const cleanDeviceId = cleanString(deviceId);
     const cleanApiKey = cleanString(apiKey);
+    const receivedAt = new Date().toISOString();
 
-    if (!cleanDeviceId || !cleanApiKey) {
-        throw createHttpError(400, 'device_id e api_key sono obbligatori');
+    if (!cleanDeviceId) {
+        throw createHttpError(400, 'device_id è obbligatorio');
     }
 
     const normalizedReadings = normalizeReadings(readings);
@@ -733,8 +855,14 @@ async function ingestDeviceReadings({ deviceId, apiKey, timestamp, readings }) {
 
     const result = await withTransaction(async (connection) => {
         const execute = createExecutor(connection);
-        const device = await findDeviceByCredentials(execute, cleanDeviceId, cleanApiKey);
-        return persistReadingsForDevice(execute, device, normalizedReadings, readingTimestamp);
+        const device = await findDeviceByCredentials(execute, cleanDeviceId, cleanApiKey, {
+            seenAt: receivedAt,
+            requestIp
+        });
+        return persistReadingsForDevice(execute, device, normalizedReadings, readingTimestamp, {
+            seenAt: receivedAt,
+            requestIp
+        });
     });
 
     await notifyMissingDataHeartbeat(readingTimestamp);
@@ -752,30 +880,51 @@ async function validateDeviceCredentials({ deviceId, apiKey }) { // RAYAT-FIX
 
     return withTransaction(async (connection) => { // RAYAT-FIX
         const execute = createExecutor(connection); // RAYAT-FIX
-        await findDeviceByCredentials(execute, cleanDeviceId, cleanApiKey); // RAYAT-FIX
+        const devices = await execute( // RAYAT-FIX
+            `SELECT id
+             FROM devices
+             WHERE device_id = ?
+               AND api_key = ?`, // RAYAT-FIX
+            [cleanDeviceId, cleanApiKey] // RAYAT-FIX
+        ); // RAYAT-FIX
+        if (!devices.length) { // RAYAT-FIX
+            throw createHttpError(401, 'Device non autorizzato'); // RAYAT-FIX
+        } // RAYAT-FIX
         return true; // RAYAT-FIX
     }); // RAYAT-FIX
 } // RAYAT-FIX
 
-async function ingestTrustedReadings({ deviceId, timestamp, readings }) {
+async function ingestTrustedReadings({ deviceId, timestamp, readings, requestIp = '' }) {
     const normalizedReadings = normalizeReadings(readings);
     const readingTimestamp = normalizeTimestamp(timestamp);
     const explicitDeviceId = cleanString(deviceId);
     const defaultDeviceId = cleanString(process.env.MQTT_DEFAULT_DEVICE_ID);
+    const receivedAt = new Date().toISOString();
 
     const result = await withTransaction(async (connection) => {
         const execute = createExecutor(connection);
         let device;
 
         if (explicitDeviceId) {
-            device = await findDeviceById(execute, explicitDeviceId);
+            device = await findDeviceById(execute, explicitDeviceId, {
+                autoRegisterUnassigned: true,
+                seenAt: receivedAt,
+                requestIp
+            });
         } else if (defaultDeviceId) {
-            device = await findDeviceById(execute, defaultDeviceId);
+            device = await findDeviceById(execute, defaultDeviceId, {
+                autoRegisterUnassigned: true,
+                seenAt: receivedAt,
+                requestIp
+            });
         } else {
             device = await ensureBridgeGatewayDevice(execute);
         }
 
-        return persistReadingsForDevice(execute, device, normalizedReadings, readingTimestamp);
+        return persistReadingsForDevice(execute, device, normalizedReadings, readingTimestamp, {
+            seenAt: receivedAt,
+            requestIp
+        });
     });
 
     await notifyMissingDataHeartbeat(readingTimestamp);
@@ -806,7 +955,7 @@ async function ingestPublicReadings({ timestamp, readings }) {
     };
 }
 
-async function recordGatewaySignal({ deviceId, event, receivedAt, sentAt, topic, bootId, fwVersion, rssi, clientId, routerId }) { // RAYAT-FIX
+async function recordGatewaySignal({ deviceId, event, receivedAt, sentAt, topic, bootId, fwVersion, rssi, clientId, routerId, requestIp = '' }) { // RAYAT-FIX
     const resolvedDeviceId = cleanString(deviceId || clientId || routerId); // RAYAT-FIX
     const normalizedEvent = normalizeGatewaySignalEvent(event); // RAYAT-FIX
     if (!resolvedDeviceId || !normalizedEvent) { // RAYAT-FIX
@@ -818,7 +967,11 @@ async function recordGatewaySignal({ deviceId, event, receivedAt, sentAt, topic,
 
     return withTransaction(async (connection) => { // RAYAT-FIX
         const execute = createExecutor(connection); // RAYAT-FIX
-        const device = await findDeviceById(execute, resolvedDeviceId); // RAYAT-FIX
+        const device = await findDeviceById(execute, resolvedDeviceId, {
+            autoRegisterUnassigned: true,
+            seenAt: receivedAtIso,
+            requestIp
+        }); // RAYAT-FIX
         return persistGatewaySignalForDevice(execute, device, { // RAYAT-FIX
             event: normalizedEvent, // RAYAT-FIX
             topic: cleanString(topic), // RAYAT-FIX
@@ -828,7 +981,8 @@ async function recordGatewaySignal({ deviceId, event, receivedAt, sentAt, topic,
             fwVersion, // RAYAT-FIX
             rssi, // RAYAT-FIX
             clientId, // RAYAT-FIX
-            routerId // RAYAT-FIX
+            routerId, // RAYAT-FIX
+            requestIp // RAYAT-FIX
         }); // RAYAT-FIX
     }); // RAYAT-FIX
 }

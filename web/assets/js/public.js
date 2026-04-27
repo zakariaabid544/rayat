@@ -25,28 +25,31 @@
             }
         }
 
-        function isLocalHttpRuntime() {
-            const protocol = window.location?.protocol || '';
-            const hostname = window.location?.hostname || '';
-            return ['http:', 'https:'].includes(protocol) && ['localhost', '127.0.0.1', '0.0.0.0', ''].includes(hostname);
+        function isCapacitorNativeRuntime() {
+            const capacitor = window.Capacitor;
+            if (!capacitor) return false;
+            if (typeof capacitor.isNativePlatform === 'function') return capacitor.isNativePlatform();
+            if (typeof capacitor.getPlatform === 'function') return capacitor.getPlatform() !== 'web';
+            return window.location?.protocol === 'capacitor:';
         }
 
         function resolveApiBaseUrl() {
+            if (isCapacitorNativeRuntime()) {
+                return normalizeApiBaseUrl(RAYAT_RUNTIME_CONFIG.productionApiBaseUrl || 'https://rayat.ma/api');
+            }
+
             const override = readStoredApiBaseUrlOverride();
             if (override) return normalizeApiBaseUrl(override);
 
             const explicit = RAYAT_RUNTIME_CONFIG.apiBaseUrl || RAYAT_RUNTIME_CONFIG.API_BASE_URL;
             if (explicit) return normalizeApiBaseUrl(explicit);
 
-            if (RAYAT_RUNTIME_CONFIG.useDevelopmentApiOnLocalhost !== false && isLocalHttpRuntime()) {
-                return normalizeApiBaseUrl(RAYAT_RUNTIME_CONFIG.developmentApiBaseUrl || 'http://localhost:3000/api');
-            }
-
             return normalizeApiBaseUrl(RAYAT_RUNTIME_CONFIG.productionApiBaseUrl || 'https://rayat.ma/api');
         }
 
         const API_BASE_URL = resolveApiBaseUrl();
         const ADMIN_WEB_PATH = RAYAT_RUNTIME_CONFIG.adminPath || '/admin/';
+        const ADMIN_CAPACITOR_WEB_PATH = RAYAT_RUNTIME_CONFIG.capacitorAdminPath || '/admin/index.html';
         const PUBLIC_SITE_URL = normalizePublicSiteUrl(RAYAT_RUNTIME_CONFIG.publicSiteUrl);
 
         const CONFIG = {
@@ -60,7 +63,7 @@
             ANALYTICS_TRACK_URL: `${API_BASE_URL}/analytics/track`
         };
         // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.30'; // RAYAT-FIX
+        const FRONTEND_ASSET_VERSION = '1.1.32'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -132,7 +135,7 @@
         let dataError = false; // Track API availability
         const CUSTOMER_ROLES = new Set(['client', 'farmer']);
         const ADMIN_ROLES = new Set(['admin', 'super_admin', 'operator', 'operator_admin']);
-        const PRIVILEGED_ADMIN_ROLES = new Set(['super_admin', 'operator_admin']);
+        const PRIVILEGED_ADMIN_ROLES = new Set(['super_admin', 'admin', 'operator_admin', 'operator']);
         const VIEW_PATHS = {
             home: '/',
             login: '/login',
@@ -1083,6 +1086,48 @@
             return sessionStorage.getItem(ADMIN_AUTH_TOKEN_STORAGE_KEY) || null;
         }
 
+        function readStoredPublicSessionUser() {
+            const raw = getStoredAuthValue(AUTH_USER_STORAGE_KEY);
+            if (!raw) return null;
+
+            try {
+                const parsed = JSON.parse(raw);
+                return isPrivilegedAdminRole(parsed?.role) ? parsed : null;
+            } catch (_err) {
+                return null;
+            }
+        }
+
+        function syncPrivilegedPublicSessionToAdminSession() {
+            const publicAdminUser = isPrivilegedAdminRole(user?.role)
+                ? user
+                : readStoredPublicSessionUser();
+            const publicToken = authToken || getStoredAuthValue(AUTH_TOKEN_STORAGE_KEY);
+
+            if (publicAdminUser && publicToken) {
+                sessionStorage.setItem(ADMIN_AUTH_TOKEN_STORAGE_KEY, publicToken);
+                sessionStorage.setItem(ADMIN_AUTH_USER_STORAGE_KEY, JSON.stringify(publicAdminUser));
+            }
+
+            syncStoredAdminSessionIntoState();
+        }
+
+        function resolveAdminPanelUrl() {
+            const targetPath = isCapacitorNativeRuntime()
+                ? ADMIN_CAPACITOR_WEB_PATH
+                : ADMIN_WEB_PATH;
+
+            if (/^[a-z][a-z0-9+.-]*:/i.test(String(targetPath))) {
+                return targetPath;
+            }
+
+            try {
+                return new URL(targetPath, window.location.href).href;
+            } catch (_err) {
+                return targetPath;
+            }
+        }
+
         function isAdminReferrer() {
             if (!document.referrer) return false;
             try {
@@ -1154,7 +1199,16 @@
         function goToAdminArea() {
             closeProfileMenu();
             toggleMobileMenu(false);
-            window.location.href = ADMIN_WEB_PATH;
+            syncPrivilegedPublicSessionToAdminSession();
+            window.location.assign(resolveAdminPanelUrl());
+        }
+
+        function shouldShowNativeAdminLoginEntry() {
+            return isCapacitorNativeRuntime();
+        }
+
+        function openAdminLoginFromNavigation() {
+            goToAdminArea();
         }
 
         function getPathForView(view) {
@@ -4261,7 +4315,7 @@
                         sessionStorage.setItem(ADMIN_AUTH_TOKEN_STORAGE_KEY, data.token);
                         sessionStorage.setItem(ADMIN_AUTH_USER_STORAGE_KEY, JSON.stringify(data.user));
                         syncStoredAdminSessionIntoState();
-                        window.location.href = ADMIN_WEB_PATH;
+                        goToAdminArea();
                     } else {
                         setView('demo');
                     }
@@ -5159,6 +5213,11 @@
                                 action: link.action || `navigateFromMobileMenu('${link.view}')`
                             }, { mobile: true })).join('')}
                         </nav>
+                        ${shouldShowNativeAdminLoginEntry() && !hasVisibleAccountState ? `
+                            <div class="mt-6 pt-6 border-t border-slate-200">
+                                <button onclick="openAdminLoginFromNavigation()" class="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs">${t('adminArea')}</button>
+                            </div>
+                        ` : ''}
                         ${canAccessProfile ? `
                             <div class="rayat-mobile-account-card">
                                 <div class="rayat-mobile-account-summary">
@@ -5351,6 +5410,12 @@
                             ${t('loginBtn')}
                         </button>
                     </form>
+
+                    ${shouldShowNativeAdminLoginEntry() ? `
+                        <button type="button" onclick="openAdminLoginFromNavigation()" class="mt-3 w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-lg font-semibold transition">
+                            ${t('adminArea')}
+                        </button>
+                    ` : ''}
 
                     <div class="mt-4 text-center">
                         <button type="button" onclick="requestPasswordReset()" class="text-sm text-green-700 font-bold hover:underline">
@@ -7125,7 +7190,14 @@
         }
 
         // PWA Service Worker Registration
-        if ('serviceWorker' in navigator) {
+        if (isCapacitorNativeRuntime() && 'serviceWorker' in navigator) {
+            const registrationsPromise = typeof navigator.serviceWorker.getRegistrations === 'function'
+                ? navigator.serviceWorker.getRegistrations()
+                : Promise.resolve([]);
+            registrationsPromise
+                .then(registrations => registrations.forEach(registration => registration.unregister()))
+                .catch(() => {});
+        } else if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register(`/sw.js?v=${FRONTEND_ASSET_VERSION}`, { updateViaCache: 'none' })
                     .then(reg => {

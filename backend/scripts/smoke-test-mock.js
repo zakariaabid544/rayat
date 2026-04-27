@@ -163,10 +163,15 @@ function listDevices(offset = 0, limit = 50, userId = null) {
       return {
         id: device.id,
         serial_number: device.device_id,
+        device_id: device.device_id,
         name: device.name,
-        status: device.status,
+        status: device.user_id === null ? 'unassigned' : device.status,
         last_seen: device.last_seen,
+        last_seen_at: device.last_seen,
+        last_seen_ip: parseJsonObject(device.metadata).last_seen_ip || parseJsonObject(device.metadata).first_seen_ip || null,
         created_at: device.created_at,
+        updated_at: device.updated_at,
+        metadata: parseJsonObject(device.metadata),
         client_id: device.user_id,
         client_name: user ? user.name : null,
         client_code: user ? user.client_code : null,
@@ -274,8 +279,17 @@ async function fakeQuery(sql, params = []) {
       .map((user) => ({ id: user.id }));
   }
 
+  if (text === 'SELECT pg_advisory_xact_lock(hashtext(?))') {
+    return [];
+  }
+
   if (text.startsWith('SELECT COUNT(*) AS total FROM devices d')) {
-    return [{ total: state.devices.length }];
+    const onlyUnassigned = text.includes("(d.user_id IS NULL OR d.status = 'unassigned')");
+    return [{
+      total: state.devices.filter((device) => (
+        !onlyUnassigned || device.user_id === null || device.status === 'unassigned'
+      )).length
+    }];
   }
 
   if (text.startsWith('SELECT d.id, d.device_id AS serial_number')) {
@@ -286,25 +300,54 @@ async function fakeQuery(sql, params = []) {
     const offset = Number.isFinite(Number(params[params.length - 1]))
       ? Number(params[params.length - 1])
       : inlineLimit.offset;
-    return listDevices(offset, limit);
+    const onlyUnassigned = text.includes("(d.user_id IS NULL OR d.status = 'unassigned')");
+    const devices = listDevices(0, Number.MAX_SAFE_INTEGER)
+      .filter((device) => !onlyUnassigned || device.client_id === null || device.status === 'unassigned');
+    return devices.slice(offset, offset + limit);
   }
 
   if (text.startsWith('INSERT INTO devices')) {
     const now = '2026-03-22 12:00:00';
-    const row = {
-      id: nextDeviceId++,
-      device_id: params[0],
-      user_id: params[1] ? Number(params[1]) : null,
-      name: params[2],
-      api_key: params[3],
-      status: 'inactive',
-      metadata: params[4],
-      last_seen: null,
-      created_at: now,
-      updated_at: now
-    };
+    let row;
+
+    if (params.length === 3) {
+      row = {
+        id: nextDeviceId++,
+        device_id: params[0],
+        user_id: null,
+        name: null,
+        api_key: params[1],
+        status: 'unassigned',
+        metadata: params[2],
+        last_seen: null,
+        created_at: now,
+        updated_at: now
+      };
+    } else {
+      const hasExplicitStatusParam = params.length >= 6;
+      row = {
+        id: nextDeviceId++,
+        device_id: params[0],
+        user_id: params[1] ? Number(params[1]) : null,
+        name: params[2],
+        api_key: params[3],
+        status: hasExplicitStatusParam ? params[4] : 'inactive',
+        metadata: hasExplicitStatusParam ? params[5] : params[4],
+        last_seen: null,
+        created_at: now,
+        updated_at: now
+      };
+    }
+
     state.devices.push(row);
     return { insertId: row.id };
+  }
+
+  if (text === 'SELECT id, api_key FROM devices WHERE device_id = ? LIMIT 1') {
+    return state.devices
+      .filter((device) => device.device_id === params[0])
+      .slice(0, 1)
+      .map((device) => ({ id: device.id, api_key: device.api_key }));
   }
 
   if (text.startsWith('INSERT INTO sensors')) {
@@ -342,6 +385,36 @@ async function fakeQuery(sql, params = []) {
       .map((device) => ({ id: device.id, user_id: device.user_id }));
   }
 
+  if (text === 'SELECT id FROM devices WHERE device_id = ? LIMIT 1') {
+    return state.devices
+      .filter((device) => device.device_id === params[0])
+      .slice(0, 1)
+      .map((device) => ({ id: device.id }));
+  }
+
+  if (text === 'SELECT id, user_id, device_id FROM devices WHERE device_id = ? LIMIT 1') {
+    return state.devices
+      .filter((device) => device.device_id === params[0])
+      .slice(0, 1)
+      .map((device) => ({
+        id: device.id,
+        user_id: device.user_id,
+        device_id: device.device_id
+      }));
+  }
+
+  if (text.startsWith('SELECT api_key FROM devices WHERE device_id = ? OR COALESCE(metadata->>\'clientId\'')) {
+    const targetDeviceId = params[0];
+    return state.devices
+      .filter((device) => {
+        const metadata = parseJsonObject(device.metadata);
+        return device.device_id === targetDeviceId || metadata.clientId === targetDeviceId;
+      })
+      .sort((left, right) => (left.device_id === targetDeviceId ? -1 : 1) - (right.device_id === targetDeviceId ? -1 : 1))
+      .slice(0, 1)
+      .map((device) => ({ api_key: device.api_key }));
+  }
+
   if (text.startsWith('SELECT id, user_id, device_id FROM devices WHERE device_id = ? OR COALESCE(metadata->>\'clientId\'')) {
     const targetDeviceId = params[0];
     return state.devices
@@ -358,22 +431,24 @@ async function fakeQuery(sql, params = []) {
       }));
   }
 
-  if (text.startsWith(`UPDATE devices SET last_seen = NOW(), status = 'active'`)) {
-    const device = state.devices.find((row) => row.id === Number(params[0]));
+  if (text.startsWith('UPDATE devices SET user_id = ?, status = ?, name = COALESCE(NULLIF(name, \'\'), ?), updated_at = NOW() WHERE id = ?')) {
+    const device = state.devices.find((row) => row.id === Number(params[3]));
     if (device) {
-      device.last_seen = '2026-03-22 12:10:00';
-      device.status = 'active';
+      device.user_id = params[0] ? Number(params[0]) : null;
+      device.status = params[1];
+      device.name = device.name || params[2];
     }
     return { affectedRows: device ? 1 : 0 };
   }
 
-  if (text.startsWith(`UPDATE devices SET last_seen = ?, status = 'active', metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb, updated_at = NOW() WHERE id = ?`)) {
+  if (text.startsWith(`UPDATE devices SET last_seen = ?, status = 'active', metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb, updated_at = NOW() WHERE id = ?`)
+    || text.startsWith(`UPDATE devices SET last_seen = ?, status = CASE WHEN user_id IS NULL THEN 'unassigned' ELSE 'active' END, metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb, updated_at = NOW() WHERE id = ?`)) {
     const device = state.devices.find((row) => row.id === Number(params[2]));
     if (device) {
       const currentMetadata = parseJsonObject(device.metadata);
       const metadataPatch = parseJsonObject(params[1]);
       device.last_seen = params[0];
-      device.status = 'active';
+      device.status = device.user_id === null ? 'unassigned' : 'active';
       device.metadata = {
         ...currentMetadata,
         ...metadataPatch
@@ -383,10 +458,39 @@ async function fakeQuery(sql, params = []) {
     return { affectedRows: device ? 1 : 0 };
   }
 
+  if (text.startsWith('UPDATE devices SET device_id = ?, user_id = ?, status = ?, name = COALESCE(NULLIF(name, \'\'), ?), updated_at = NOW() WHERE id = ?')) {
+    const device = state.devices.find((row) => row.id === Number(params[4]));
+    if (device) {
+      device.device_id = params[0];
+      device.user_id = params[1] ? Number(params[1]) : null;
+      device.status = params[2];
+      device.name = device.name || params[3];
+    }
+    return { affectedRows: device ? 1 : 0 };
+  }
+
   if (text === 'SELECT id, type, subtype FROM sensors WHERE device_id = ?') {
     return state.sensors
       .filter((sensor) => sensor.device_id === Number(params[0]))
       .map((sensor) => ({ id: sensor.id, type: sensor.type, subtype: sensor.subtype }));
+  }
+
+  if (text === 'SELECT id, type FROM sensors WHERE device_id = ? ORDER BY id ASC') {
+    return state.sensors
+      .filter((sensor) => sensor.device_id === Number(params[0]))
+      .sort((left, right) => left.id - right.id)
+      .map((sensor) => ({ id: sensor.id, type: sensor.type }));
+  }
+
+  if (text === 'UPDATE sensors SET type = ?, subtype = ?, name = ?, unit = ?, updated_at = NOW() WHERE id = ?') {
+    const sensor = state.sensors.find((row) => row.id === Number(params[4]));
+    if (sensor) {
+      sensor.type = params[0];
+      sensor.subtype = params[1];
+      sensor.name = params[2];
+      sensor.unit = params[3];
+    }
+    return { affectedRows: sensor ? 1 : 0 };
   }
 
   if (text.startsWith('INSERT INTO sensor_readings')) {
@@ -1013,6 +1117,95 @@ async function run() {
         const iotDevicesJson = await iotDevicesRes.json();
         assert.equal(iotDevicesJson.data.length, 1);
         assert.equal(iotDevicesJson.data[0].sensor_count, 11);
+
+        const unknownDeviceApiKeyRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sensor_id: 'sensors/AUTO-GW-002/clima/temperature',
+            device_id: 'AUTO-GW-002',
+            api_key: 'wrong-key',
+            value: 18.7
+          })
+        });
+        assert.equal(unknownDeviceApiKeyRes.status, 401);
+
+        const autoRegisterRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-rayat-bridge-token': process.env.MQTT_INGEST_TOKEN
+          },
+          body: JSON.stringify({
+            sensor_id: 'sensors/AUTO-GW-002/clima/temperature',
+            device_id: 'AUTO-GW-002',
+            value: 23.5
+          })
+        });
+        assert.equal(autoRegisterRes.status, 200);
+
+        const unassignedDevicesRes = await fetch(`http://127.0.0.1:${port}/api/admin/devices?page=1&pageSize=25&status=unassigned`, {
+          headers: { Authorization: `Bearer ${reloginJson.token}` }
+        });
+        assert.equal(unassignedDevicesRes.status, 200);
+        const unassignedDevicesJson = await unassignedDevicesRes.json();
+        const autoRegisteredDevice = unassignedDevicesJson.data.find((device) => device.serial_number === 'AUTO-GW-002');
+        assert.ok(autoRegisteredDevice);
+        assert.equal(autoRegisteredDevice.status, 'unassigned');
+        assert.equal(autoRegisteredDevice.client_id, null);
+
+        const autoRegisterAgainRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-rayat-bridge-token': process.env.MQTT_INGEST_TOKEN
+          },
+          body: JSON.stringify({
+            sensor_id: 'sensors/AUTO-GW-002/clima/temperature',
+            device_id: 'AUTO-GW-002',
+            value: 24.1
+          })
+        });
+        assert.equal(autoRegisterAgainRes.status, 200);
+
+        const unassignedDevicesAgainRes = await fetch(`http://127.0.0.1:${port}/api/admin/devices?page=1&pageSize=25&status=unassigned`, {
+          headers: { Authorization: `Bearer ${reloginJson.token}` }
+        });
+        assert.equal(unassignedDevicesAgainRes.status, 200);
+        const unassignedDevicesAgainJson = await unassignedDevicesAgainRes.json();
+        assert.equal(
+          unassignedDevicesAgainJson.data.filter((device) => device.serial_number === 'AUTO-GW-002').length,
+          1
+        );
+
+        const assignAutoDeviceRes = await fetch(`http://127.0.0.1:${port}/api/admin/devices`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify({ type: 'clima', serial_number: 'AUTO-GW-002', client_id: 2 })
+        });
+        assert.equal(assignAutoDeviceRes.status, 201);
+        const assignAutoDeviceJson = await assignAutoDeviceRes.json();
+        assert.equal(assignAutoDeviceJson.id, autoRegisteredDevice.id);
+
+        const devicesAfterAssignRes = await fetch(`http://127.0.0.1:${port}/api/admin/devices?page=1&pageSize=25`, {
+          headers: { Authorization: `Bearer ${reloginJson.token}` }
+        });
+        assert.equal(devicesAfterAssignRes.status, 200);
+        const devicesAfterAssignJson = await devicesAfterAssignRes.json();
+        const assignedAutoDevice = devicesAfterAssignJson.data.find((device) => device.serial_number === 'AUTO-GW-002');
+        assert.ok(assignedAutoDevice);
+        assert.equal(assignedAutoDevice.client_id, 2);
+        assert.equal(assignedAutoDevice.status, 'active');
+
+        const clientDevicesAfterAssignRes = await fetch(`http://127.0.0.1:${port}/api/iot/devices`, {
+          headers: { Authorization: `Bearer ${clientToken}` }
+        });
+        assert.equal(clientDevicesAfterAssignRes.status, 200);
+        const clientDevicesAfterAssignJson = await clientDevicesAfterAssignRes.json();
+        assert.ok(clientDevicesAfterAssignJson.data.some((device) => device.device_id === 'AUTO-GW-002'));
 
         const aggregationStartIndex = state.publicSensorReadings.length; // RAYAT-FIX
         const aggregationTimestamp = new Date().toISOString(); // RAYAT-FIX

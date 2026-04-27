@@ -181,6 +181,8 @@ function scheduleExactAlertTimeout(lastUpdate, options = {}) {
 }
 
 async function getLastUpdateTimestamp() {
+  const sensorUpdateSources = [];
+
   if (hasLegacySensorDataTable === null) {
     const rows = await query(
       `SELECT EXISTS (
@@ -194,31 +196,40 @@ async function getLastUpdateTimestamp() {
   }
 
   if (hasLegacySensorDataTable) {
-    try {
-      const rows = await query('SELECT MAX(created_at) AS last_update FROM sensor_data');
-      const directMatch = toDateOrNull(rows?.[0]?.last_update);
-      if (directMatch) {
-        return directMatch;
-      }
-    } catch (error) {
-      if (!isMissingRelationError(error)) {
-        throw error;
-      }
-
-      hasLegacySensorDataTable = false;
-    }
+    sensorUpdateSources.push('SELECT MAX(created_at) AS last_update FROM sensor_data');
   }
 
-  const rows = await query(
-    `SELECT MAX(last_update) AS last_update
-     FROM (
-       SELECT MAX(created_at) AS last_update FROM public_sensor_readings
-       UNION ALL
-       SELECT MAX(timestamp) AS last_update FROM sensor_readings
-     ) AS sensor_updates`
+  sensorUpdateSources.push(
+    'SELECT MAX(created_at) AS last_update FROM public_sensor_readings',
+    'SELECT MAX(timestamp) AS last_update FROM sensor_readings'
   );
 
-  return toDateOrNull(rows?.[0]?.last_update);
+  try {
+    const rows = await query(
+      `SELECT MAX(last_update) AS last_update
+       FROM (
+         ${sensorUpdateSources.join('\n         UNION ALL\n         ')}
+       ) AS sensor_updates`
+    );
+
+    return toDateOrNull(rows?.[0]?.last_update);
+  } catch (error) {
+    if (!hasLegacySensorDataTable || !isMissingRelationError(error)) {
+      throw error;
+    }
+
+    hasLegacySensorDataTable = false;
+    const rows = await query(
+      `SELECT MAX(last_update) AS last_update
+       FROM (
+         SELECT MAX(created_at) AS last_update FROM public_sensor_readings
+         UNION ALL
+         SELECT MAX(timestamp) AS last_update FROM sensor_readings
+       ) AS sensor_updates`
+    );
+
+    return toDateOrNull(rows?.[0]?.last_update);
+  }
 }
 
 async function getLastNotificationTimestamp(lastUpdate) {
@@ -334,6 +345,35 @@ async function getPendingRecoveryAlert(recoveredAt) {
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {
       console.warn('[alert-job] impossibile leggere l’alert pendente di recovery, uso fallback in memoria:', error.message);
+    }
+  }
+
+  try {
+    const rows = await query(
+      `SELECT created_at AS alerted_at
+       FROM notification_log
+       WHERE notification_type = ?
+         AND channel = 'email'
+         AND created_at < ?::timestamptz
+         AND (
+           metadata IS NULL
+           OR COALESCE(metadata->>'lastUpdate', '') = ''
+         )
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [ALERT_TYPE, recoveredAtIso]
+    );
+
+    const alertedAt = toDateOrNull(rows?.[0]?.alerted_at);
+    if (alertedAt && !(await hasRecoveryNotificationForAlert(alertedAt))) {
+      return {
+        alertLastUpdate: alertedAt,
+        alertedAt
+      };
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[alert-job] impossibile leggere fallback recovery legacy:', error.message);
     }
   }
 
@@ -686,16 +726,21 @@ async function deliverRecoveryEmail(alertLastUpdate, recoveredAt, options = {}) 
   const subject = buildRecoverySubject(options);
   const body = buildRecoveryText(alertLastUpdate, recoveredAt, options);
   const downtimeMinutes = getRecoveryDowntimeMinutes(alertLastUpdate, recoveredAt);
+  const metadata = {
+    alertLastUpdate: alertLastUpdate ? alertLastUpdate.toISOString() : null,
+    recoveredAt: recoveredAt ? recoveredAt.toISOString() : null,
+    downtimeMinutes
+  };
+
+  if (options.readingTimestamp) {
+    metadata.readingTimestamp = options.readingTimestamp;
+  }
 
   await deliverNotificationEmail(
     RECOVERY_ALERT_TYPE,
     subject,
     body,
-    {
-      alertLastUpdate: alertLastUpdate ? alertLastUpdate.toISOString() : null,
-      recoveredAt: recoveredAt ? recoveredAt.toISOString() : null,
-      downtimeMinutes
-    },
+    metadata,
     options
   );
 }
@@ -786,14 +831,19 @@ async function syncMissingDataAlertSchedule(options = {}) {
 }
 
 async function notifyMissingDataHeartbeat(timestamp) {
-  const lastUpdate = toDateOrNull(timestamp) || new Date();
+  const receivedAt = new Date();
+  const readingTimestamp = toDateOrNull(timestamp);
+  const lastUpdate = receivedAt;
   const currentLastKnown = toDateOrNull(runtimeState.lastKnownDataAt);
 
   if (currentLastKnown && lastUpdate.getTime() < currentLastKnown.getTime()) {
     return;
   }
 
-  await maybeSendRecoveryEmail(lastUpdate, { trigger: 'ingest_recovery' });
+  await maybeSendRecoveryEmail(lastUpdate, {
+    trigger: 'ingest_recovery',
+    readingTimestamp: readingTimestamp ? readingTimestamp.toISOString() : null
+  });
 
   scheduleExactAlertTimeout(lastUpdate, { trigger: 'ingest' });
 }

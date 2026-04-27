@@ -26,9 +26,7 @@ It resolves the API URL from `config.js`.
 
 Default behavior:
 
-- Local web development over `http://localhost`, `127.0.0.1`, or `0.0.0.0`
-  uses `http://localhost:3000/api`.
-- Hosted production and future Capacitor runtimes use `https://rayat.ma/api`.
+- Hosted production and Capacitor runtimes use `https://rayat.ma/api`.
 - A temporary browser override can be set with `localStorage.rayat_api_base_url`.
 - Analytics pageview URLs use `publicSiteUrl`, not the runtime WebView origin.
 
