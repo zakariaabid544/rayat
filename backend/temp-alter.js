@@ -1,1 +1,0 @@
-const { query } = require('./config/database'); async function alter() { try { await query('ALTER TABLE devices ADD COLUMN type VARCHAR(50)'); await query('ALTER TABLE devices ADD COLUMN subtype VARCHAR(50)'); console.log('Altered devices table successfully!'); } catch(e) { console.error('Error:', e); } process.exit(); } alter();
