@@ -1,0 +1,2862 @@
+        :root {
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-left: env(safe-area-inset-left, 0px);
+            --safe-right: env(safe-area-inset-right, 0px);
+            --rayat-mobile-radius: 1.35rem;
+            --rayat-mobile-gap: 1rem;
+            --rayat-touch-size: 48px;
+        }
+
+        html {
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+            background: #f8fafc;
+            min-height: 100%;
+            overflow-y: auto;
+        }
+
+        body {
+            padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
+            -webkit-tap-highlight-color: transparent;
+            user-select: auto;
+            touch-action: manipulation;
+            background-color: #f8fafc;
+            min-height: 100%;
+            overflow-y: auto;
+        }
+
+        /* RAYAT FIX - mobile app ready optimization */
+        input,
+        select,
+        textarea,
+        button {
+            font: inherit;
+        }
+
+        /* RAYAT FIX - checkbox remember me + desktop scroll */
+        input:not([type="checkbox"]):not([type="radio"]),
+        select,
+        textarea {
+            font-size: 16px;
+            line-height: 1.45;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        input,
+        textarea {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        /* Improved touch responsiveness for buttons */
+        button,
+        a {
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        button,
+        .btn,
+        [role="button"] {
+            min-height: 44px;
+        }
+
+        button:active,
+        .rayat-card:active {
+            transform: scale(0.96);
+            transition: transform 0.1s ease;
+        }
+
+        body.rayat-standalone-mode header {
+            box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+        }
+
+        body.rayat-standalone-mode .rayat-whatsapp-float {
+            bottom: calc(24px + var(--safe-bottom));
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+
+        /* Hide scrollbars for a cleaner app look */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .5;
+            }
+        }
+
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .animate-spin-once {
+            animation: spin 0.8s ease-in-out;
+        }
+
+        /* Admin Dark Mode Styles */
+        .admin-dark {
+            background-color: #1a1c23;
+            color: #e5e7eb;
+        }
+
+        .admin-card {
+            background-color: #24262d;
+            border-color: #374151;
+        }
+
+        .farmer-dashboard-bg {
+            background-color: #f0fdf4;
+            /* Very light green */
+        }
+
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 1rem;
+        }
+
+        /* CSS Globale */
+        .rayat-card {
+            min-height: 220px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            border-radius: 2rem;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            padding: 1.5rem;
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border: 5px solid rgba(255, 255, 255, 0.15);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .rayat-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        .rayat-ok {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .rayat-alert {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        /* Marker Pulse Animation */
+        @keyframes markerPulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .marker-online {
+            background-color: #22c55e;
+            border: 2px solid white;
+            border-radius: 50%;
+            animation: markerPulse 2s infinite ease-in-out;
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.8);
+        }
+        .marker-offline {
+            background-color: #94a3b8;
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+
+        /* Wave Animation */
+        @keyframes waveMove {
+            0% {
+                transform: translateX(0) translateZ(0) scaleY(1);
+            }
+
+            50% {
+                transform: translateX(-25%) translateZ(0) scaleY(0.85);
+            }
+
+            100% {
+                transform: translateX(-50%) translateZ(0) scaleY(1);
+            }
+        }
+
+        .rayat-wave {
+            position: absolute;
+            left: 0;
+            width: 200%;
+            height: 100%;
+            background-repeat: repeat-x;
+            background-position: 0 bottom;
+            transform-origin: center bottom;
+        }
+
+        .wave-top {
+            z-index: 15;
+            opacity: 0.5;
+            animation: waveMove 3s infinite linear;
+        }
+
+        .wave-mid {
+            z-index: 10;
+            opacity: 0.3;
+            animation: waveMove 5s infinite linear;
+        }
+
+        .wave-bot {
+            z-index: 5;
+            animation: waveMove 10s infinite linear;
+        }
+
+        /* Capacitor Safe Areas */
+        .safe-area-top {
+            padding-top: env(safe-area-inset-top);
+        }
+
+        .safe-area-bottom {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        #offline-banner {
+            display: none;
+            background: #f59e0b;
+            color: white;
+            text-align: center;
+            padding: 8px;
+            font-size: 11px;
+            font-weight: bold;
+            position: fixed;
+            top: env(safe-area-inset-top);
+            width: 100%;
+            z-index: 100;
+        }
+
+        html,
+        body,
+        #app {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+
+        #app {
+            min-height: 100%;
+        }
+
+        html.rayat-scroll-locked,
+        body.rayat-scroll-locked {
+            overflow: hidden;
+            overscroll-behavior: none;
+        }
+
+        img,
+        svg,
+        canvas,
+        iframe {
+            max-width: 100%;
+        }
+
+        body.rayat-menu-open {
+            overflow: hidden;
+        }
+
+        .rayat-desktop-nav {
+            display: flex;
+        }
+
+        /* PATCH-01 — start */
+        .rayat-nav-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .rayat-nav-link:hover {
+            color: #fdba74;
+        }
+
+        .rayat-nav-link--login {
+            padding: 0.6rem 0.95rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .rayat-nav-link--login:hover {
+            border-color: rgba(253, 186, 116, 0.9);
+            background: rgba(251, 146, 60, 0.12);
+        }
+
+        .rayat-mobile-nav-link__icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            flex: 0 0 20px;
+            font-size: 15px;
+        }
+        /* PATCH-01 — end */
+
+        .rayat-mobile-toggle {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(6, 95, 70, 0.9);
+            color: white;
+            font-size: 24px;
+            line-height: 1;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+        }
+
+        .rayat-account-trigger {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(6, 95, 70, 0.9);
+            color: white;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
+            transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .rayat-account-trigger:hover {
+            transform: translateY(-1px);
+            background: rgba(4, 120, 87, 0.95);
+            box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
+        }
+
+        .rayat-account-trigger--active {
+            background: rgba(249, 115, 22, 0.96);
+            border-color: rgba(255, 255, 255, 0.28);
+        }
+
+        .rayat-account-trigger__icon {
+            width: 20px;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .rayat-account-trigger__icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .rayat-account-trigger__initials {
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        /* RAYAT FIX - login/profile/final UX cleanup */
+
+        .rayat-account-trigger--menu {
+            gap: 0.55rem;
+            width: auto;
+            min-width: 44px;
+            padding: 0 0.9rem;
+        }
+
+        .rayat-account-trigger__chevron {
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s ease;
+        }
+
+        .rayat-account-trigger__chevron svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .rayat-profile-menu-shell {
+            position: relative;
+        }
+
+        .rayat-profile-menu-shell.is-open .rayat-account-trigger__chevron {
+            transform: rotate(180deg);
+        }
+
+        .rayat-profile-menu {
+            position: absolute;
+            top: calc(100% + 12px);
+            right: 0;
+            width: min(320px, calc(100vw - 2rem));
+            padding: 0.85rem;
+            border-radius: 1.5rem;
+            border: 1px solid rgba(226, 232, 240, 0.96);
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 22px 48px rgba(15, 23, 42, 0.18);
+            opacity: 0;
+            transform: translateY(8px);
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            backdrop-filter: blur(18px);
+            z-index: 70;
+        }
+
+        .rayat-profile-menu.is-open {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .rayat-profile-menu-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            padding: 0.7rem 0.85rem 0.95rem;
+            margin-bottom: 0.4rem;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.88);
+        }
+
+        .rayat-profile-menu-summary strong {
+            color: #0f172a;
+            font-size: 0.98rem;
+            font-weight: 900;
+            line-height: 1.3;
+        }
+
+        .rayat-profile-menu-summary span {
+            color: #64748b;
+            font-size: 0.84rem;
+            line-height: 1.45;
+            word-break: break-word;
+        }
+
+        .rayat-profile-menu-item {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 0.95rem 1rem;
+            border-radius: 1.1rem;
+            color: #0f172a;
+            font-size: 0.88rem;
+            font-weight: 800;
+            line-height: 1.35;
+            transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+        }
+
+        .rayat-profile-menu-item:hover {
+            background: #f8fafc;
+            color: #065f46;
+            transform: translateY(-1px);
+        }
+
+        .rayat-profile-menu-item--logout {
+            color: #b91c1c;
+        }
+
+        .rayat-profile-menu-item--logout:hover {
+            background: #fef2f2;
+            color: #b91c1c;
+        }
+
+        .rayat-password-field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .rayat-password-control {
+            position: relative;
+        }
+
+        .rayat-password-toggle {
+            position: absolute;
+            top: 50%;
+            right: 0.9rem;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 40px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .rayat-password-toggle:hover {
+            background: rgba(226, 232, 240, 0.7);
+            color: #0f172a;
+        }
+
+        .rayat-password-toggle svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .rayat-remember-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            margin-top: -0.2rem;
+        }
+
+        .rayat-remember-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: #334155;
+            font-size: 0.95rem;
+            font-weight: 700;
+            line-height: 1.4;
+            cursor: pointer;
+        }
+
+        .rayat-remember-checkbox {
+            -webkit-appearance: checkbox;
+            appearance: auto;
+            width: 18px;
+            height: 18px;
+            min-width: 18px;
+            min-height: 18px;
+            display: inline-block;
+            flex: 0 0 18px;
+            margin: 0;
+            border: 1.5px solid #94a3b8;
+            border-radius: 0.35rem;
+            background: #ffffff;
+            accent-color: #166534;
+            cursor: pointer;
+            vertical-align: middle;
+        }
+
+        .rayat-remember-checkbox:focus-visible {
+            outline: 3px solid rgba(22, 101, 52, 0.18);
+            outline-offset: 2px;
+        }
+
+        .rayat-remember-checkbox:checked {
+            border-color: #166534;
+        }
+
+        .rayat-mobile-account-card {
+            margin-top: 1.5rem;
+            padding: 1.2rem;
+            border-radius: 1.6rem;
+            background: #f8fafc;
+            border: 1px solid rgba(226, 232, 240, 0.94);
+        }
+
+        .rayat-mobile-account-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            margin-bottom: 1rem;
+        }
+
+        .rayat-mobile-account-label {
+            color: #16a34a;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }
+
+        .rayat-mobile-account-summary strong {
+            color: #0f172a;
+            font-size: 1rem;
+            font-weight: 900;
+        }
+
+        .rayat-mobile-account-summary span {
+            color: #64748b;
+            font-size: 0.88rem;
+            word-break: break-word;
+        }
+
+        .rayat-mobile-account-actions {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .rayat-mobile-account-action {
+            width: 100%;
+            min-height: 48px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.95rem 1rem;
+            border-radius: 1.15rem;
+            background: white;
+            border: 1px solid rgba(226, 232, 240, 0.94);
+            color: #0f172a;
+            font-size: 0.83rem;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+        }
+
+        .rayat-mobile-account-action:hover {
+            border-color: rgba(34, 197, 94, 0.35);
+            color: #166534;
+            background: #f0fdf4;
+        }
+
+        .rayat-mobile-account-action--logout {
+            color: #b91c1c;
+        }
+
+        .rayat-mobile-account-action--logout:hover {
+            border-color: rgba(248, 113, 113, 0.35);
+            color: #b91c1c;
+            background: #fef2f2;
+        }
+
+        .rayat-mobile-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 60;
+            display: none;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            background: rgba(15, 23, 42, 0.46);
+            backdrop-filter: blur(10px);
+            transition: opacity 0.25s ease;
+        }
+
+        .rayat-mobile-overlay.is-open {
+            display: block;
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        .rayat-mobile-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: min(88vw, 360px);
+            height: 100%;
+            background: #ffffff;
+            padding: 24px;
+            transform: translateX(100%);
+            transition: transform 0.25s ease;
+            box-shadow: -20px 0 50px rgba(15, 23, 42, 0.18);
+            overflow-y: auto;
+        }
+
+        .rayat-mobile-panel.is-open {
+            transform: translateX(0);
+        }
+
+        .rayat-auth-screen,
+        .rayat-register-screen,
+        .rayat-profile-page,
+        .rayat-demo-page,
+        .rayat-contact-page {
+            padding-bottom: calc(1.5rem + var(--safe-bottom));
+        }
+
+        .rayat-auth-card,
+        .rayat-register-card {
+            border-radius: 1.75rem;
+        }
+
+        .rayat-auth-card input,
+        .rayat-auth-card button,
+        .rayat-register-card input,
+        .rayat-register-card select,
+        .rayat-register-card textarea,
+        .rayat-register-card button,
+        .rayat-profile-card input,
+        .rayat-profile-card textarea,
+        .rayat-profile-card button,
+        .rayat-contact-page input,
+        .rayat-contact-page select,
+        .rayat-contact-page textarea,
+        .rayat-contact-page button {
+            min-height: 48px;
+        }
+
+        .rayat-register-body {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .rayat-register-section {
+            border-radius: 1.5rem;
+        }
+
+        .rayat-register-crop-grid button {
+            min-height: 52px;
+            font-weight: 800;
+            line-height: 1.35;
+        }
+
+        .rayat-contact-grid {
+            align-items: start;
+        }
+
+        .rayat-demo-nav-grid button {
+            min-height: 176px;
+        }
+
+        .rayat-demo-panel {
+            border-radius: 2.5rem;
+        }
+
+        .rayat-crop-selector {
+            width: 100%;
+        }
+
+        .rayat-crop-selector select,
+        .rayat-crop-selector input {
+            min-height: 56px;
+        }
+
+        .rayat-modal-card {
+            max-height: calc(100vh - 2rem);
+            overflow: auto;
+        }
+
+        @keyframes rayatFadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes rayatFadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .rayat-fade-up {
+            opacity: 0;
+            animation: rayatFadeUp 0.6s ease-out 0.1s forwards;
+        }
+
+        .rayat-fade-in {
+            opacity: 0;
+            animation: rayatFadeIn 0.6s ease-out 0.4s forwards;
+        }
+
+        .rayat-hero {
+            position: relative;
+            overflow: hidden;
+            color: white;
+            background:
+                radial-gradient(circle at top left, rgba(255, 255, 255, 0.12), transparent 30%),
+                linear-gradient(135deg, #214e3a 0%, #2d6a4f 45%, #163924 100%);
+            padding: 6rem 0 5rem;
+        }
+
+        .rayat-hero-shell {
+            position: relative;
+            z-index: 2;
+            max-width: 920px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .rayat-hero-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.55rem 0.95rem;
+            margin-bottom: 1.25rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+        }
+
+        .rayat-hero-title {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.2em;
+            margin: 0 auto 1.5rem;
+            max-width: min(100%, 24ch);
+            font-size: 72px;
+            font-weight: 800;
+            line-height: 1.02;
+            letter-spacing: -0.05em;
+        }
+
+        .rayat-hero-title-line {
+            display: inline-block;
+            width: auto;
+            max-width: 100%;
+            text-wrap: balance;
+        }
+
+        .rayat-hero-title-line--primary {
+            max-width: 24ch;
+        }
+
+        .rayat-hero-title-line--secondary {
+            max-width: 18ch;
+        }
+
+        .rayat-hero-title-line--accent {
+            max-width: 18ch;
+        }
+
+        .rayat-hero-accent {
+            color: #f97316;
+        }
+
+        .rayat-hero-subtitle {
+            margin: 0 auto 2rem;
+            max-width: 600px;
+            width: min(600px, 90%);
+            font-size: 22px;
+            line-height: 1.5;
+            opacity: 0.88;
+        }
+
+        .rayat-hero-orb {
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(18px);
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .rayat-hero-orb--one {
+            width: 240px;
+            height: 240px;
+            top: -40px;
+            left: -40px;
+            background: rgba(249, 115, 22, 0.4);
+        }
+
+        .rayat-hero-orb--two {
+            width: 280px;
+            height: 280px;
+            right: -60px;
+            bottom: -80px;
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        .rayat-metric-card {
+            border-radius: 1.75rem;
+            padding: 1.5rem;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+        }
+
+        .rayat-metric-card--attention {
+            background: linear-gradient(180deg, #ffffff 0%, #fffbeb 100%);
+            border-color: rgba(245, 158, 11, 0.26);
+        }
+
+        .rayat-metric-card--alert {
+            background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
+            border-color: rgba(239, 68, 68, 0.3);
+            box-shadow: 0 22px 48px rgba(239, 68, 68, 0.12);
+        }
+
+        .rayat-metric-card--inactive {
+            border-color: rgba(148, 163, 184, 0.2);
+            box-shadow: 0 18px 40px rgba(148, 163, 184, 0.09);
+        }
+
+        .rayat-alert-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            align-self: flex-start;
+            border-radius: 999px;
+            padding: 0.38rem 0.7rem;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .rayat-metric-card-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.85rem;
+            flex-wrap: wrap;
+        }
+
+        .rayat-metric-card-header-main {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.85rem;
+            min-width: 0;
+            flex: 1 1 14rem;
+        }
+
+        .rayat-metric-card-icon {
+            font-size: 2rem;
+            line-height: 1;
+            flex-shrink: 0;
+            margin-top: 0.1rem;
+        }
+
+        .rayat-metric-card-copy {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .rayat-metric-card-title {
+            margin: 0;
+            font-size: 12px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            color: #475569;
+            line-height: 1.35;
+            text-wrap: balance;
+        }
+
+        .rayat-metric-card-state {
+            margin: 0.28rem 0 0;
+            font-size: 0.94rem;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+
+        .rayat-metric-card-range {
+            margin-top: 1rem;
+            font-size: 0.97rem;
+            line-height: 1.6;
+            font-weight: 600;
+        }
+
+        .rayat-metric-card-placeholder {
+            display: inline-flex;
+            align-items: center;
+            min-height: 3.5rem;
+            font-size: 1rem;
+            font-weight: 800;
+            line-height: 1.35;
+            color: #64748b;
+        }
+
+        .rayat-alert-badge--attention {
+            color: #b45309;
+            background: rgba(245, 158, 11, 0.14);
+        }
+
+        .rayat-alert-badge--alert {
+            color: #dc2626;
+            background: rgba(239, 68, 68, 0.14);
+        }
+
+        .rayat-history-card {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        }
+
+        .rayat-history-table {
+            min-width: 720px;
+        }
+
+        .rayat-history-head-cell {
+            padding: 1.35rem 1rem;
+            font-size: 12px;
+            font-weight: 900;
+            color: #334155;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            white-space: nowrap;
+        }
+
+        .rayat-history-head-cell--metric {
+            text-align: center;
+        }
+
+        .rayat-history-row {
+            background: transparent;
+        }
+
+        .rayat-history-time-cell {
+            padding: 1.15rem 1rem;
+            min-width: 164px;
+            white-space: nowrap;
+        }
+
+        .rayat-history-time-primary {
+            font-size: 0.96rem;
+            font-weight: 900;
+            color: #0f172a;
+            line-height: 1.2;
+        }
+
+        .rayat-history-time-secondary {
+            margin-top: 0.18rem;
+            font-size: 0.83rem;
+            font-weight: 700;
+            color: #475569;
+            line-height: 1.2;
+        }
+
+        .rayat-history-value-cell {
+            padding: 1.15rem 0.9rem;
+            text-align: center;
+            font-size: 1.18rem;
+            font-weight: 900;
+            color: #0f172a;
+            white-space: nowrap;
+        }
+
+        .rayat-history-value-cell--md {
+            font-size: 1.3rem;
+        }
+
+        .rayat-history-value-cell--lg {
+            font-size: 1.55rem;
+        }
+
+        .rayat-history-status-cell {
+            padding: 1.15rem 1rem;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .rayat-history-status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.65rem 0.95rem;
+            border-radius: 0.95rem;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        /* RAYAT FIX - refresh header button shared across demo/live monitoring */
+        .rayat-monitoring-toolbar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1.5rem;
+            margin: 0 0 3rem;
+        }
+
+        .rayat-monitoring-toolbar__copy {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .rayat-monitoring-toolbar__title {
+            margin: 0 0 0.8rem;
+            font-size: clamp(3rem, 5.2vw, 4.75rem);
+            font-weight: 900;
+            line-height: 0.95;
+            letter-spacing: -0.06em;
+            text-transform: uppercase;
+            color: #166534;
+        }
+
+        .rayat-monitoring-toolbar__subtitle {
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+        }
+
+        .rayat-monitoring-toolbar__controls {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.95rem;
+            flex-shrink: 0;
+        }
+
+        .rayat-monitoring-status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.9rem;
+            padding: 0.9rem 1.1rem;
+            border-radius: 1.5rem;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
+            box-shadow: 0 18px 34px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+        }
+
+        .rayat-monitoring-status-pill__dot {
+            width: 12px;
+            height: 12px;
+            flex: 0 0 12px;
+            border-radius: 999px;
+            background: #22c55e;
+            box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.14), 0 0 22px rgba(34, 197, 94, 0.45);
+        }
+
+        .rayat-monitoring-status-pill.is-offline .rayat-monitoring-status-pill__dot {
+            background: #ef4444;
+            box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12), 0 0 20px rgba(239, 68, 68, 0.35);
+        }
+
+        .rayat-monitoring-status-pill.is-loading .rayat-monitoring-status-pill__dot {
+            background: #94a3b8;
+            box-shadow: 0 0 0 6px rgba(148, 163, 184, 0.12), 0 0 20px rgba(148, 163, 184, 0.24);
+            animation: rayatSensorStatusBlink 1.8s ease-in-out infinite;
+        }
+
+        .rayat-monitoring-status-pill__copy {
+            display: flex;
+            flex-direction: column;
+            gap: 0.18rem;
+            min-width: 0;
+        }
+
+        .rayat-monitoring-status-pill__copy strong {
+            font-size: 11px;
+            font-weight: 900;
+            color: #0f172a;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            line-height: 1.1;
+        }
+
+        .rayat-monitoring-status-pill__copy span {
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: #64748b;
+            line-height: 1.2;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+            }
+
+            50% {
+                box-shadow: 0 0 16px 6px rgba(34, 197, 94, 0.25);
+            }
+        }
+
+        .section-title-main {
+            margin: 0 0 1rem;
+            font-family: inherit;
+            font-size: 2.25rem;
+            line-height: 2.5rem;
+            font-weight: 700;
+            color: #166534;
+            text-align: center;
+            letter-spacing: normal;
+        }
+
+        .section-subtitle-main {
+            margin: 0 auto 0;
+            max-width: 760px;
+            font-size: 1.25rem;
+            line-height: 1.75rem;
+            font-weight: 400;
+            color: #4b5563;
+            text-align: center;
+        }
+
+        .rayat-home-sensors-section {
+            padding: 1.75rem 0 4.5rem;
+            background: linear-gradient(180deg, #f8fafc 0%, #f0fdf4 100%);
+            border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+            overflow-x: hidden;
+        }
+
+        .rayat-home-technology-section {
+            padding: 2.5rem 0 3.25rem;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            overflow-x: hidden;
+        }
+
+        .rayat-home-technology-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .rayat-home-technology-title {
+            margin-bottom: 0;
+        }
+
+        .rayat-home-technology-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 1.5rem;
+        }
+
+        .rayat-home-technology-card {
+            appearance: none;
+            border: 0;
+            min-width: 0;
+            min-height: 240px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+            padding: 2.5rem;
+            border-radius: 3rem;
+            background: #ffffff;
+            color: #1f2937;
+            box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.45s ease, box-shadow 0.45s ease, background-color 0.45s ease, color 0.45s ease;
+        }
+
+        .rayat-home-technology-card:hover {
+            transform: scale(1.05);
+            background: #f0fdf4;
+        }
+
+        .rayat-home-technology-card:focus-visible {
+            outline: 3px solid rgba(22, 163, 74, 0.28);
+            outline-offset: 4px;
+        }
+
+        .rayat-home-technology-card.is-featured {
+            background: #15803d;
+            color: #ffffff;
+            box-shadow: 0 35px 60px -15px rgba(21, 128, 61, 0.3);
+            transform: scale(1.05);
+        }
+
+        .rayat-home-technology-card__icon {
+            font-size: 4.5rem;
+            line-height: 1;
+            color: #0f172a;
+        }
+
+        .rayat-home-technology-card__label {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 900;
+            line-height: 1.05;
+            letter-spacing: -0.04em;
+            text-transform: uppercase;
+            color: #1f2937;
+            text-wrap: balance;
+        }
+
+        .rayat-home-technology-card.is-featured .rayat-home-technology-card__icon,
+        .rayat-home-technology-card.is-featured .rayat-home-technology-card__label {
+            color: #ffffff;
+        }
+
+        .rayat-home-sensors-intro {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            margin: 0 auto 2.25rem;
+            max-width: 760px;
+            text-align: center;
+        }
+
+        .rayat-home-sensors-intro__title {
+            text-wrap: balance;
+        }
+
+        .rayat-home-sensors-intro__subtitle {
+            text-wrap: pretty;
+        }
+
+        .rayat-home-sensors-shell {
+            overflow-x: hidden;
+            border-radius: 2.5rem;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            background: rgba(255, 255, 255, 0.96);
+            padding: 1.5rem;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+        }
+
+        .rayat-home-sensors-head {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.85rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .rayat-home-sensors-title {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+            line-height: 1.35;
+            color: #1e293b;
+        }
+
+        .rayat-home-sensors-statuses {
+            display: flex;
+            justify-content: center;
+        }
+
+        .rayat-home-status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.7rem;
+            border-radius: 999px;
+            border: 1px solid rgba(34, 197, 94, 0.18);
+            background: #ffffff;
+            padding: 0.78rem 1.15rem;
+            color: #166534;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .rayat-home-status-badge.is-offline {
+            border-color: rgba(248, 113, 113, 0.24);
+            background: #fff7f7;
+            color: #b91c1c;
+        }
+
+        @keyframes rayatHomeStatusPulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.26);
+            }
+
+            50% {
+                box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.08);
+            }
+        }
+
+        .rayat-home-status-badge__dot {
+            width: 11px;
+            height: 11px;
+            flex: 0 0 11px;
+            border-radius: 999px;
+            background: #22c55e;
+            animation: rayatHomeStatusPulse 1.8s ease-in-out infinite;
+        }
+
+        .rayat-home-status-badge.is-offline .rayat-home-status-badge__dot {
+            background: #ef4444;
+            animation: none;
+        }
+
+        .rayat-home-status-badge__state {
+            font-size: 0.95rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .rayat-home-sensor-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 1rem;
+            overflow-x: hidden;
+        }
+
+        .rayat-home-sensor-grid .rayat-metric-card {
+            min-width: 0;
+            height: 100%;
+        }
+
+        .rayat-home-sensors-cta {
+            display: flex;
+            justify-content: center;
+            margin-top: 1.5rem;
+        }
+
+        .rayat-home-demo-cta {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 56px;
+            min-width: min(100%, 320px);
+            border-radius: 1.25rem;
+            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+            padding: 0.95rem 1.4rem;
+            font-size: 0.98rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            color: #ffffff;
+            text-transform: uppercase;
+            text-decoration: none;
+            animation: pulse-glow 2.5s ease-in-out infinite;
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+
+        .rayat-home-demo-cta:hover {
+            transform: translateY(-1px);
+            background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+        }
+
+        .rayat-home-demo-cta--whatsapp {
+            min-width: min(100%, 420px);
+            flex-direction: column;
+            gap: 0.45rem;
+            padding: 1rem 1.5rem 1.15rem;
+            text-transform: none;
+            letter-spacing: normal;
+            line-height: 1.2;
+            text-align: center;
+        }
+
+        .rayat-home-demo-cta__icon-wrap {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.6rem;
+            height: 2.6rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        .rayat-home-demo-cta__icon {
+            width: 1.3rem;
+            height: 1.3rem;
+        }
+
+        .rayat-home-demo-cta__title {
+            font-size: 1.05rem;
+            font-weight: 800;
+        }
+
+        .rayat-home-demo-cta__note {
+            font-size: 0.86rem;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.92);
+        }
+
+        .rayat-header-refresh-button {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 58px;
+            min-width: 58px;
+            height: 58px;
+            border-radius: 1.35rem;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(241, 245, 249, 0.98) 100%);
+            color: #0f172a;
+            box-shadow:
+                0 18px 35px rgba(15, 23, 42, 0.12),
+                0 8px 16px rgba(15, 23, 42, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.98),
+                inset 0 -8px 14px rgba(148, 163, 184, 0.16);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .rayat-header-refresh-button::before {
+            content: '';
+            position: absolute;
+            inset: 1px;
+            border-radius: inherit;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.12) 100%);
+            pointer-events: none;
+        }
+
+        .rayat-header-refresh-button:hover {
+            transform: translateY(-2px);
+            border-color: rgba(34, 197, 94, 0.28);
+            box-shadow:
+                0 22px 42px rgba(15, 23, 42, 0.14),
+                0 10px 18px rgba(34, 197, 94, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.98),
+                inset 0 -8px 14px rgba(148, 163, 184, 0.12);
+        }
+
+        .rayat-header-refresh-button:active {
+            transform: translateY(0) scale(0.96);
+        }
+
+        .rayat-header-refresh-button:disabled {
+            cursor: progress;
+        }
+
+        .rayat-header-refresh-button__icon {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+        }
+
+        .rayat-header-refresh-button__icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .rayat-header-refresh-button.is-loading .rayat-header-refresh-button__icon {
+            animation: rayatRefreshSpin 0.95s linear infinite;
+        }
+
+        .rayat-section-refresh-button {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 52px;
+            min-width: 52px;
+            height: 52px;
+            border-radius: 1.2rem;
+            border: 1px solid rgba(148, 163, 184, 0.24);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%);
+            color: #0f172a;
+            box-shadow:
+                0 16px 32px rgba(15, 23, 42, 0.12),
+                0 6px 14px rgba(15, 23, 42, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.98),
+                inset 0 -7px 12px rgba(148, 163, 184, 0.12);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .rayat-section-refresh-button::before {
+            content: '';
+            position: absolute;
+            inset: 1px;
+            border-radius: inherit;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.08) 100%);
+            pointer-events: none;
+        }
+
+        .rayat-section-refresh-button:hover {
+            transform: translateY(-2px);
+            border-color: rgba(34, 197, 94, 0.28);
+            box-shadow:
+                0 18px 36px rgba(15, 23, 42, 0.14),
+                0 9px 16px rgba(34, 197, 94, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.98),
+                inset 0 -7px 12px rgba(148, 163, 184, 0.08);
+        }
+
+        .rayat-section-refresh-button:active {
+            transform: translateY(0) scale(0.96);
+        }
+
+        .rayat-section-refresh-button:disabled {
+            cursor: progress;
+        }
+
+        .rayat-section-refresh-button__icon {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+        }
+
+        .rayat-section-refresh-button__icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .rayat-section-refresh-button.is-loading .rayat-section-refresh-button__icon {
+            animation: rayatRefreshSpin 0.95s linear infinite;
+        }
+
+        .rayat-demo-section-heading {
+            margin: 0 0 1.5rem;
+        }
+
+        .rayat-demo-section-heading__row {
+            display: flex;
+            align-items: center;
+            min-width: 0;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .rayat-demo-section-heading__meta {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.85rem;
+            flex: 0 0 auto;
+            line-height: 1;
+        }
+
+        .rayat-demo-section-heading__title {
+            margin: 0;
+            display: flex;
+            align-items: center;
+            flex: 1 1 auto;
+            min-width: 0;
+            font-size: clamp(1.35rem, 3.2vw, 2.2rem);
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: -0.04em;
+            text-transform: uppercase;
+            color: #1e293b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .rayat-demo-section-heading__badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.55rem;
+            min-width: 0;
+            padding: 0.8rem 1rem;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
+            box-shadow: 0 18px 34px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+            white-space: nowrap;
+            line-height: 1;
+        }
+
+        .rayat-demo-section-heading__badge.is-online {
+            border-color: rgba(34, 197, 94, 0.18);
+        }
+
+        .rayat-demo-section-heading__badge.is-offline {
+            border-color: rgba(239, 68, 68, 0.18);
+        }
+
+        .rayat-demo-section-heading__status {
+            width: 12px;
+            height: 12px;
+            flex: 0 0 12px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 0 5px rgba(148, 163, 184, 0.12);
+        }
+
+        .rayat-demo-section-heading__status.is-online {
+            background: #22c55e;
+            box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.14), 0 0 18px rgba(34, 197, 94, 0.24);
+        }
+
+        .rayat-demo-section-heading__status.is-offline {
+            background: #ef4444;
+            box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.12), 0 0 18px rgba(239, 68, 68, 0.2);
+        }
+
+        .rayat-demo-section-heading__status.is-loading {
+            background: #94a3b8;
+            box-shadow: 0 0 0 5px rgba(148, 163, 184, 0.12), 0 0 18px rgba(148, 163, 184, 0.18);
+            animation: rayatSensorStatusBlink 1.8s ease-in-out infinite;
+        }
+
+        .rayat-demo-section-heading__badge-text {
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.86rem;
+            font-weight: 800;
+            color: #0f172a;
+            line-height: 1;
+        }
+
+        .rayat-demo-section-heading__separator {
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.88rem;
+            font-weight: 900;
+            color: #94a3b8;
+            line-height: 1;
+        }
+
+        .rayat-demo-section-heading__timestamp {
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.84rem;
+            font-weight: 700;
+            color: #64748b;
+            line-height: 1;
+        }
+
+        @keyframes rayatSensorStatusBlink {
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.45;
+                transform: scale(0.9);
+            }
+        }
+
+        @keyframes rayatRefreshSpin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .rayat-range-track-shell {
+            padding-inline: 10px;
+        }
+
+        .rayat-range-track {
+            position: relative;
+            height: 14px;
+            border-radius: 999px;
+            overflow: visible;
+            box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.15);
+        }
+
+        .rayat-range-pointer {
+            position: absolute;
+            top: -5px;
+            transform: translateX(-50%);
+            z-index: 1;
+            pointer-events: none;
+            width: 0;
+            height: 0;
+            border-left: 9px solid transparent;
+            border-right: 9px solid transparent;
+            border-top: 18px solid #0f172a;
+            filter: drop-shadow(0 2px 5px rgba(15, 23, 42, 0.26));
+        }
+
+        .rayat-dashboard-alert-feed {
+            background: linear-gradient(135deg, #f8fafc 0%, #ecfeff 100%);
+            border: 1px solid rgba(14, 165, 233, 0.12);
+            border-radius: 2rem;
+            padding: 1.5rem;
+        }
+
+        .rayat-map-shell {
+            isolation: isolate;
+        }
+
+        .rayat-home-map-card {
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .rayat-home-map-header {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .rayat-home-map-layout {
+            display: grid;
+            grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+            gap: 1rem;
+            align-items: stretch;
+        }
+
+        .rayat-home-map-legend {
+            position: relative;
+            z-index: 1;
+            align-self: stretch;
+        }
+
+        .rayat-home-map-canvas {
+            position: relative;
+            min-width: 0;
+        }
+
+        .rayat-home-map-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            max-width: 100%;
+            background: #ea580c;
+            color: #fff;
+            padding: 0.85rem 1.35rem;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 900;
+            line-height: 1.2;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            box-shadow: 0 18px 36px rgba(234, 88, 12, 0.22);
+            text-align: center;
+        }
+
+        .rayat-contact-map-shell {
+            position: relative;
+            min-height: 300px;
+            z-index: 1;
+        }
+
+        /* RAYAT FIX - mantiene il visual mani interamente visibile nella sezione contatti */
+        .rayat-founder-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+        }
+
+        .rayat-founder-copy {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .rayat-founder-visual {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 clamp(120px, 18vw, 180px);
+            min-height: 120px;
+            pointer-events: none;
+        }
+
+        .rayat-founder-visual-emoji {
+            display: block;
+            font-size: clamp(5rem, 8vw, 8rem);
+            line-height: 1;
+            opacity: 0.22;
+            transform: rotate(12deg);
+        }
+
+        .rayat-whatsapp-panel {
+            padding: 2.5rem 2rem;
+            border-radius: 2rem;
+            background:
+                radial-gradient(circle at top right, rgba(37, 211, 102, 0.12), transparent 26%),
+                linear-gradient(135deg, #f6fffa 0%, #ecfdf5 100%);
+            border: 1px solid rgba(34, 197, 94, 0.12);
+            box-shadow: 0 24px 54px rgba(21, 128, 61, 0.08);
+        }
+
+        .rayat-whatsapp-float {
+            position: fixed;
+            right: 24px;
+            bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+            z-index: 70;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            height: 56px;
+            border-radius: 999px;
+            background: #25D366;
+            color: white;
+            box-shadow: 0 16px 30px rgba(37, 211, 102, 0.32);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .rayat-whatsapp-float:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 20px 36px rgba(37, 211, 102, 0.38);
+        }
+
+        .rayat-footer-primary-nav {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+            margin: 1.25rem 0 1.75rem;
+        }
+
+        .rayat-footer-primary-link {
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            transition: color 0.2s ease;
+        }
+
+        .rayat-footer-primary-link:hover {
+            color: #f97316;
+        }
+
+        .rayat-profile-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.72fr);
+            gap: 2rem;
+            align-items: start;
+        }
+
+        .rayat-profile-card {
+            background: #fff;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            border-radius: 2rem;
+            padding: 2rem;
+            box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+        }
+
+        .rayat-profile-hero {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        .rayat-profile-avatar {
+            width: 96px;
+            min-width: 96px;
+            height: 96px;
+            border-radius: 28px;
+            overflow: hidden;
+            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+        }
+
+        .rayat-profile-avatar-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+            display: block;
+        }
+
+        .rayat-profile-avatar-fallback {
+            font-size: 2rem;
+            font-weight: 900;
+            color: #166534;
+            letter-spacing: 0.06em;
+        }
+
+        .rayat-profile-sidebar {
+            position: sticky;
+            top: calc(var(--safe-top) + 96px);
+        }
+
+        .rayat-profile-meta-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.9rem 0;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+            font-size: 0.96rem;
+            color: #475569;
+        }
+
+        .rayat-profile-meta-row:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .rayat-profile-meta-row strong {
+            color: #0f172a;
+            font-weight: 900;
+            text-align: right;
+        }
+
+        .rayat-profile-sensors-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1.25rem;
+        }
+
+        .rayat-profile-sensor-card {
+            border-radius: 1.75rem;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            padding: 1.4rem;
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.05);
+        }
+
+        .rayat-footer-divider {
+            color: rgba(100, 116, 139, 0.45);
+            font-weight: 700;
+        }
+
+        .rayat-footer-legal-nav {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
+
+        .rayat-footer-legal-nav a {
+            color: inherit;
+        }
+
+        .rayat-soft-banner {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1.5rem;
+            border-radius: 2rem;
+            background: linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%);
+            border: 1px solid rgba(245, 158, 11, 0.18);
+            box-shadow: 0 16px 36px rgba(245, 158, 11, 0.08);
+        }
+
+        .rayat-water-compact {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 1rem;
+            padding: 1.5rem;
+            border-radius: 2rem;
+            background: #f8fafc;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+        }
+
+        .rayat-water-hectares {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .rayat-water-hectares-input {
+            flex: 1;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            padding: 0 1rem;
+            border-radius: 1.5rem;
+            background: white;
+            border: 2px solid rgba(226, 232, 240, 0.9);
+        }
+
+        .rayat-water-stepper {
+            width: 52px;
+            min-width: 52px;
+            height: 52px;
+            border-radius: 16px;
+            background: #0f172a;
+            color: white;
+            font-size: 28px;
+            font-weight: 900;
+            line-height: 1;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+        }
+
+        #contact-map {
+            min-height: 300px;
+            height: 320px;
+            position: relative;
+            z-index: 1;
+        }
+
+        @media (max-width: 768px) {
+            .rayat-desktop-nav {
+                display: none !important;
+            }
+
+            body {
+                padding-top: 0;
+            }
+
+            .rayat-mobile-toggle {
+                display: inline-flex !important;
+                width: var(--rayat-touch-size);
+                height: var(--rayat-touch-size);
+            }
+
+            .container {
+                padding-left: 1rem !important;
+                padding-right: 1rem !important;
+            }
+
+            .rayat-auth-screen,
+            .rayat-register-screen,
+            .rayat-profile-page,
+            .rayat-demo-page,
+            .rayat-contact-page {
+                padding-top: 1rem;
+            }
+
+            .rayat-auth-card,
+            .rayat-register-card {
+                border-radius: var(--rayat-mobile-radius);
+                padding-left: 1rem !important;
+                padding-right: 1rem !important;
+            }
+
+            .rayat-register-hero {
+                padding: 1.25rem 1rem !important;
+            }
+
+            .rayat-register-body {
+                gap: 1.4rem;
+            }
+
+            .rayat-register-section {
+                padding: 1rem !important;
+            }
+
+            .rayat-register-crop-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+
+            .text-7xl {
+                font-size: 3rem !important;
+                line-height: 1.05 !important;
+            }
+
+            .text-6xl {
+                font-size: 2.75rem !important;
+                line-height: 1.08 !important;
+            }
+
+            .text-5xl {
+                font-size: 2.3rem !important;
+                line-height: 1.1 !important;
+            }
+
+            .text-4xl {
+                font-size: 1.85rem !important;
+                line-height: 1.15 !important;
+            }
+
+            .text-3xl {
+                font-size: 1.55rem !important;
+                line-height: 1.2 !important;
+            }
+
+            .text-2xl {
+                font-size: 1.3rem !important;
+                line-height: 1.25 !important;
+            }
+
+            .text-\[10rem\],
+            .md\:text-\[12rem\] {
+                font-size: 7.5rem !important;
+            }
+
+            .grid-cols-2,
+            .lg\:grid-cols-4,
+            .lg\:grid-cols-3,
+            .lg\:grid-cols-2,
+            .xl\:grid-cols-3,
+            .md\:grid-cols-2 {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+
+            .rayat-sensor-card-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.85rem !important;
+            }
+
+            .rayat-sensor-card-grid .rayat-metric-card {
+                min-width: 0;
+                padding: 1rem;
+            }
+
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-1 { order: 1; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-2 { order: 2; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-3 { order: 3; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-4 { order: 4; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-5 { order: 5; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-6 { order: 6; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-7 { order: 7; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-8 { order: 8; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-9 { order: 9; }
+            .rayat-sensor-card-grid .rayat-metric-card--mobile-order-10 { order: 10; }
+
+            .md\:flex-row,
+            .lg\:flex-row {
+                flex-direction: column !important;
+            }
+
+            table {
+                min-width: 720px;
+            }
+
+            .overflow-x-auto {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .rayat-hero {
+                padding: 5rem 0 4rem;
+            }
+
+            .rayat-hero-title {
+                max-width: 100%;
+                font-size: clamp(1.7rem, 7.1vw, 2.45rem);
+                line-height: 1.08;
+                gap: 0.28rem;
+            }
+
+            .rayat-hero-title-line--primary,
+            .rayat-hero-title-line--secondary,
+            .rayat-hero-title-line--accent {
+                max-width: 100%;
+            }
+
+            .rayat-hero-subtitle {
+                font-size: 17px;
+                width: min(100%, 90%);
+                line-height: 1.55;
+            }
+
+            .rayat-demo-shell {
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+            }
+
+            .rayat-demo-nav-grid {
+                gap: 0.85rem !important;
+                margin-bottom: 1.2rem !important;
+            }
+
+            .rayat-demo-nav-grid button {
+                min-height: 126px;
+                padding: 1.25rem 0.9rem !important;
+                border-radius: 1.6rem !important;
+            }
+
+            .rayat-demo-nav-grid button .text-7xl {
+                font-size: 3.25rem !important;
+                margin-bottom: 0.9rem !important;
+            }
+
+            .rayat-demo-panel {
+                padding: 1.2rem !important;
+                border-radius: 1.8rem !important;
+            }
+
+            .rayat-monitoring-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 1rem;
+                margin-bottom: 1.4rem;
+            }
+
+            .rayat-monitoring-toolbar__copy {
+                text-align: center;
+            }
+
+            .rayat-monitoring-toolbar__title {
+                font-size: clamp(2.25rem, 9vw, 3.1rem);
+                margin-bottom: 0.55rem;
+            }
+
+            .rayat-monitoring-toolbar__subtitle {
+                font-size: 0.82rem;
+                letter-spacing: 0.16em;
+            }
+
+            .rayat-monitoring-toolbar__controls {
+                width: 100%;
+                justify-content: space-between;
+                align-items: stretch;
+                gap: 0.8rem;
+            }
+
+            .rayat-monitoring-toolbar--demo-only .rayat-monitoring-toolbar__copy {
+                text-align: center;
+            }
+
+            .rayat-home-sensors-shell {
+                border-radius: 1.6rem;
+                padding: 1rem;
+            }
+
+            .rayat-home-technology-section {
+                padding: 2rem 0 2.25rem;
+            }
+
+            .rayat-home-technology-title {
+                margin-bottom: 0;
+            }
+
+            .rayat-home-technology-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 1rem;
+            }
+
+            .rayat-home-technology-card {
+                min-height: 188px;
+                gap: 1rem;
+                padding: 1.5rem;
+            }
+
+            .rayat-home-technology-card__label {
+                font-size: 1.15rem;
+            }
+
+            .rayat-home-sensors-intro {
+                margin-bottom: 1.75rem;
+                gap: 0.85rem;
+            }
+
+            .rayat-home-sensors-intro__subtitle {
+                font-size: 1.125rem;
+                line-height: 1.7;
+            }
+
+            .rayat-home-sensors-title {
+                margin-bottom: 0;
+            }
+
+            .rayat-home-sensor-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.75rem;
+            }
+
+            .rayat-home-status-badge {
+                width: 100%;
+            }
+
+            .rayat-home-demo-cta {
+                width: 100%;
+                min-width: 0;
+            }
+
+            .rayat-monitoring-status-pill {
+                flex: 1;
+                min-width: 0;
+                padding: 0.85rem 0.95rem;
+                border-radius: 1.2rem;
+            }
+
+            .rayat-monitoring-status-pill__copy strong {
+                font-size: 10px;
+                letter-spacing: 0.14em;
+            }
+
+            .rayat-monitoring-status-pill__copy span {
+                font-size: 0.8rem;
+            }
+
+            .rayat-header-refresh-button {
+                width: 54px;
+                min-width: 54px;
+                height: 54px;
+                border-radius: 1.2rem;
+            }
+
+            .rayat-demo-section-heading {
+                margin-bottom: 1rem;
+            }
+
+            .rayat-demo-section-heading__row {
+                gap: 0.55rem;
+            }
+
+            .rayat-demo-section-heading__meta {
+                gap: 0.55rem;
+            }
+
+            .rayat-demo-section-heading__title {
+                font-size: clamp(0.92rem, 4.5vw, 1.2rem);
+            }
+
+            .rayat-demo-section-heading__badge {
+                gap: 0.42rem;
+                padding: 0.68rem 0.82rem;
+            }
+
+            .rayat-demo-section-heading__badge-text {
+                font-size: 0.74rem;
+            }
+
+            .rayat-section-refresh-button {
+                width: 48px;
+                min-width: 48px;
+                height: 48px;
+                border-radius: 1rem;
+            }
+
+            .rayat-demo-section-heading__status {
+                width: 11px;
+                height: 11px;
+                flex-basis: 11px;
+            }
+
+            .rayat-demo-section-heading__separator {
+                font-size: 0.76rem;
+            }
+
+            .rayat-demo-section-heading__timestamp {
+                font-size: 0.72rem;
+            }
+
+            .rayat-water-compact {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+                border-radius: 1.5rem;
+            }
+
+            .rayat-founder-card {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .rayat-founder-visual {
+                width: 100%;
+                justify-content: flex-end;
+                min-height: 96px;
+            }
+
+            .rayat-founder-visual-emoji {
+                font-size: clamp(4.25rem, 18vw, 6rem);
+            }
+
+            .rayat-home-map-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .rayat-home-map-legend {
+                position: static;
+                margin: 0;
+            }
+
+            .rayat-home-map-card {
+                padding: 0.9rem;
+                gap: 0.85rem;
+            }
+
+            .rayat-home-map-header {
+                justify-content: stretch;
+            }
+
+            .rayat-home-map-badge {
+                width: 100%;
+                border-radius: 1.25rem;
+                padding: 0.95rem 1rem;
+                font-size: 11px;
+                letter-spacing: 0.12em;
+            }
+
+            .rayat-metric-card-head {
+                align-items: flex-start;
+                gap: 0.75rem;
+            }
+
+            .rayat-metric-card-header-main {
+                flex-basis: 100%;
+            }
+
+            .rayat-alert-badge {
+                align-self: flex-start;
+                white-space: normal;
+                line-height: 1.25;
+            }
+
+            .rayat-history-card {
+                padding: 1.5rem;
+                border-radius: 2rem;
+            }
+
+            .rayat-history-head-cell {
+                padding: 1rem 0.85rem;
+                font-size: 11px;
+            }
+
+            .rayat-history-time-cell,
+            .rayat-history-status-cell,
+            .rayat-history-value-cell {
+                padding: 1rem 0.85rem;
+            }
+
+            .rayat-history-time-primary {
+                font-size: 0.92rem;
+            }
+
+            .rayat-history-time-secondary {
+                font-size: 0.8rem;
+            }
+
+            .rayat-history-value-cell {
+                font-size: 1.08rem;
+            }
+
+            .rayat-history-value-cell--md {
+                font-size: 1.14rem;
+            }
+
+            .rayat-history-value-cell--lg {
+                font-size: 1.2rem;
+            }
+
+            .rayat-footer-primary-nav {
+                justify-content: center;
+                gap: 0.7rem 1rem;
+                margin: 1rem 0 1.35rem;
+            }
+
+            .rayat-footer-primary-link {
+                width: auto;
+                padding: 0;
+                font-size: 15px;
+            }
+
+            .rayat-footer-divider {
+                display: inline;
+            }
+
+            .rayat-footer-legal-nav {
+                gap: 0.9rem 1.15rem;
+                font-size: 10px;
+                letter-spacing: 0.12em;
+            }
+
+            .rayat-profile-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .rayat-profile-card {
+                padding: 1.5rem;
+                border-radius: 1.75rem;
+            }
+
+            .rayat-profile-page .text-5xl,
+            .rayat-profile-page .md\:text-6xl {
+                font-size: 2rem !important;
+                line-height: 1.08 !important;
+            }
+
+            .rayat-contact-grid {
+                gap: 1.2rem !important;
+            }
+
+            .rayat-contact-page .rounded-3xl {
+                border-radius: 1.5rem !important;
+            }
+
+            .rayat-contact-page .shadow-xl,
+            .rayat-contact-page .shadow-2xl {
+                box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08) !important;
+            }
+
+            .rayat-profile-hero {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .rayat-profile-sidebar {
+                position: static;
+                top: auto;
+            }
+
+            .rayat-profile-sensors-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .rayat-profile-menu {
+                position: fixed;
+                top: calc(var(--safe-top, 0px) + 84px);
+                right: 1rem;
+                left: 1rem;
+                width: auto;
+            }
+
+            #map,
+            #home-map,
+            #contact-map,
+            #map-registration {
+                height: 360px !important;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .grid-cols-2,
+            .lg\:grid-cols-4,
+            .lg\:grid-cols-3,
+            .lg\:grid-cols-2,
+            .xl\:grid-cols-3,
+            .md\:grid-cols-2 {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+
+            .text-7xl {
+                font-size: 2.35rem !important;
+            }
+
+            .text-6xl {
+                font-size: 2.1rem !important;
+            }
+
+            .text-5xl {
+                font-size: 1.8rem !important;
+            }
+
+            .text-4xl {
+                font-size: 1.55rem !important;
+            }
+
+            .text-3xl {
+                font-size: 1.3rem !important;
+            }
+
+            .text-2xl {
+                font-size: 1.15rem !important;
+            }
+
+            .text-xl {
+                font-size: 1rem !important;
+            }
+
+            .text-\[10rem\],
+            .md\:text-\[12rem\] {
+                font-size: 5.75rem !important;
+            }
+
+            .rayat-register-crop-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            .rayat-register-crop-grid button {
+                min-height: 50px;
+                padding: 0.9rem 1rem !important;
+            }
+
+            .rayat-auth-card,
+            .rayat-register-card,
+            .rayat-profile-card,
+            .rayat-demo-panel {
+                border-radius: 1.25rem !important;
+            }
+
+            .rayat-demo-nav-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            .rayat-demo-nav-grid button {
+                min-height: 108px;
+            }
+
+            .rayat-sensor-card-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.75rem !important;
+            }
+
+            .rayat-home-sensor-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .rayat-home-status-badge {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .rayat-home-demo-cta {
+                width: 100%;
+            }
+
+            .rayat-home-demo-cta--whatsapp {
+                min-width: 100%;
+                padding-left: 1.15rem;
+                padding-right: 1.15rem;
+            }
+
+            .rayat-home-technology-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .rayat-home-technology-card {
+                min-height: 168px;
+                gap: 0.85rem;
+                padding: 1.35rem 1rem;
+            }
+
+            .rayat-home-technology-card__icon {
+                font-size: 3rem;
+            }
+
+            .rayat-home-technology-card__label {
+                font-size: 0.98rem;
+                line-height: 1.12;
+            }
+
+            .rayat-home-demo-cta__title {
+                font-size: 0.94rem;
+            }
+
+            .rayat-home-demo-cta__note {
+                font-size: 0.76rem;
+            }
+
+            .rayat-sensor-card-grid .rayat-metric-card {
+                padding: 0.9rem;
+            }
+
+            .rayat-demo-panel .text-4xl,
+            .rayat-demo-panel .text-7xl {
+                line-height: 1.05 !important;
+            }
+
+            .rayat-profile-meta-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.35rem;
+            }
+
+            .rayat-profile-meta-row strong {
+                text-align: left;
+            }
+
+            .rayat-mobile-actions > *,
+            form button,
+            form input[type="submit"],
+            .rayat-modal-card button {
+                width: 100%;
+            }
+
+            header button,
+            header a,
+            #lang-menu button {
+                width: auto !important;
+            }
+
+            .flex.gap-4.justify-center {
+                flex-direction: column !important;
+            }
+
+            #map,
+            #home-map,
+            #contact-map,
+            #map-registration {
+                height: 280px !important;
+            }
+
+            .rayat-modal-card {
+                width: 100% !important;
+                max-width: none !important;
+                min-height: 100vh;
+                border-radius: 0 !important;
+                padding-top: calc(1.5rem + env(safe-area-inset-top)) !important;
+                padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)) !important;
+            }
+
+            .rayat-whatsapp-panel {
+                padding: 2rem 1.25rem;
+            }
+
+            .rayat-whatsapp-float {
+                right: 18px;
+                bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+            }
+
+            .rayat-water-hectares {
+                gap: 0.5rem;
+            }
+
+            .rayat-water-hectares-input {
+                min-height: 68px;
+            }
+
+            .rayat-water-stepper {
+                width: 48px;
+                min-width: 48px;
+                height: 48px;
+            }
+
+            .rayat-hero-title {
+                font-size: clamp(2.05rem, 10vw, 2.45rem);
+                line-height: 1.06;
+            }
+
+            .rayat-hero-subtitle {
+                font-size: 16px;
+                width: 100%;
+            }
+
+            .rayat-metric-card {
+                padding: 1.25rem;
+            }
+
+            .rayat-metric-card-title {
+                font-size: 11px;
+                letter-spacing: 0.16em;
+            }
+
+            .rayat-metric-card-state,
+            .rayat-metric-card-range {
+                font-size: 0.92rem;
+            }
+
+            .rayat-alert-badge {
+                font-size: 10px;
+                padding: 0.4rem 0.68rem;
+            }
+
+            .rayat-home-map-card {
+                padding: 0.75rem;
+            }
+
+            .rayat-home-map-badge {
+                font-size: 10px;
+                padding: 0.82rem 0.9rem;
+                letter-spacing: 0.1em;
+            }
+
+            .rayat-footer-primary-nav,
+            .rayat-footer-legal-nav {
+                gap: 0.75rem;
+            }
+
+            .rayat-footer-divider {
+                display: none;
+            }
+
+            #contact-map {
+                min-height: 220px;
+                height: 220px;
+            }
+        }

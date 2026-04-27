@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 
 const { query, withTransaction } = require('../config/database');
+const { buildDatabaseUnavailableResponse } = require('./database-http');
 
 const DEFAULT_RESET_EXPIRY_MINUTES = 45;
 const GENERIC_FORGOT_PASSWORD_RESPONSE = {
@@ -299,6 +300,12 @@ function attachPasswordResetRoutes(router, options = {}) {
             res.json(GENERIC_FORGOT_PASSWORD_RESPONSE);
         } catch (error) {
             console.error('Forgot password error:', error);
+            const databaseResponse = buildDatabaseUnavailableResponse(error, {
+                message: 'Recupero password temporaneamente non disponibile'
+            });
+            if (databaseResponse) {
+                return res.status(databaseResponse.statusCode).json(databaseResponse.body);
+            }
             if (error.statusCode === 400) {
                 return res.status(400).json({ error: error.message });
             }
@@ -322,6 +329,12 @@ function attachPasswordResetRoutes(router, options = {}) {
             });
         } catch (error) {
             console.error('Reset password error:', error);
+            const databaseResponse = buildDatabaseUnavailableResponse(error, {
+                message: 'Reimpostazione password temporaneamente non disponibile'
+            });
+            if (databaseResponse) {
+                return res.status(databaseResponse.statusCode).json(databaseResponse.body);
+            }
             res.status(error.statusCode || 500).json({
                 error: error.statusCode ? error.message : 'Errore interno del server'
             });

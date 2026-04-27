@@ -4,7 +4,7 @@
  *
  * Roles:
  *   super_admin – full access
- *   operator_admin – gestisce registrazioni/clienti/sensori, ma non gli utenti admin
+ *   admin – gestisce registrazioni/clienti/sensori, ma non gli utenti admin
  */
 const express = require('express');
 const bcrypt = require('bcrypt');
@@ -31,6 +31,7 @@ const {
     signAdminToken,
     ADMIN_SESSION_COOKIE
 } = require('../utils/admin-auth');
+const { buildDatabaseUnavailableResponse } = require('../utils/database-http');
 const { attachPasswordResetRoutes } = require('../utils/password-reset');
 const { buildAnalyticsSummary } = require('../utils/analytics');
 
@@ -80,6 +81,22 @@ function sendAdminError(res, statusCode, message, errorCode = null) {
         payload.errorCode = errorCode;
     }
     return res.status(statusCode).json(payload);
+}
+
+function sendAdminOperationalError(res, error, options = {}) {
+    const {
+        fallbackMessage = 'Errore interno del server',
+        databaseMessage = 'Servizio amministrazione temporaneamente non disponibile'
+    } = options;
+    const databaseResponse = buildDatabaseUnavailableResponse(error, {
+        message: databaseMessage
+    });
+
+    if (databaseResponse) {
+        return res.status(databaseResponse.statusCode).json(databaseResponse.body);
+    }
+
+    return sendAdminError(res, 500, fallbackMessage);
 }
 
 function extractBearerToken(req) {
@@ -670,6 +687,12 @@ const isAdminRole = async (req, res, next) => {
         req.adminUser = await resolveAdminFromToken(token);
         next();
     } catch (error) {
+        const databaseResponse = buildDatabaseUnavailableResponse(error, {
+            message: 'Servizio amministrazione temporaneamente non disponibile'
+        });
+        if (databaseResponse) {
+            return res.status(databaseResponse.statusCode).json(databaseResponse.body);
+        }
         const statusCode = error.statusCode || 403;
         return sendAdminError(
             res,
@@ -713,7 +736,7 @@ router.get('/health', isAdminRole, async (_req, res) => { // RAYAT-FIX
         res.status(payload.db === 'ok' ? 200 : 503).json(payload); // RAYAT-FIX
     } catch (error) { // RAYAT-FIX
         console.error('Admin health error:', error); // RAYAT-FIX
-        res.status(500).json({ error: 'Errore interno del server' }); // RAYAT-FIX
+        return sendAdminOperationalError(res, error); // RAYAT-FIX
     } // RAYAT-FIX
 }); // RAYAT-FIX
 
@@ -772,7 +795,7 @@ router.post('/login', async (req, res) => {
         });
     } catch (error) {
         console.error('Admin login error:', error);
-        sendAdminError(res, 500, 'Errore interno del server');
+        return sendAdminOperationalError(res, error);
     }
 });
 
@@ -830,6 +853,12 @@ router.get('/session', async (req, res) => {
         });
     } catch (error) {
         clearAdminSessionCookie(res, req);
+        const databaseResponse = buildDatabaseUnavailableResponse(error, {
+            message: 'Servizio amministrazione temporaneamente non disponibile'
+        });
+        if (databaseResponse) {
+            return res.status(databaseResponse.statusCode).json(databaseResponse.body);
+        }
         sendAdminError(
             res,
             error.statusCode || 403,
@@ -896,7 +925,10 @@ router.get('/stats', isAdminRole, async (req, res) => {
         });
     } catch (error) {
         console.error('Admin stats error:', error);
-        res.status(500).json({ error: 'Errore nel recupero statistiche' });
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore nel recupero statistiche',
+            databaseMessage: 'Statistiche amministrazione temporaneamente non disponibili'
+        });
     }
 });
 
@@ -916,7 +948,10 @@ router.get('/analytics/summary', isAdminRole, isSuperAdmin, async (req, res) => 
         });
     } catch (error) {
         console.error('Get analytics summary error:', error);
-        res.status(500).json({ error: 'Errore nel recupero analytics' });
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore nel recupero analytics',
+            databaseMessage: 'Analytics amministrazione temporaneamente non disponibili'
+        });
     }
 });
 
@@ -1959,8 +1994,8 @@ router.post('/users', isAdminRole, isSuperAdmin, async (req, res) => {
         if (!name || !email || !password) {
             return res.status(400).json({ error: 'Nome, email e password sono obbligatori' });
         }
-        if (!['operator_admin', 'super_admin'].includes(role)) {
-            return res.status(400).json({ error: 'Ruolo non valido. Usa "operator_admin" o "super_admin".' });
+        if (!['admin', 'super_admin'].includes(role)) {
+            return res.status(400).json({ error: 'Ruolo non valido. Usa "admin" o "super_admin".' });
         }
 
         const existing = await query('SELECT id FROM users WHERE email = ?', [email]);

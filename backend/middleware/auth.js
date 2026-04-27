@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { query, getTableColumns } = require('../config/database');
 const { normalizeAdminRole } = require('../utils/admin-auth');
+const { sendDatabaseAwareError } = require('../utils/database-http');
 
 // Middleware per verificare JWT token
 function authenticateToken(req, res, next) {
@@ -111,7 +112,10 @@ async function checkSubscription(req, res, next) {
         next();
     } catch (err) {
         console.error('Check subscription error:', err);
-        res.status(500).json({ error: 'Errore interno del server' });
+        return sendDatabaseAwareError(res, err, {
+            fallbackMessage: 'Errore interno del server',
+            databaseMessage: 'Verifica abbonamento temporaneamente non disponibile'
+        });
     }
 }
 

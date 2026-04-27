@@ -79,8 +79,10 @@ app.use('/api/iot/upload', iotLimiter);
 app.use('/api/iot', require('./routes/iot'));
 app.use('/api/admin', require('./routes/admin'));
 
-const adminIndexPath = path.join(__dirname, '../admin/index.html');
-const publicIndexPath = path.join(__dirname, '../index.html');
+const webRootPath = path.join(__dirname, '../web');
+const adminRootPath = path.join(webRootPath, 'admin');
+const adminIndexPath = path.join(adminRootPath, 'index.html');
+const publicIndexPath = path.join(webRootPath, 'index.html');
 
 async function requireProtectedAdminPage(req, res, next) {
     const token = extractAdminSessionToken(req);
@@ -144,11 +146,10 @@ app.get(
 );
 
 // Admin Panel static files
-app.use('/admin', express.static(path.join(__dirname, '../admin')));
+app.use('/admin', express.static(adminRootPath));
 
-// Public site static files (icons, manifest, sw.js, etc.)
-app.use('/icons', express.static(path.join(__dirname, '../icons')));
-app.use(express.static(path.join(__dirname, '../'), {
+// Canonical public frontend source: ./web
+app.use(express.static(webRootPath, {
     index: false  // we handle / manually below
 }));
 
@@ -173,7 +174,6 @@ function shouldServePublicApp(req) {
     if (
         req.path.startsWith('/api')
         || req.path.startsWith('/admin')
-        || req.path.startsWith('/icons')
     ) {
         return false;
     }

@@ -279,6 +279,10 @@ async function fakeQuery(sql, params = []) {
       .map((user) => ({ id: user.id }));
   }
 
+  if (text === 'SELECT pg_advisory_xact_lock(hashtext(?))') {
+    return [];
+  }
+
   if (text.startsWith('SELECT COUNT(*) AS total FROM devices d')) {
     const onlyUnassigned = text.includes("(d.user_id IS NULL OR d.status = 'unassigned')");
     return [{
@@ -286,10 +290,6 @@ async function fakeQuery(sql, params = []) {
         !onlyUnassigned || device.user_id === null || device.status === 'unassigned'
       )).length
     }];
-  }
-
-  if (text === 'SELECT pg_advisory_xact_lock(hashtext(?))') {
-    return [];
   }
 
   if (text.startsWith('SELECT d.id, d.device_id AS serial_number')) {
@@ -467,6 +467,17 @@ async function fakeQuery(sql, params = []) {
     return { affectedRows: device ? 1 : 0 };
   }
 
+  if (text.startsWith('UPDATE devices SET device_id = ?, user_id = ?, status = ?, name = COALESCE(NULLIF(name, \'\'), ?), updated_at = NOW() WHERE id = ?')) {
+    const device = state.devices.find((row) => row.id === Number(params[4]));
+    if (device) {
+      device.device_id = params[0];
+      device.user_id = params[1] ? Number(params[1]) : null;
+      device.status = params[2];
+      device.name = device.name || params[3];
+    }
+    return { affectedRows: device ? 1 : 0 };
+  }
+
   if (text === 'SELECT id, type, subtype FROM sensors WHERE device_id = ?') {
     return state.sensors
       .filter((sensor) => sensor.device_id === Number(params[0]))
@@ -489,17 +500,6 @@ async function fakeQuery(sql, params = []) {
       sensor.unit = params[3];
     }
     return { affectedRows: sensor ? 1 : 0 };
-  }
-
-  if (text.startsWith('UPDATE devices SET device_id = ?, user_id = ?, status = ?, name = COALESCE(NULLIF(name, \'\'), ?), updated_at = NOW() WHERE id = ?')) {
-    const device = state.devices.find((row) => row.id === Number(params[4]));
-    if (device) {
-      device.device_id = params[0];
-      device.user_id = params[1] ? Number(params[1]) : null;
-      device.status = params[2];
-      device.name = device.name || params[3];
-    }
-    return { affectedRows: device ? 1 : 0 };
   }
 
   if (text.startsWith('INSERT INTO sensor_readings')) {
@@ -738,7 +738,7 @@ async function run() {
   const { processIncomingMessage } = require('../src/jobs/mqttDirectJob');
 
   const app = express();
-  const publicIndexPath = path.resolve(__dirname, '../../index.html');
+  const publicIndexPath = path.resolve(__dirname, '../../web/index.html');
   function shouldServePublicApp(req) {
     if (req.method !== 'GET') {
       return false;

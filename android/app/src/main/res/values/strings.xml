@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rayat</string>
+    <string name="title_activity_main">Rayat</string>
+    <string name="package_name">ma.rayat.app</string>
+    <string name="custom_url_scheme">ma.rayat.app</string>
+</resources>

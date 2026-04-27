@@ -2,6 +2,7 @@ const express = require('express');
 
 const { query } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
+const { sendDatabaseAwareError } = require('../utils/database-http');
 const { ingestDeviceReadings, prepareIncomingSensorPayload } = require('../utils/sensor-ingest');
 
 const router = express.Router();
@@ -52,7 +53,10 @@ router.post('/upload', async (req, res) => {
             return res.status(error.statusCode).json({ error: error.message });
         }
         console.error('IoT upload error:', error);
-        res.status(500).json({ error: 'Errore nel salvataggio dati' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel salvataggio dati',
+            databaseMessage: 'Persistenza dati IoT temporaneamente non disponibile'
+        });
     }
 });
 
@@ -93,7 +97,10 @@ router.get('/devices', authenticateToken, async (req, res) => {
         });
     } catch (error) {
         console.error('Get devices error:', error);
-        res.status(500).json({ error: 'Errore nel recupero dispositivi' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel recupero dispositivi',
+            databaseMessage: 'Elenco dispositivi temporaneamente non disponibile'
+        });
     }
 });
 

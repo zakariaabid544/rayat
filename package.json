@@ -4,11 +4,24 @@
   "version": "1.0.0",
   "description": "Deployment helper package for the Rayat production export",
   "scripts": {
+    "postinstall": "npm run install:backend",
     "install:backend": "npm --prefix backend install",
     "start": "npm --prefix backend start",
     "dev": "npm --prefix backend run dev",
     "seed:admin": "npm --prefix backend run seed:admin",
     "init:db": "node backend/init-db.js",
-    "test": "npm --prefix backend test"
+    "test": "npm --prefix backend test",
+    "cap": "cap",
+    "cap:sync": "cap sync",
+    "cap:copy": "cap copy",
+    "cap:doctor": "cap doctor"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.3.1",
+    "@capacitor/core": "8.3.1",
+    "@capacitor/ios": "8.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.3.1"
   }
 }

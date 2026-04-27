@@ -18,6 +18,7 @@ const {
     getPostgresMinuteIntervalLiteral,
     getSensorDataFreshMinutes // RAYAT-FIX
 } = require('../utils/monitoring-config');
+const { sendDatabaseAwareError } = require('../utils/database-http');
 const { cleanString, parseGatewaySignalUpdate, parseSensorUpdate } = require('../utils/sensor-update-parser');
 
 const DEFAULT_BRIDGE_TOKEN_HEADER = 'x-rayat-bridge-token';
@@ -353,7 +354,10 @@ router.get('/public/latest', async (_req, res) => {
         });
     } catch (error) {
         console.error('Get public latest sensors error:', error);
-        res.status(500).json({ error: 'Errore nel recupero dati sensori pubblici' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel recupero dati sensori pubblici',
+            databaseMessage: 'Dati sensori pubblici temporaneamente non disponibili'
+        });
     }
 });
 
@@ -362,7 +366,10 @@ router.get('/public/status', async (_req, res) => { // RAYAT-FIX
         res.json(await resolveGatewayStatusPayload({})); // RAYAT-FIX
     } catch (error) { // RAYAT-FIX
         console.error('Get public gateway status error:', error); // RAYAT-FIX
-        res.status(500).json({ error: 'Errore nel recupero stato gateway pubblico' }); // RAYAT-FIX
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel recupero stato gateway pubblico',
+            databaseMessage: 'Stato gateway pubblico temporaneamente non disponibile'
+        }); // RAYAT-FIX
     } // RAYAT-FIX
 }); // RAYAT-FIX
 
@@ -422,7 +429,10 @@ router.get('/public/history', async (req, res) => {
         }
 
         console.error('Get public history sensors error:', error);
-        res.status(500).json({ error: 'Errore nel recupero storico sensori pubblici' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel recupero storico sensori pubblici',
+            databaseMessage: 'Storico sensori pubblici temporaneamente non disponibile'
+        });
     }
 });
 
@@ -520,7 +530,10 @@ router.post('/update', async (req, res) => {
         }
 
         console.error('Sensor bridge update error:', error);
-        res.status(500).json({ error: 'Errore nel salvataggio dati sensori' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel salvataggio dati sensori',
+            databaseMessage: 'Persistenza dati sensori temporaneamente non disponibile'
+        });
     }
 });
 
@@ -529,7 +542,10 @@ router.get('/status', authenticateToken, checkSubscription, async (req, res) => 
         res.json(await resolveGatewayStatusPayload({ userId: req.user.id })); // RAYAT-FIX
     } catch (error) { // RAYAT-FIX
         console.error('Get gateway status error:', error); // RAYAT-FIX
-        res.status(500).json({ error: 'Errore nel recupero stato gateway' }); // RAYAT-FIX
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel recupero stato gateway',
+            databaseMessage: 'Stato gateway temporaneamente non disponibile'
+        }); // RAYAT-FIX
     } // RAYAT-FIX
 }); // RAYAT-FIX
 
@@ -593,7 +609,10 @@ router.get('/latest', authenticateToken, checkSubscription, async (req, res) => 
 
     } catch (error) {
         console.error('Get latest sensors error:', error);
-        res.status(500).json({ error: 'Errore nel recupero dati sensori' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel recupero dati sensori',
+            databaseMessage: 'Dati sensori temporaneamente non disponibili'
+        });
     }
 });
 
@@ -639,7 +658,10 @@ router.get('/:type/latest', authenticateToken, checkSubscription, async (req, re
 
     } catch (error) {
         console.error('Get sensor type error:', error);
-        res.status(500).json({ error: 'Errore nel recupero dati sensore' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel recupero dati sensore',
+            databaseMessage: 'Dati sensore temporaneamente non disponibili'
+        });
     }
 });
 
@@ -697,7 +719,10 @@ router.get('/:type/history', authenticateToken, checkSubscription, async (req, r
 
     } catch (error) {
         console.error('Get sensor history error:', error);
-        res.status(500).json({ error: 'Errore nel recupero storico sensore' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel recupero storico sensore',
+            databaseMessage: 'Storico sensore temporaneamente non disponibile'
+        });
     }
 });
 
@@ -730,7 +755,10 @@ router.get('/alerts', authenticateToken, checkSubscription, async (req, res) => 
 
     } catch (error) {
         console.error('Get alerts error:', error);
-        res.status(500).json({ error: 'Errore nel recupero allarmi' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel recupero allarmi',
+            databaseMessage: 'Allarmi temporaneamente non disponibili'
+        });
     }
 });
 
@@ -784,7 +812,10 @@ router.post('/alarm-events/sync', authenticateToken, checkSubscription, async (r
         });
     } catch (error) {
         console.error('Sync alarm events error:', error);
-        res.status(500).json({ error: 'Errore nella sincronizzazione degli allarmi' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nella sincronizzazione degli allarmi',
+            databaseMessage: 'Sincronizzazione allarmi temporaneamente non disponibile'
+        });
     }
 });
 
@@ -803,7 +834,10 @@ router.post('/alerts/:id/acknowledge', authenticateToken, checkSubscription, asy
 
     } catch (error) {
         console.error('Acknowledge alert error:', error);
-        res.status(500).json({ error: 'Errore nella conferma allarme' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nella conferma allarme',
+            databaseMessage: 'Conferma allarme temporaneamente non disponibile'
+        });
     }
 });
 
@@ -821,7 +855,10 @@ router.get('/thresholds', authenticateToken, checkSubscription, async (req, res)
 
     } catch (error) {
         console.error('Get thresholds error:', error);
-        res.status(500).json({ error: 'Errore nel recupero soglie' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel recupero soglie',
+            databaseMessage: 'Soglie temporaneamente non disponibili'
+        });
     }
 });
 
@@ -846,7 +883,10 @@ router.put('/thresholds', authenticateToken, checkSubscription, async (req, res)
 
     } catch (error) {
         console.error('Update thresholds error:', error);
-        res.status(500).json({ error: 'Errore nell\'aggiornamento soglie' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nell\'aggiornamento soglie',
+            databaseMessage: 'Aggiornamento soglie temporaneamente non disponibile'
+        });
     }
 });
 

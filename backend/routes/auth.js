@@ -13,6 +13,7 @@ const { query, getTableColumns } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { isPrivilegedAdminRole, normalizeAdminRole } = require('../utils/admin-auth');
 const { attachPasswordResetRoutes } = require('../utils/password-reset');
+const { isDatabaseUnavailableError, sendDatabaseAwareError } = require('../utils/database-http');
 const { sendNewClientRegistrationEmail } = require('../utils/registration-email');
 const { recordAnalyticsEvent } = require('../utils/analytics');
 
@@ -461,7 +462,10 @@ router.post('/login', async (req, res) => {
         });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ error: 'Errore interno del server' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore interno del server',
+            databaseMessage: 'Autenticazione temporaneamente non disponibile'
+        });
     }
 });
 
@@ -495,9 +499,9 @@ router.get('/me', authenticateToken, async (req, res) => {
         });
     } catch (error) {
         console.error('Auth me error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Errore nel recupero del profilo'
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore nel recupero del profilo',
+            databaseMessage: 'Profilo temporaneamente non disponibile'
         });
     }
 });
@@ -563,10 +567,18 @@ router.put('/profile', authenticateToken, async (req, res) => {
             profile: buildPersistedProfilePayload(currentUser)
         });
     } catch (error) {
+        if (error.statusCode && !isDatabaseUnavailableError(error)) {
+            console.error('Update profile error:', error);
+            return res.status(error.statusCode).json({
+                success: false,
+                error: error.message || 'Errore durante il salvataggio del profilo'
+            });
+        }
+
         console.error('Update profile error:', error);
-        res.status(error.statusCode || 500).json({
-            success: false,
-            error: error.message || 'Errore durante il salvataggio del profilo'
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore durante il salvataggio del profilo',
+            databaseMessage: 'Aggiornamento profilo temporaneamente non disponibile'
         });
     }
 });
@@ -610,7 +622,10 @@ router.post('/admin-reset-password', authenticateToken, async (req, res) => {
         });
     } catch (error) {
         console.error('Admin reset password error:', error);
-        res.status(500).json({ error: 'Errore interno del server' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore interno del server',
+            databaseMessage: 'Reset password admin temporaneamente non disponibile'
+        });
     }
 });
 
@@ -629,8 +644,16 @@ router.post('/register', async (req, res) => {
             user: createdUser
         });
     } catch (error) {
+        if (error.statusCode && !isDatabaseUnavailableError(error)) {
+            console.error('Register error:', error);
+            return res.status(error.statusCode).json({ error: error.message || 'Errore interno del server' });
+        }
+
         console.error('Register error:', error);
-        res.status(error.statusCode || 500).json({ error: error.message || 'Errore interno del server' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore interno del server',
+            databaseMessage: 'Registrazione temporaneamente non disponibile'
+        });
     }
 });
 
@@ -660,8 +683,16 @@ router.post('/register-full', async (req, res) => {
             user: createdUser
         });
     } catch (error) {
+        if (error.statusCode && !isDatabaseUnavailableError(error)) {
+            console.error('Full Register error:', error);
+            return res.status(error.statusCode).json({ error: error.message || 'Errore registrazione' });
+        }
+
         console.error('Full Register error:', error);
-        res.status(error.statusCode || 500).json({ error: error.message || 'Errore registrazione' });
+        return sendDatabaseAwareError(res, error, {
+            fallbackMessage: 'Errore registrazione',
+            databaseMessage: 'Registrazione temporaneamente non disponibile'
+        });
     }
 });
 
