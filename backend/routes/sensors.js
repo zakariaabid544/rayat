@@ -314,10 +314,12 @@ async function resolveGatewayStatusPayload(options = {}) { // RAYAT-FIX
         || buildEmptyGatewayStatus(); // RAYAT-FIX
     const publicSensorDataLastAt = !options.userId ? await getPublicSensorDataLastAt() : null; // RAYAT-FIX
     const resolvedSensorDataLastAt = publicSensorDataLastAt || selected.sensorDataLastAt; // RAYAT-FIX
+    const resolvedSensorDataFresh = isGatewayTimestampFresh(resolvedSensorDataLastAt, getSensorDataFreshMinutes()); // RAYAT-FIX
     const resolvedSelection = { // RAYAT-FIX
         ...selected, // RAYAT-FIX
+        routerOnline: selected.routerOnline || resolvedSensorDataFresh, // RAYAT-FIX
         sensorDataLastAt: resolvedSensorDataLastAt, // RAYAT-FIX
-        sensorDataFresh: isGatewayTimestampFresh(resolvedSensorDataLastAt, getSensorDataFreshMinutes()) // RAYAT-FIX
+        sensorDataFresh: resolvedSensorDataFresh // RAYAT-FIX
     }; // RAYAT-FIX
 
     return { // RAYAT-FIX

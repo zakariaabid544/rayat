@@ -1036,6 +1036,14 @@ async function run() {
         }); // RAYAT-FIX
         assert.equal(staleLatestRes.status, 200); // RAYAT-FIX
 
+        const telemetryOnlyStatusRes = await fetch(`http://127.0.0.1:${port}/api/sensors/public/status`); // RAYAT-FIX
+        assert.equal(telemetryOnlyStatusRes.status, 200); // RAYAT-FIX
+        const telemetryOnlyStatusJson = await telemetryOnlyStatusRes.json(); // RAYAT-FIX
+        assert.equal(telemetryOnlyStatusJson.success, true); // RAYAT-FIX
+        assert.equal(telemetryOnlyStatusJson.data.routerOnline, true); // RAYAT-FIX
+        assert.equal(telemetryOnlyStatusJson.data.sensorDataFresh, true); // RAYAT-FIX
+        assert.equal(telemetryOnlyStatusJson.data.lastHeartbeatAt, null); // RAYAT-FIX
+
         const bootRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-rayat-bridge-token': process.env.MQTT_INGEST_TOKEN }, // RAYAT-FIX
