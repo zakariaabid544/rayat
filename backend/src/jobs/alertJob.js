@@ -56,6 +56,7 @@ let isRunning = false;
 let isSyncingSchedule = false;
 let hasLegacySensorDataTable = null;
 let hasRuntimeConfigTable = null;
+const activeRecoveryNotifications = new Map();
 
 const mailConfigCache = {
   loadedAt: 0,
@@ -126,6 +127,47 @@ function toDateOrNull(value) {
 function toIsoOrNull(value) {
   const date = toDateOrNull(value);
   return date ? date.toISOString() : null;
+}
+
+function getRecoveryNotificationKey(alertLastUpdate) {
+  return toIsoOrNull(alertLastUpdate);
+}
+
+async function tryAcquireRecoveryNotificationLock(alertLastUpdate) {
+  const lockKey = getRecoveryNotificationKey(alertLastUpdate);
+  if (!lockKey) {
+    return { acquired: false, release: async () => {} };
+  }
+
+  try {
+    const rows = await query(
+      'SELECT pg_try_advisory_lock(hashtext(?)) AS acquired',
+      [`rayat:recovery:${lockKey}`]
+    );
+    const acquired = Boolean(rows?.[0]?.acquired);
+
+    return {
+      acquired,
+      release: acquired
+        ? async () => {
+          try {
+            await query(
+              'SELECT pg_advisory_unlock(hashtext(?)) AS released',
+              [`rayat:recovery:${lockKey}`]
+            );
+          } catch (error) {
+            console.warn('[alert-job] impossibile rilasciare lock recovery:', error.message);
+          }
+        }
+        : async () => {}
+    };
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[alert-job] lock recovery non disponibile, uso single-flight in memoria:', error.message);
+    }
+
+    return { acquired: true, release: async () => {} };
+  }
 }
 
 function getAlertDueDate(lastUpdate) {
@@ -756,12 +798,46 @@ async function maybeSendRecoveryEmail(recoveredAt, options = {}) {
     return false;
   }
 
-  await deliverRecoveryEmail(pendingAlert.alertLastUpdate, normalizedRecoveredAt, {
-    ...options,
-    trigger: options.trigger || 'recovery'
-  });
+  const recoveryKey = getRecoveryNotificationKey(pendingAlert.alertLastUpdate);
+  if (!recoveryKey) {
+    return false;
+  }
 
-  return true;
+  if (activeRecoveryNotifications.has(recoveryKey)) {
+    return false;
+  }
+
+  const sendPromise = (async () => {
+    const lock = await tryAcquireRecoveryNotificationLock(pendingAlert.alertLastUpdate);
+    if (!lock.acquired) {
+      return false;
+    }
+
+    try {
+      if (await hasRecoveryNotificationForAlert(pendingAlert.alertLastUpdate)) {
+        return false;
+      }
+
+      await deliverRecoveryEmail(pendingAlert.alertLastUpdate, normalizedRecoveredAt, {
+        ...options,
+        trigger: options.trigger || 'recovery'
+      });
+
+      return true;
+    } finally {
+      await lock.release();
+    }
+  })();
+
+  activeRecoveryNotifications.set(recoveryKey, sendPromise);
+
+  try {
+    return await sendPromise;
+  } finally {
+    if (activeRecoveryNotifications.get(recoveryKey) === sendPromise) {
+      activeRecoveryNotifications.delete(recoveryKey);
+    }
+  }
 }
 
 async function sendMissingDataTestEmail(options = {}) {
