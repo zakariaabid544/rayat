@@ -10,8 +10,9 @@
     "router:publisher": "node scripts/mqtt-router-publisher.js",
     "sync:live-mail-config": "node scripts/save-live-mail-config.js",
     "smoke:routes": "node scripts/smoke-test-mock.js",
+    "test:super-admin": "node scripts/test-super-admin-bootstrap.js",
     "test:alert-email": "node scripts/send-missing-data-test-alert.js",
-    "test": "npm run smoke:routes"
+    "test": "npm run test:super-admin && npm run smoke:routes"
   },
   "keywords": [
     "iot",

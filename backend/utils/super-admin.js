@@ -4,85 +4,139 @@ const { query } = require('../config/database');
 
 const PLACEHOLDER_PASSWORDS = new Set([
   '',
+  'CHANGEME',
   'CHANGE_ME',
   'CHANGE_THIS_PASSWORD',
   'CHANGE_ME_TO_A_STRONG_ADMIN_PASSWORD'
 ]);
 
-function getConfiguredSuperAdminEmail() {
-  return String(process.env.ADMIN_DEFAULT_EMAIL || '').trim().toLowerCase();
+function getConfiguredSuperAdminEmail(env = process.env) {
+  return String(env.ADMIN_DEFAULT_EMAIL || '').trim().toLowerCase();
 }
 
-function getConfiguredSuperAdminPassword() {
-  return String(process.env.ADMIN_DEFAULT_PASSWORD || '').trim();
+function getConfiguredSuperAdminPassword(env = process.env) {
+  return String(env.ADMIN_DEFAULT_PASSWORD || '').trim();
 }
 
-async function ensureSuperAdmin() {
-  const email = getConfiguredSuperAdminEmail();
-  const password = getConfiguredSuperAdminPassword();
+function isPlaceholderAdminPassword(password) {
+  const normalized = String(password || '').trim();
+  return !normalized || PLACEHOLDER_PASSWORDS.has(normalized.toUpperCase());
+}
 
-  if (!email || PLACEHOLDER_PASSWORDS.has(password)) {
+function isTruthy(value) {
+  return value === true || value === 1 || value === '1' || value === 'true';
+}
+
+async function doesPasswordMatch(password, passwordHash, bcryptImpl) {
+  if (!passwordHash) {
+    return false;
+  }
+
+  try {
+    return await bcryptImpl.compare(password, passwordHash);
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function ensureSuperAdmin(options = {}) {
+  const env = options.env || process.env;
+  const executor = options.query || query;
+  const bcryptImpl = options.bcrypt || bcrypt;
+  const email = getConfiguredSuperAdminEmail(env);
+  const password = getConfiguredSuperAdminPassword(env);
+
+  if (!email) {
+    console.warn('Super admin bootstrap skipped: ADMIN_DEFAULT_EMAIL is not configured.');
+    return {
+      status: 'skipped',
+      reason: 'missing_email'
+    };
+  }
+
+  if (isPlaceholderAdminPassword(password)) {
     console.warn(
-      'Super admin bootstrap skipped: set ADMIN_DEFAULT_EMAIL and ADMIN_DEFAULT_PASSWORD.'
+      'Super admin bootstrap skipped: ADMIN_DEFAULT_PASSWORD is missing or still a placeholder.'
     );
     return {
       status: 'skipped',
+      reason: 'unsafe_password',
       email
     };
   }
 
-  const existingSuperAdmins = await query(
-    `SELECT id, email, role
+  const existingUser = await executor(
+    `SELECT id, email, password_hash, role, active, is_verified
      FROM users
-     WHERE role IN ('super_admin', 'admin')
-     LIMIT 1`
-  );
-
-  if (existingSuperAdmins.length > 0) {
-    console.log('ℹ️ Super admin already exists');
-    return {
-      status: 'existing',
-      id: existingSuperAdmins[0].id,
-      email: existingSuperAdmins[0].email
-    };
-  }
-
-  const passwordHash = await bcrypt.hash(password, 12);
-  const existingUser = await query(
-    `SELECT id, role
-     FROM users
-     WHERE email = ?
+     WHERE LOWER(email) = ?
      LIMIT 1`,
     [email]
   );
 
   if (existingUser.length > 0) {
-    await query(
+    const user = existingUser[0];
+    const passwordMatches = await doesPasswordMatch(password, user.password_hash, bcryptImpl);
+    const changed = user.role !== 'super_admin'
+      || !isTruthy(user.active)
+      || !isTruthy(user.is_verified)
+      || !passwordMatches;
+
+    if (!changed) {
+      console.log('Super admin account already matches ADMIN_DEFAULT_EMAIL.');
+      return {
+        status: 'existing',
+        id: user.id,
+        email: user.email || email
+      };
+    }
+
+    const setClauses = [
+      "role = 'super_admin'",
+      'active = TRUE',
+      'is_verified = TRUE'
+    ];
+    const params = [];
+
+    if (!passwordMatches) {
+      const passwordHash = await bcryptImpl.hash(password, 12);
+      setClauses.push('password_hash = ?');
+      params.push(passwordHash);
+    }
+    params.push(user.id);
+
+    await executor(
       `UPDATE users
-       SET password_hash = ?,
-           role = 'super_admin',
-           is_verified = TRUE,
-           active = TRUE,
+       SET ${setClauses.join(', ')},
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [passwordHash, existingUser[0].id]
+      params
     );
-  } else {
-    await query(
-      `INSERT INTO users (email, password_hash, name, role, is_verified, active)
-       VALUES (?, ?, ?, 'super_admin', TRUE, TRUE)`,
-      [email, passwordHash, 'Super Admin']
-    );
+
+    console.log('Super admin account ensured from ADMIN_DEFAULT_EMAIL.');
+    return {
+      status: 'updated',
+      id: user.id,
+      email: user.email || email
+    };
   }
 
-  console.log('✅ Super admin created');
+  const passwordHash = await bcryptImpl.hash(password, 12);
+  const result = await executor(
+    `INSERT INTO users (email, password_hash, name, role, is_verified, active)
+     VALUES (?, ?, ?, 'super_admin', TRUE, TRUE)`,
+    [email, passwordHash, 'Super Admin']
+  );
+
+  console.log('Super admin account created from ADMIN_DEFAULT_EMAIL.');
   return {
     status: 'created',
+    id: result.insertId || result.rows?.[0]?.id || null,
     email
   };
 }
 
 module.exports = {
   ensureSuperAdmin,
-  getConfiguredSuperAdminEmail
+  getConfiguredSuperAdminEmail,
+  isPlaceholderAdminPassword
 };
