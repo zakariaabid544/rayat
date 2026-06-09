@@ -162,7 +162,7 @@ async function seedBarakahPerliteClient() {
 
     pushAssignment(assignments, params, deviceColumns, 'user_id', userId);
     pushAssignment(assignments, params, deviceColumns, 'status', 'active');
-    pushAssignment(assignments, params, deviceColumns, 'name', 'RAYAT Perlite Track', { coalesceBlank: true });
+    pushAssignment(assignments, params, deviceColumns, 'name', 'RAYAT Perlite Track');
     if (hasColumn(deviceColumns, 'metadata')) {
       assignments.push("metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb");
       params.push(metadata);
