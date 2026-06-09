@@ -18,7 +18,7 @@
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
         // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.35'; // RAYAT-FIX
+        const FRONTEND_ASSET_VERSION = '1.1.36'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -6291,7 +6291,7 @@
                                         <div class="flex items-start justify-between gap-4">
                                             <div class="min-w-0">
                                                 <div class="text-3xl mb-4">🌱</div>
-                                                <h4 class="text-xl font-black text-slate-900 tracking-tight break-words">RAYAT Perlite Track</h4>
+                                                <h4 class="text-xl font-black text-slate-900 tracking-tight break-words">RAYAT perlite track</h4>
                                                 <p class="text-sm text-slate-500 mt-2">Substrate Rayat: umidita, EC e temperatura del substrato</p>
                                             </div>
                                             <span class="inline-flex items-center justify-center px-3 py-1 rounded-full bg-green-50 text-green-700 font-black text-[11px] uppercase tracking-[0.14em]">${t('profileViewOnly')}</span>
@@ -6870,10 +6870,32 @@
 
             selectedSensor = 'terreno';
             const statusMeta = getDemoSectionStatusMeta('terreno');
+            const isPerliteOffline = statusMeta.className === 'is-offline';
+            const perliteLastUpdate = statusMeta.timestamp && statusMeta.timestamp !== '--'
+                ? statusMeta.timestamp
+                : 'Waiting for sensor data';
             const perliteMetricDefinitions = [
-                { key: 'temperature', label: 'Temperatura substrato' },
-                { key: 'ec', label: 'EC substrato' },
-                { key: 'moisture', label: 'Umidita substrato' }
+                {
+                    key: 'temperature',
+                    label: 'Temperatura substrato',
+                    icon: '🌡️',
+                    range: { min: 18, max: 26, unit: '°C' },
+                    rangeLabel: 'Range indicativo per pomodoro in serra'
+                },
+                {
+                    key: 'ec',
+                    label: 'EC substrato',
+                    icon: '⚡',
+                    range: { min: 2.0, max: 3.5, unit: 'mS/cm' },
+                    rangeLabel: 'Range indicativo per substrato perlite'
+                },
+                {
+                    key: 'moisture',
+                    label: 'Umidità substrato',
+                    icon: '💧',
+                    range: { min: 55, max: 75, unit: '%' },
+                    rangeLabel: 'Range indicativo per coltura fuori suolo'
+                }
             ];
             const rawPerliteMetrics = perliteMetricDefinitions.map((definition) => {
                 const metric = sensorData.terreno.details.find((item) => item.key === definition.key) || {};
@@ -6899,6 +6921,62 @@
                     : { ...metric, value: null, installed: false };
             });
             const historyRows = getFilteredHistory();
+            const renderPerliteMetricCard = (metric) => {
+                const normalizedValue = normalizeMetricValue('soil', metric.key, metric.value);
+                const hasLiveValue = metric.installed !== false && Number.isFinite(normalizedValue);
+                const state = hasLiveValue
+                    ? getMetricState(normalizedValue, metric.range)
+                    : {
+                        level: isPerliteOffline ? 'offline' : 'loading',
+                        cssModifier: 'rayat-metric-card--inactive',
+                        label: isPerliteOffline ? 'Offline' : 'Waiting for sensor data'
+                    };
+                const gauge = metric.range ? getGaugeMeta('soil', metric.key, metric.range) : null;
+                const gaugeMarkerPercent = hasLiveValue && gauge
+                    ? getGaugeMarkerPercent(normalizedValue, gauge.min, gauge.max)
+                    : null;
+                const unit = metric.range?.unit || metric.unit || '';
+                const rangeUnitSuffix = metric.range?.unit ? ` ${metric.range.unit}` : '';
+                const rangeText = metric.range
+                    ? `${metric.rangeLabel}: ${formatMetricValue(metric.range.min)} – ${formatMetricValue(metric.range.max)}${rangeUnitSuffix}`
+                    : metric.rangeLabel;
+                const stateClass = hasLiveValue ? getLevelClass(state.level) : 'text-slate-500';
+
+                return `
+                    <article class="rayat-metric-card ${hasLiveValue ? state.cssModifier : 'rayat-metric-card--inactive'}" data-metric-key="${metric.key}">
+                        <div class="rayat-metric-card-head mb-4">
+                            <div class="rayat-metric-card-header-main">
+                                <span class="rayat-metric-card-icon">${metric.icon}</span>
+                                <div class="rayat-metric-card-copy">
+                                    <p class="rayat-metric-card-title">${escapeHtml(metric.label)}</p>
+                                    <p class="rayat-metric-card-state ${stateClass}">${escapeHtml(state.label)}</p>
+                                </div>
+                            </div>
+                            ${hasLiveValue && state.badge ? `<span class="rayat-alert-badge ${state.level === 'alert' ? 'rayat-alert-badge--alert' : 'rayat-alert-badge--attention'}">${state.badge}</span>` : ''}
+                        </div>
+                        <div class="flex items-end gap-2 mb-5">
+                            ${hasLiveValue ? `
+                                <span class="text-5xl font-black text-slate-900 leading-none">${formatMetricValue(normalizedValue)}</span>
+                                <span class="text-sm font-bold text-slate-400 uppercase">${unit}</span>
+                            ` : `
+                                <span class="text-4xl font-black text-slate-300 leading-none">N/A</span>
+                            `}
+                        </div>
+                        ${gauge ? `
+                            <div class="rayat-range-track-shell">
+                                <div class="rayat-range-track" style="background:${gauge.gradient};">
+                                    ${gaugeMarkerPercent !== null ? `<div class="rayat-range-pointer" style="left:${gaugeMarkerPercent}%;" aria-hidden="true"></div>` : ''}
+                                </div>
+                            </div>
+                            <div class="flex justify-between text-[11px] font-semibold text-slate-400 mt-3">
+                                <span>${formatMetricValue(gauge.min)}${unit ? ` ${unit}` : ''}</span>
+                                <span>${formatMetricValue(gauge.max)}${unit ? ` ${unit}` : ''}</span>
+                            </div>
+                        ` : ''}
+                        <p class="rayat-metric-card-range ${hasLiveValue && state.level !== 'normal' ? getLevelClass(state.level) : 'text-slate-600'}">${escapeHtml(rangeText || 'Waiting for sensor data')}</p>
+                    </article>
+                `;
+            };
             const renderPerliteHistoryRows = () => {
                 if (!historyRows.length) {
                     return `
@@ -6939,8 +7017,8 @@
                         ${renderSubscriptionWarningBanner()}
                         <div class="rayat-monitoring-toolbar rayat-monitoring-toolbar--demo-only">
                             <div class="rayat-monitoring-toolbar__copy">
-                                <h2 class="rayat-monitoring-toolbar__title">RAYAT Perlite Track</h2>
-                                <p class="rayat-monitoring-toolbar__subtitle">Substrate Rayat per Barakah Perlite: umidita, EC e temperatura del substrato.</p>
+                                <h2 class="rayat-monitoring-toolbar__title">RAYAT perlite track</h2>
+                                <p class="rayat-monitoring-toolbar__subtitle">Pilot project per pomodoro in serra su substrato Barakah Perlite.</p>
                             </div>
                         </div>
 
@@ -6959,11 +7037,42 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="mb-8 rounded-[2rem] border border-green-100 bg-green-50/70 px-6 py-4 text-sm font-bold text-green-900">
-                                    Nota: il sensore e in test a casa; domani verra installato nel substrato di perlite, quindi i valori attuali possono essere non realistici.
+                                <div class="mb-8 rounded-[2rem] border border-green-100 bg-gradient-to-br from-green-50 via-white to-emerald-50 px-6 py-6 md:px-8 md:py-7 shadow-[0_24px_70px_rgba(22,101,52,0.08)]">
+                                    <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+                                        <div>
+                                            <p class="text-xs font-black uppercase tracking-[0.24em] text-green-700 mb-2">Barakah Perlite Pilot Project</p>
+                                            <h5 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Tomatoes grown in greenhouse</h5>
+                                            <p class="mt-3 text-sm font-semibold text-slate-500">Last real update: ${escapeHtml(perliteLastUpdate)}</p>
+                                        </div>
+                                        <span class="rayat-demo-section-heading__badge ${statusMeta.className} self-start">
+                                            <span class="rayat-demo-section-heading__status ${statusMeta.className}" aria-hidden="true"></span>
+                                            <span class="rayat-demo-section-heading__badge-text">${escapeHtml(isPerliteOffline ? 'Offline' : statusMeta.label)}</span>
+                                        </span>
+                                    </div>
+                                    <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-7">
+                                        ${[
+                                            ['Crop', 'Tomatoes grown in greenhouse'],
+                                            ['Location', 'Souss-Massa, Morocco'],
+                                            ['Substrate', 'Barakah Perlite'],
+                                            ['Monitoring', 'Rayat Smart Monitoring']
+                                        ].map(([label, value]) => `
+                                            <div class="rounded-2xl bg-white/80 border border-green-100 px-4 py-4">
+                                                <dt class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">${label}</dt>
+                                                <dd class="mt-1 text-sm font-black text-slate-800">${value}</dd>
+                                            </div>
+                                        `).join('')}
+                                    </dl>
+                                    <div class="mt-5 rounded-2xl bg-green-900 text-white px-5 py-4">
+                                        <div class="text-[10px] font-black uppercase tracking-[0.2em] text-green-200 mb-2">Parameters</div>
+                                        <div class="flex flex-wrap gap-2">
+                                            ${['Moisture', 'EC', 'Temperature'].map((parameter) => `
+                                                <span class="rounded-full bg-white/12 border border-white/15 px-4 py-2 text-xs font-black uppercase tracking-[0.12em]">${parameter}</span>
+                                            `).join('')}
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="rayat-sensor-card-grid rayat-sensor-card-grid--soil grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-                                    ${perliteMetrics.map((metric) => renderMetricCard('soil', metric)).join('')}
+                                    ${perliteMetrics.map((metric) => renderPerliteMetricCard(metric)).join('')}
                                 </div>
                             </div>
                         </div>
