@@ -11,13 +11,66 @@ require('../config/env');
 
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const { query } = require('../config/database');
+const { query, getTableColumns } = require('../config/database');
 const { ensurePlatformSchema } = require('../utils/platform-schema');
 
 const DEFAULT_EMAIL = 'support@barakahperlite.com';
 
 function cleanString(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function hasColumn(columns, columnName) {
+  return columns.has(columnName);
+}
+
+function pushAssignment(assignments, params, columns, columnName, value, options = {}) {
+  if (!hasColumn(columns, columnName)) {
+    return;
+  }
+
+  if (options.raw) {
+    assignments.push(`${columnName} = ${value}`);
+    return;
+  }
+
+  if (options.coalesceBlank) {
+    assignments.push(`${columnName} = COALESCE(NULLIF(${columnName}, ''), ?)`);
+  } else if (options.coalesceRaw) {
+    assignments.push(`${columnName} = COALESCE(${columnName}, ${options.coalesceRaw})`);
+    return;
+  } else {
+    assignments.push(`${columnName} = ?`);
+  }
+
+  params.push(value);
+}
+
+function pushInsertValue(columns, params, tableColumns, columnName, value, options = {}) {
+  if (!hasColumn(tableColumns, columnName)) {
+    return;
+  }
+
+  columns.push(columnName);
+  if (options.raw) {
+    params.push({ raw: value });
+  } else {
+    params.push(value);
+  }
+}
+
+function buildInsertSql(tableName, columns, values) {
+  const sqlValues = values.map((value) => (value && typeof value === 'object' && value.raw ? value.raw : '?'));
+  const params = values.flatMap((value) => {
+    if (value && typeof value === 'object' && value.raw) {
+      return Object.prototype.hasOwnProperty.call(value, 'param') ? [value.param] : [];
+    }
+    return [value];
+  });
+  return {
+    sql: `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${sqlValues.join(', ')})`,
+    params
+  };
 }
 
 async function seedBarakahPerliteClient() {
@@ -35,6 +88,8 @@ async function seedBarakahPerliteClient() {
   }
 
   await ensurePlatformSchema();
+  const userColumns = await getTableColumns('users');
+  const deviceColumns = await getTableColumns('devices');
 
   const passwordHash = await bcrypt.hash(password, 12);
   const existingUsers = await query('SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1', [email]);
@@ -42,43 +97,44 @@ async function seedBarakahPerliteClient() {
 
   if (existingUsers.length) {
     userId = existingUsers[0].id;
-    await query(
-      `UPDATE users
-       SET password_hash = ?,
-           name = COALESCE(NULLIF(name, ''), ?),
-           role = 'client',
-           customer_role = COALESCE(NULLIF(customer_role, ''), 'owner'),
-           is_verified = TRUE,
-           registration_status = 'active',
-           registration_source = COALESCE(NULLIF(registration_source, ''), 'admin'),
-           active = TRUE,
-           approved_at = COALESCE(approved_at, NOW()),
-           updated_at = NOW()
-       WHERE id = ?`,
-      [passwordHash, 'Barakah Perlite', userId]
-    );
+    const assignments = [];
+    const params = [];
+
+    pushAssignment(assignments, params, userColumns, 'password_hash', passwordHash);
+    pushAssignment(assignments, params, userColumns, 'name', 'Barakah Perlite', { coalesceBlank: true });
+    pushAssignment(assignments, params, userColumns, 'role', 'client');
+    pushAssignment(assignments, params, userColumns, 'customer_role', 'owner');
+    pushAssignment(assignments, params, userColumns, 'is_verified', true);
+    pushAssignment(assignments, params, userColumns, 'registration_status', 'active');
+    pushAssignment(assignments, params, userColumns, 'registration_source', 'admin');
+    pushAssignment(assignments, params, userColumns, 'active', true);
+    pushAssignment(assignments, params, userColumns, 'approved_at', null, { coalesceRaw: 'NOW()' });
+    pushAssignment(assignments, params, userColumns, 'updated_at', 'NOW()', { raw: true });
+
+    params.push(userId);
+    await query(`UPDATE users SET ${assignments.join(', ')} WHERE id = ?`, params);
     console.log(`Updated Barakah Perlite client: ${email}`);
   } else {
-    const insertResult = await query(
-      `INSERT INTO users (
-         email,
-         password_hash,
-         name,
-         language,
-         role,
-         customer_role,
-         client_code,
-         is_verified,
-         registration_status,
-         registration_source,
-         active,
-         approved_at,
-         created_at,
-         updated_at
-       )
-       VALUES (?, ?, ?, 'it', 'client', 'owner', ?, TRUE, 'active', 'admin', TRUE, NOW(), NOW(), NOW())`,
-      [email, passwordHash, 'Barakah Perlite', 'BARAKAH-PERLITE']
-    );
+    const columns = [];
+    const values = [];
+
+    pushInsertValue(columns, values, userColumns, 'email', email);
+    pushInsertValue(columns, values, userColumns, 'password_hash', passwordHash);
+    pushInsertValue(columns, values, userColumns, 'name', 'Barakah Perlite');
+    pushInsertValue(columns, values, userColumns, 'language', 'it');
+    pushInsertValue(columns, values, userColumns, 'role', 'client');
+    pushInsertValue(columns, values, userColumns, 'customer_role', 'owner');
+    pushInsertValue(columns, values, userColumns, 'client_code', 'BARAKAH-PERLITE');
+    pushInsertValue(columns, values, userColumns, 'is_verified', true);
+    pushInsertValue(columns, values, userColumns, 'registration_status', 'active');
+    pushInsertValue(columns, values, userColumns, 'registration_source', 'admin');
+    pushInsertValue(columns, values, userColumns, 'active', true);
+    pushInsertValue(columns, values, userColumns, 'approved_at', 'NOW()', { raw: true });
+    pushInsertValue(columns, values, userColumns, 'created_at', 'NOW()', { raw: true });
+    pushInsertValue(columns, values, userColumns, 'updated_at', 'NOW()', { raw: true });
+
+    const insert = buildInsertSql('users', columns, values);
+    const insertResult = await query(insert.sql, insert.params);
     userId = insertResult.insertId || insertResult.rows?.[0]?.id;
     console.log(`Created Barakah Perlite client: ${email}`);
   }
@@ -101,25 +157,40 @@ async function seedBarakahPerliteClient() {
   const existingDevices = await query('SELECT id FROM devices WHERE device_id = ? LIMIT 1', [deviceId]);
 
   if (existingDevices.length) {
-    await query(
-      `UPDATE devices
-       SET user_id = ?,
-           status = 'active',
-           name = COALESCE(NULLIF(name, ''), ?),
-           metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb,
-           updated_at = NOW()
-       WHERE id = ?`,
-      [userId, 'RAYAT Perlite Track', metadata, existingDevices[0].id]
-    );
+    const assignments = [];
+    const params = [];
+
+    pushAssignment(assignments, params, deviceColumns, 'user_id', userId);
+    pushAssignment(assignments, params, deviceColumns, 'status', 'active');
+    pushAssignment(assignments, params, deviceColumns, 'name', 'RAYAT Perlite Track', { coalesceBlank: true });
+    if (hasColumn(deviceColumns, 'metadata')) {
+      assignments.push("metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb");
+      params.push(metadata);
+    }
+    pushAssignment(assignments, params, deviceColumns, 'updated_at', 'NOW()', { raw: true });
+
+    params.push(existingDevices[0].id);
+    await query(`UPDATE devices SET ${assignments.join(', ')} WHERE id = ?`, params);
     console.log(`Assigned existing device ${deviceId} to ${email}`);
     return;
   }
 
-  await query(
-    `INSERT INTO devices (device_id, user_id, name, api_key, status, metadata, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'active', ?::jsonb, NOW(), NOW())`,
-    [deviceId, userId, 'RAYAT Perlite Track', crypto.randomBytes(24).toString('hex'), metadata]
-  );
+  const columns = [];
+  const values = [];
+  pushInsertValue(columns, values, deviceColumns, 'device_id', deviceId);
+  pushInsertValue(columns, values, deviceColumns, 'user_id', userId);
+  pushInsertValue(columns, values, deviceColumns, 'name', 'RAYAT Perlite Track');
+  pushInsertValue(columns, values, deviceColumns, 'api_key', crypto.randomBytes(24).toString('hex'));
+  pushInsertValue(columns, values, deviceColumns, 'status', 'active');
+  if (hasColumn(deviceColumns, 'metadata')) {
+    columns.push('metadata');
+    values.push({ raw: '?::jsonb', param: metadata });
+  }
+  pushInsertValue(columns, values, deviceColumns, 'created_at', 'NOW()', { raw: true });
+  pushInsertValue(columns, values, deviceColumns, 'updated_at', 'NOW()', { raw: true });
+
+  const insert = buildInsertSql('devices', columns, values);
+  await query(insert.sql, insert.params);
   console.log(`Created and assigned device ${deviceId} to ${email}`);
 }
 
