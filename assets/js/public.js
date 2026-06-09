@@ -18,7 +18,7 @@
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
         // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.34'; // RAYAT-FIX
+        const FRONTEND_ASSET_VERSION = '1.1.35'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -2921,11 +2921,13 @@
             sensorData.terreno.percentuale = 0;
             sensorData.terreno.details.forEach((metric) => {
                 metric.value = null;
+                metric.timestamp = null;
             });
             sensorData.clima.valore = null;
             sensorData.clima.percentuale = 0;
             sensorData.clima.details.forEach((metric) => {
                 metric.value = null;
+                metric.timestamp = null;
             });
         }
 
@@ -4760,7 +4762,11 @@
                 }
                 if (m.key && s.details) {
                     const d = s.details.find(x => x.key === m.key);
-                    if (d) { d.value = val; updated = true; }
+                    if (d) {
+                        d.value = val;
+                        d.timestamp = r.timestamp || null;
+                        updated = true;
+                    }
                 }
             });
             initializeSelectedSensorFromFreshestData(); // RAYAT-FIX
@@ -6864,16 +6870,33 @@
 
             selectedSensor = 'terreno';
             const statusMeta = getDemoSectionStatusMeta('terreno');
-            const perliteMetrics = [
+            const perliteMetricDefinitions = [
                 { key: 'temperature', label: 'Temperatura substrato' },
                 { key: 'ec', label: 'EC substrato' },
                 { key: 'moisture', label: 'Umidita substrato' }
-            ].map((definition) => {
+            ];
+            const rawPerliteMetrics = perliteMetricDefinitions.map((definition) => {
                 const metric = sensorData.terreno.details.find((item) => item.key === definition.key) || {};
                 return {
                     ...metric,
                     ...definition
                 };
+            });
+            const freshestPerliteTimestamp = Math.max(
+                0,
+                ...rawPerliteMetrics
+                    .map((metric) => new Date(metric.timestamp || 0).getTime())
+                    .filter((timestamp) => Number.isFinite(timestamp))
+            );
+            const perliteMetrics = rawPerliteMetrics.map((metric) => {
+                const metricTimestamp = new Date(metric.timestamp || 0).getTime();
+                const isCurrentFrameMetric = freshestPerliteTimestamp > 0
+                    && Number.isFinite(metricTimestamp)
+                    && Math.abs(freshestPerliteTimestamp - metricTimestamp) <= 120000;
+
+                return isCurrentFrameMetric
+                    ? metric
+                    : { ...metric, value: null, installed: false };
             });
             const historyRows = getFilteredHistory();
             const renderPerliteHistoryRows = () => {
