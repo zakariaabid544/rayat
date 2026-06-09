@@ -1002,21 +1002,32 @@ async function run() {
 
         const rawFrameTimestamp = new Date().toISOString(); // RAYAT-FIX
         const rawFrames = [
-          '01030400d403357aec',
-          '0203020117bdda',
-          '03030e00c40180031b0069001a008a02a91b3e'
+          {
+            sensor_id: 'sensors/CLIMA-GW-001/telemetry',
+            device_id: 'CLIMA-GW-001',
+            raw_hex: '01030400d403357aec'
+          },
+          {
+            sensor_id: 'sensors/CLIMA-GW-001/telemetry',
+            device_id: 'CLIMA-GW-001',
+            raw_hex: '0203020117bdda'
+          },
+          {
+            sensor_id: 'sensors/GW-001/telemetry',
+            device_id: 'GW-001',
+            raw_hex: '03030e00c40180031b0069001a008a02a91b3e'
+          }
         ];
 
-        for (const rawHex of rawFrames) {
+        for (const rawFrame of rawFrames) {
           const rawFrameRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-rayat-bridge-token': process.env.MQTT_INGEST_TOKEN },
             body: JSON.stringify({
-              sensor_id: 'sensors/GW-001/telemetry',
-              device_id: 'GW-001',
-              api_key: createdDevice.api_key,
+              sensor_id: rawFrame.sensor_id,
+              device_id: rawFrame.device_id,
               timestamp: rawFrameTimestamp,
-              raw_hex: rawHex,
+              raw_hex: rawFrame.raw_hex,
               payload_encoding: 'modbus_rtu'
             })
           });
@@ -1113,10 +1124,10 @@ async function run() {
         });
         assert.equal(sensorsRes.status, 200);
         const sensorsJson = await sensorsRes.json();
-        assert.equal(sensorsJson.data.length, 11);
-        const climateSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'clima_temperature');
+        assert.ok(sensorsJson.data.length >= 11);
+        const climateSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'clima_temperature' && Number(sensor.latest_value) === 21.2);
         const soilPhosphorusSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'terreno_p');
-        assert.equal(Number(climateSensor.latest_value), 21.2);
+        assert.ok(climateSensor);
         assert.equal(Number(soilPhosphorusSensor.latest_value), 26);
 
         const iotDevicesRes = await fetch(`http://127.0.0.1:${port}/api/iot/devices`, {

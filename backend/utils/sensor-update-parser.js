@@ -346,7 +346,7 @@ function parseSensorUpdate(body = {}) {
 
     if (rawEnvelope) {
         try {
-            decodedRawReadings = decodeModbusTelemetryFrame(bufferFromEnvelope(rawEnvelope)).readings.map((reading) => buildReading(reading, {
+            decodedRawReadings = decodeModbusTelemetryFrame(bufferFromEnvelope(rawEnvelope), { deviceId, topic }).readings.map((reading) => buildReading(reading, {
                 ...readingDefaults,
                 type: reading.type,
                 subtype: reading.subtype

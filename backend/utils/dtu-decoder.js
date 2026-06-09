@@ -112,6 +112,29 @@ const SUBSTRATE_3_REGISTER_LAYOUT = {
     ]
 };
 
+const SUBSTRATE_2_REGISTER_PARTIAL_LAYOUT = {
+    name: 'substrate_2_register_partial',
+    readings: [
+        {
+            type: 'terreno',
+            subtype: 'terreno_temperature',
+            name: 'Sensore Temperatura Substrato',
+            unit: '°C',
+            scale: 0.01,
+            signed: true
+        },
+        {
+            type: 'terreno',
+            subtype: 'terreno_moisture',
+            name: 'Sensore Umidita Substrato',
+            unit: '%',
+            scale: 0.01
+        }
+    ]
+};
+
+const SUBSTRATE_DEVICE_IDS = new Set(['GW-001', 'RAYAT-GW-001']);
+
 const FRAME_LAYOUTS = {
     1: {
         2: {
@@ -210,7 +233,26 @@ const FRAME_LAYOUTS = {
     }
 };
 
-function decodeModbusTelemetryFrame(buffer) {
+function normalizeDeviceId(value) {
+    return cleanString(value).toUpperCase();
+}
+
+function shouldUseSubstrateLayout(options = {}) {
+    const profile = cleanString(options.sensorProfile || options.profile).toLowerCase();
+    return profile === 'substrate'
+        || profile === 'perlite'
+        || SUBSTRATE_DEVICE_IDS.has(normalizeDeviceId(options.deviceId || options.device_id));
+}
+
+function resolveFrameLayout(slaveId, registerCount, options = {}) {
+    if (slaveId === 1 && registerCount === 2 && shouldUseSubstrateLayout(options)) {
+        return SUBSTRATE_2_REGISTER_PARTIAL_LAYOUT;
+    }
+
+    return FRAME_LAYOUTS[slaveId]?.[registerCount];
+}
+
+function decodeModbusTelemetryFrame(buffer, options = {}) {
     if (!Buffer.isBuffer(buffer) || buffer.length < 5) {
         throw new Error('Frame Modbus troppo corto');
     }
@@ -237,7 +279,7 @@ function decodeModbusTelemetryFrame(buffer) {
     }
 
     const registerCount = byteCount / 2;
-    const layout = FRAME_LAYOUTS[slaveId]?.[registerCount];
+    const layout = resolveFrameLayout(slaveId, registerCount, options);
     if (!layout) {
         const supportedCounts = Object.keys(FRAME_LAYOUTS[slaveId] || {}).join(', ');
         throw new Error(

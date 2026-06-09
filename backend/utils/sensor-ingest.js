@@ -436,7 +436,7 @@ function prepareIncomingSensorPayload(body = {}) {
 
         if (rawEnvelope) {
             try {
-                const decoded = decodeModbusTelemetryFrame(bufferFromEnvelope(rawEnvelope));
+                const decoded = decodeModbusTelemetryFrame(bufferFromEnvelope(rawEnvelope), { deviceId });
                 readings = normalizeReadings(decoded.readings);
             } catch (error) {
                 throw createHttpError(400, `Payload DTU non decodificabile: ${error.message}`);

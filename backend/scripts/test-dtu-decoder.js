@@ -25,6 +25,17 @@ function testLegacySlaveOneClimateFrame() {
   assertReading(decoded.readings, 'clima_humidity', 0, 'clima');
 }
 
+function testGw001TwoRegisterSubstratePartialFrame() {
+  const decoded = decodeModbusTelemetryFrame(Buffer.from('01030409550000E9BF', 'hex'), { deviceId: 'GW-001' });
+
+  assert.equal(decoded.slaveId, 1);
+  assert.equal(decoded.layout, 'substrate_2_register_partial');
+  assert.equal(decoded.registerCount, 2);
+  assert.deepEqual(decoded.registers, [2389, 0]);
+  assertReading(decoded.readings, 'terreno_temperature', 23.89);
+  assertReading(decoded.readings, 'terreno_moisture', 0);
+}
+
 function testSubstrateThreeRegisterFrame() {
   const decoded = decodeModbusTelemetryFrame(Buffer.from('01030609421004010C1D77', 'hex'));
 
@@ -61,6 +72,19 @@ function testSubstrateMqttPayloadParsing() {
   assertReading(parsed.readings, 'terreno_ec', 0.268);
 }
 
+function testGw001TwoRegisterMqttPayloadParsing() {
+  const parsed = parseSensorUpdate({
+    topic: 'sensors/GW-001/telemetry',
+    raw_hex: '01030409550000E9BF'
+  });
+
+  assert.equal(parsed.deviceId, 'GW-001');
+  assert.equal(parsed.readings.length, 2);
+  assertReading(parsed.readings, 'terreno_temperature', 23.89);
+  assertReading(parsed.readings, 'terreno_moisture', 0);
+  assert.equal(bySubtype(parsed.readings, 'clima_temperature'), undefined);
+}
+
 function testLegacySevenInOneSoilFrame() {
   const decoded = decodeModbusTelemetryFrame(Buffer.from('03030E00F0022604D200B4002D0104028A1F8C', 'hex'));
 
@@ -77,9 +101,11 @@ function testLegacySevenInOneSoilFrame() {
 }
 
 testLegacySlaveOneClimateFrame();
+testGw001TwoRegisterSubstratePartialFrame();
 testSubstrateThreeRegisterFrame();
 testSubstrateInputRegisterFrame();
 testSubstrateMqttPayloadParsing();
+testGw001TwoRegisterMqttPayloadParsing();
 testLegacySevenInOneSoilFrame();
 
 console.log('DTU decoder tests passed');

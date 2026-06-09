@@ -63,7 +63,7 @@
             ANALYTICS_TRACK_URL: `${API_BASE_URL}/analytics/track`
         };
         // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.33'; // RAYAT-FIX
+        const FRONTEND_ASSET_VERSION = '1.1.34'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -1091,6 +1091,14 @@
         function canAccessPerliteTrack(userData = user, role = currentRole) {
             return (isAuthenticated() && isCustomerRole(role) && isBarakahPerliteCustomer(userData))
                 || hasPrivilegedAdminShortcut();
+        }
+
+        function isBarakahPerliteClientSession(userData = user, role = currentRole) {
+            return isAuthenticated() && isCustomerRole(role) && isBarakahPerliteCustomer(userData);
+        }
+
+        function normalizeViewForCurrentUser(view) {
+            return view === 'demo' && isBarakahPerliteClientSession() ? 'perlite-track' : view;
         }
 
         function getAdminSessionTokenCandidate() {
@@ -4475,6 +4483,7 @@
 
         function setView(view, options = {}) {
             closeProfileMenu();
+            view = normalizeViewForCurrentUser(view);
 
             if (view === 'profilo') {
                 if (isAuthenticated() && isCustomerRole(currentRole)) {
@@ -6641,6 +6650,10 @@
 
 
         function renderDemoPage() {
+            if (isBarakahPerliteClientSession()) {
+                return renderPerliteTrackPage();
+            }
+
             const currentSensorKey = normalizeDashboardSensorKey(selectedSensor) || resolveFreshestSensorKey(selectedSensor); // RAYAT-FIX
             const current = sensorData[currentSensorKey] || sensorData.terreno; // RAYAT-FIX
 
@@ -6967,9 +6980,9 @@
             selectedSensor = 'terreno';
             const statusMeta = getDemoSectionStatusMeta('terreno');
             const perliteMetrics = [
-                { key: 'moisture', label: 'Umidita substrato' },
+                { key: 'temperature', label: 'Temperatura substrato' },
                 { key: 'ec', label: 'EC substrato' },
-                { key: 'temperature', label: 'Temperatura substrato' }
+                { key: 'moisture', label: 'Umidita substrato' }
             ].map((definition) => {
                 const metric = sensorData.terreno.details.find((item) => item.key === definition.key) || {};
                 return {
@@ -6991,9 +7004,9 @@
 
                 return historyRows.map((row) => {
                     const levels = [
-                        getMetricLevel('soil', 'moisture', row.terreno),
+                        getMetricLevel('soil', 'temperature', row.temperature),
                         getMetricLevel('soil', 'ec', row.ec),
-                        getMetricLevel('soil', 'temperature', row.temperature)
+                        getMetricLevel('soil', 'moisture', row.terreno)
                     ];
 
                     return `
@@ -7002,9 +7015,9 @@
                                 <div class="rayat-history-time-primary">${formatLocalizedDate(row.date)}</div>
                                 <div class="rayat-history-time-secondary">${formatLocalizedTime(row.date)}</div>
                             </td>
-                            <td class="rayat-history-value-cell ${getLevelClass(levels[0])}">${formatHistoryNumber(row.terreno, { group: 'soil', key: 'moisture' })}</td>
+                            <td class="rayat-history-value-cell ${getLevelClass(levels[0])}">${formatHistoryNumber(row.temperature, { group: 'soil', key: 'temperature' })}</td>
                             <td class="rayat-history-value-cell ${getLevelClass(levels[1])}">${formatHistoryNumber(row.ec, { group: 'soil', key: 'ec' })}</td>
-                            <td class="rayat-history-value-cell ${getLevelClass(levels[2])}">${formatHistoryNumber(row.temperature, { group: 'soil', key: 'temperature' })}</td>
+                            <td class="rayat-history-value-cell ${getLevelClass(levels[2])}">${formatHistoryNumber(row.terreno, { group: 'soil', key: 'moisture' })}</td>
                             ${renderHistoryStatusCell(getOverallLevel(levels))}
                         </tr>
                     `;
@@ -7066,9 +7079,9 @@
                                         <thead>
                                             <tr class="border-b-8 border-gray-50">
                                                 <th class="rayat-history-head-cell">${t('time')}</th>
-                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">💧 Umidita substrato</th>
-                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">⚡ EC substrato</th>
                                                 <th class="rayat-history-head-cell rayat-history-head-cell--metric">🌡️ Temperatura substrato</th>
+                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">⚡ EC substrato</th>
+                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">💧 Umidita substrato</th>
                                                 <th class="rayat-history-head-cell">${t('status')}</th>
                                             </tr>
                                         </thead>
@@ -7237,6 +7250,10 @@
         if (currentView === 'demo') {
             syncDashboardSensorFromPath(window.location.pathname);
         }
+        currentView = normalizeViewForCurrentUser(currentView);
+        if (currentView === 'perlite-track' && window.location.pathname !== VIEW_PATHS['perlite-track']) {
+            history.replaceState({ view: 'perlite-track' }, '', VIEW_PATHS['perlite-track']);
+        }
         if (currentView === 'profilo' && !isAuthenticated()) {
             if (hasPrivilegedAdminShortcut()) {
                 goToAdminArea();
@@ -7283,6 +7300,7 @@
                 if (currentView === 'demo') {
                     syncDashboardSensorFromPath(window.location.pathname);
                 }
+                currentView = normalizeViewForCurrentUser(currentView);
                 if (currentView === 'perlite-track' && !canAccessPerliteTrack()) {
                     currentView = 'login';
                     history.replaceState({ view: 'login' }, '', '/login');
@@ -7295,6 +7313,7 @@
                 if (currentView === 'demo') {
                     syncDashboardSensorFromPath(window.location.pathname);
                 }
+                currentView = normalizeViewForCurrentUser(currentView);
                 if (currentView === 'perlite-track' && !canAccessPerliteTrack()) {
                     currentView = 'login';
                     history.replaceState({ view: 'login' }, '', '/login');
