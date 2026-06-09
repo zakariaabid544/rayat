@@ -18,7 +18,7 @@
             ANALYTICS_TRACK_URL: `${API_ORIGIN}/api/analytics/track`
         };
         // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.29'; // RAYAT-FIX
+        const FRONTEND_ASSET_VERSION = '1.1.33'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -91,11 +91,13 @@
         const CUSTOMER_ROLES = new Set(['client', 'farmer']);
         const ADMIN_ROLES = new Set(['admin', 'super_admin', 'operator', 'operator_admin']);
         const PRIVILEGED_ADMIN_ROLES = new Set(['super_admin', 'operator_admin']);
+        const BARAKAH_PERLITE_EMAIL = 'support@barakahperlite.com';
         const VIEW_PATHS = {
             home: '/',
             login: '/login',
             register: '/register',
             demo: '/dashboard',
+            'perlite-track': '/perlite-track',
             profilo: '/profilo',
             servizi: '/services',
             'chi-siamo': '/chi-siamo',
@@ -1002,6 +1004,10 @@
             return CUSTOMER_ROLES.has(role);
         }
 
+        function isBarakahPerliteCustomer(userData = user) {
+            return String(userData?.email || '').trim().toLowerCase() === BARAKAH_PERLITE_EMAIL;
+        }
+
         function isPrivilegedRole(role = currentRole) {
             return ADMIN_ROLES.has(role);
         }
@@ -1035,6 +1041,11 @@
 
         function hasPrivilegedAdminShortcut() {
             return Boolean(getPrivilegedAdminSessionUser());
+        }
+
+        function canAccessPerliteTrack(userData = user, role = currentRole) {
+            return (isAuthenticated() && isCustomerRole(role) && isBarakahPerliteCustomer(userData))
+                || hasPrivilegedAdminShortcut();
         }
 
         function getAdminSessionTokenCandidate() {
@@ -1137,6 +1148,13 @@
         function getViewFromPath(pathname = window.location.pathname) {
             const normalizedPath = pathname.replace(/\/+$/, '') || '/';
             if (
+                normalizedPath === '/perlite-track'
+                || normalizedPath === '/rayat-perlite-track'
+                || normalizedPath === '/dashboard/perlite-track'
+            ) {
+                return 'perlite-track';
+            }
+            if (
                 normalizedPath === '/demo'
                 || normalizedPath === '/dashboard'
                 || normalizedPath.startsWith('/demo/')
@@ -1151,11 +1169,12 @@
         function shouldLoadSensorDataForView(view = currentView) {
             return view === 'home'
                 || view === 'demo'
+                || (view === 'perlite-track' && canAccessPerliteTrack())
                 || (view === 'profilo' && isAuthenticated() && isCustomerRole(currentRole));
         }
 
         function shouldLoadHistoryDataForView(view = currentView) {
-            return view === 'demo';
+            return view === 'demo' || (view === 'perlite-track' && canAccessPerliteTrack());
         }
 
         function requestViewData(view = currentView, options = {}) {
@@ -4213,7 +4232,7 @@
                         syncStoredAdminSessionIntoState();
                         window.location.href = `${API_ORIGIN}/admin/`;
                     } else {
-                        setView('demo');
+                        setView(isBarakahPerliteCustomer(user) ? 'perlite-track' : 'demo');
                     }
                 } else {
                     const errorEl = document.getElementById('error');
@@ -4365,6 +4384,11 @@
                 }
             }
 
+            if (view === 'perlite-track' && !canAccessPerliteTrack()) {
+                setView('login', { replace: true, path: '/login' });
+                return;
+            }
+
             if (view !== 'profilo') {
                 userProfileNotice = '';
             }
@@ -4379,7 +4403,7 @@
                 history[historyMethod]({ view: view }, '', nextPath);
             }
             currentView = view;
-            if (view !== 'demo') {
+            if (view !== 'demo' && view !== 'perlite-track') {
                 hideSubscriptionExpiredModal();
             }
             render();
@@ -6246,6 +6270,31 @@
                                 </div>
                             </div>
 
+                            ${isBarakahPerliteCustomer() ? `
+                                <div class="rayat-profile-sensors-grid mb-8">
+                                    <button type="button" onclick="setView('perlite-track')" class="rayat-profile-sensor-card text-left">
+                                        <div class="flex items-start justify-between gap-4">
+                                            <div class="min-w-0">
+                                                <div class="text-3xl mb-4">🌱</div>
+                                                <h4 class="text-xl font-black text-slate-900 tracking-tight break-words">RAYAT Perlite Track</h4>
+                                                <p class="text-sm text-slate-500 mt-2">Substrate Rayat: umidita, EC e temperatura del substrato</p>
+                                            </div>
+                                            <span class="inline-flex items-center justify-center px-3 py-1 rounded-full bg-green-50 text-green-700 font-black text-[11px] uppercase tracking-[0.14em]">${t('profileViewOnly')}</span>
+                                        </div>
+                                        <div class="space-y-3 mt-6">
+                                            <div class="rayat-profile-meta-row">
+                                                <span>${escapeHtml(t('profileDeviceLabel'))}</span>
+                                                <strong>GW-001</strong>
+                                            </div>
+                                            <div class="rayat-profile-meta-row">
+                                                <span>${escapeHtml(t('profileLatestReading'))}</span>
+                                                <strong>Substrate Rayat</strong>
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
+                            ` : ''}
+
                             ${assignedSensors.length ? `
                                 <div class="rayat-profile-sensors-grid">
                                     ${assignedSensors.map((sensor) => `
@@ -6795,6 +6844,132 @@
             `;
         }
 
+        function renderPerliteTrackPage() {
+            if (!canAccessPerliteTrack()) {
+                return renderLoginPage();
+            }
+
+            selectedSensor = 'terreno';
+            const statusMeta = getDemoSectionStatusMeta('terreno');
+            const perliteMetrics = [
+                { key: 'moisture', label: 'Umidita substrato' },
+                { key: 'ec', label: 'EC substrato' },
+                { key: 'temperature', label: 'Temperatura substrato' }
+            ].map((definition) => {
+                const metric = sensorData.terreno.details.find((item) => item.key === definition.key) || {};
+                return {
+                    ...metric,
+                    ...definition
+                };
+            });
+            const historyRows = getFilteredHistory();
+            const renderPerliteHistoryRows = () => {
+                if (!historyRows.length) {
+                    return `
+                        <tr class="rayat-history-row">
+                            <td colspan="5" class="py-10 text-center text-sm font-semibold text-slate-400">
+                                ${historyState.loading ? 'Caricamento storico in corso...' : 'Nessun dato substrate disponibile per il periodo selezionato.'}
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                return historyRows.map((row) => {
+                    const levels = [
+                        getMetricLevel('soil', 'moisture', row.terreno),
+                        getMetricLevel('soil', 'ec', row.ec),
+                        getMetricLevel('soil', 'temperature', row.temperature)
+                    ];
+
+                    return `
+                        <tr class="rayat-history-row hover:bg-gray-50 transition duration-300">
+                            <td class="rayat-history-time-cell">
+                                <div class="rayat-history-time-primary">${formatLocalizedDate(row.date)}</div>
+                                <div class="rayat-history-time-secondary">${formatLocalizedTime(row.date)}</div>
+                            </td>
+                            <td class="rayat-history-value-cell ${getLevelClass(levels[0])}">${formatHistoryNumber(row.terreno, { group: 'soil', key: 'moisture' })}</td>
+                            <td class="rayat-history-value-cell ${getLevelClass(levels[1])}">${formatHistoryNumber(row.ec, { group: 'soil', key: 'ec' })}</td>
+                            <td class="rayat-history-value-cell ${getLevelClass(levels[2])}">${formatHistoryNumber(row.temperature, { group: 'soil', key: 'temperature' })}</td>
+                            ${renderHistoryStatusCell(getOverallLevel(levels))}
+                        </tr>
+                    `;
+                }).join('');
+            };
+
+            return `
+                ${renderHeader(!!user)}
+                <section class="rayat-demo-page py-24 bg-gray-50 min-h-screen">
+                    <div class="rayat-demo-shell container mx-auto px-4 max-w-[1300px]">
+                        ${renderSubscriptionWarningBanner()}
+                        <div class="rayat-monitoring-toolbar rayat-monitoring-toolbar--demo-only">
+                            <div class="rayat-monitoring-toolbar__copy">
+                                <h2 class="rayat-monitoring-toolbar__title">RAYAT Perlite Track</h2>
+                                <p class="rayat-monitoring-toolbar__subtitle">Substrate Rayat per Barakah Perlite: umidita, EC e temperatura del substrato.</p>
+                            </div>
+                        </div>
+
+                        <div class="rayat-demo-panel bg-white rounded-[4rem] shadow-[-20px_40px_100px_rgba(0,0,0,0.1)] p-12 md:p-20 border border-gray-50 relative overflow-hidden">
+                            <div class="relative z-10">
+                                <div class="rayat-demo-section-heading">
+                                    <div class="rayat-demo-section-heading__row">
+                                        <h4 class="rayat-demo-section-heading__title">Substrate Rayat</h4>
+                                        <div class="rayat-demo-section-heading__meta">
+                                            <span class="rayat-demo-section-heading__badge ${statusMeta.className}">
+                                                <span class="rayat-demo-section-heading__status ${statusMeta.className}" aria-hidden="true"></span>
+                                                <span class="rayat-demo-section-heading__badge-text">${escapeHtml(statusMeta.label)}</span>
+                                                <span class="rayat-demo-section-heading__separator" aria-hidden="true">&middot;</span>
+                                                <span class="rayat-demo-section-heading__timestamp">${escapeHtml(statusMeta.timestamp)}</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-8 rounded-[2rem] border border-green-100 bg-green-50/70 px-6 py-4 text-sm font-bold text-green-900">
+                                    Nota: il sensore e in test a casa; domani verra installato nel substrato di perlite, quindi i valori attuali possono essere non realistici.
+                                </div>
+                                <div class="rayat-sensor-card-grid rayat-sensor-card-grid--soil grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                                    ${perliteMetrics.map((metric) => renderMetricCard('soil', metric)).join('')}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-20 w-full mx-auto">
+                            <div class="flex flex-nowrap items-center bg-white p-4 rounded-[2rem] shadow-2xl border border-gray-100 gap-4 mb-10 overflow-x-auto no-scrollbar">
+                                <div class="flex bg-gray-50 p-1.5 rounded-2xl shrink-0">
+                                    ${['24h', '7d', '30d'].map(period => `
+                                        <button onclick="setFilterPeriod('${period}')" class="px-5 py-2.5 rounded-xl font-bold uppercase tracking-tight text-[11px] whitespace-nowrap transition-all ${filterState.period === period ? 'bg-[#1e293b] text-white shadow-lg' : 'text-gray-400 hover:text-gray-900'}">
+                                            ${t('last' + period)}
+                                        </button>`).join('')}
+                                </div>
+                                <button onclick="refreshData()" class="bg-[#10b981] hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold uppercase tracking-tight text-[11px] shadow-xl transition-all shrink-0 flex items-center gap-2">
+                                    <span>${isRefreshingData ? t('refreshingDataAction') : t('refreshDataAction')}</span>
+                                </button>
+                            </div>
+
+                            <div class="rayat-history-card bg-white rounded-[4rem] p-12 shadow-2xl border border-gray-50 overflow-hidden">
+                                <div class="rayat-history-table-wrap overflow-x-auto">
+                                    <table class="rayat-history-table w-full text-left">
+                                        <thead>
+                                            <tr class="border-b-8 border-gray-50">
+                                                <th class="rayat-history-head-cell">${t('time')}</th>
+                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">💧 Umidita substrato</th>
+                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">⚡ EC substrato</th>
+                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">🌡️ Temperatura substrato</th>
+                                                <th class="rayat-history-head-cell">${t('status')}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-50">
+                                            ${renderPerliteHistoryRows()}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                ${renderFooter()}
+            `;
+        }
+
         // Admin settings removed
 
         // Admin dashboard removed
@@ -6895,7 +7070,7 @@
         /* PATCH-02 — end */
 
         function render() {
-            if (currentView === 'home' || currentView === 'demo' || currentView === 'profilo') {
+            if (currentView === 'home' || currentView === 'demo' || currentView === 'perlite-track' || currentView === 'profilo') {
                 checkAlerts();
             }
             const app = document.getElementById('app');
@@ -6906,6 +7081,7 @@
                 'profilo': renderUserProfilePage,
                 'servizi': renderServiziPage,
                 'demo': renderDemoPage,
+                'perlite-track': renderPerliteTrackPage,
                 'register': renderRegisterPage,
                 'contatti': renderContactPage,
                 'privacy': renderPrivacyPage,
@@ -6939,6 +7115,7 @@
         ensurePrivilegedAdminSession().then(() => {
             if (hadAdminShortcutOnLoad !== hasPrivilegedAdminShortcut() && currentView !== 'profilo') {
                 render();
+                requestViewData(currentView);
             }
         }).catch(() => {});
         currentView = getViewFromPath(window.location.pathname);
@@ -6971,7 +7148,7 @@
         // Hard sync live data.
         requestViewData(currentView);
         setInterval(() => {
-            if (currentView === 'demo') {
+            if (currentView === 'demo' || currentView === 'perlite-track') {
                 loadSensorData().catch(() => {});
                 if ((Date.now() - historyState.lastLoadedAt) >= 60000) {
                     loadHistoryData().catch(() => {});
@@ -6991,6 +7168,10 @@
                 if (currentView === 'demo') {
                     syncDashboardSensorFromPath(window.location.pathname);
                 }
+                if (currentView === 'perlite-track' && !canAccessPerliteTrack()) {
+                    currentView = 'login';
+                    history.replaceState({ view: 'login' }, '', '/login');
+                }
                 render();
                 trackPageView(currentView);
                 requestViewData(currentView);
@@ -6998,6 +7179,10 @@
                 currentView = getViewFromPath(window.location.pathname);
                 if (currentView === 'demo') {
                     syncDashboardSensorFromPath(window.location.pathname);
+                }
+                if (currentView === 'perlite-track' && !canAccessPerliteTrack()) {
+                    currentView = 'login';
+                    history.replaceState({ view: 'login' }, '', '/login');
                 }
                 render();
                 trackPageView(currentView);

@@ -7,11 +7,13 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "seed:admin": "node seed-admin.js",
+    "seed:barakah-perlite": "node scripts/seed-barakah-perlite-client.js",
     "router:publisher": "node scripts/mqtt-router-publisher.js",
     "sync:live-mail-config": "node scripts/save-live-mail-config.js",
     "smoke:routes": "node scripts/smoke-test-mock.js",
+    "test:dtu": "node scripts/test-dtu-decoder.js",
     "test:alert-email": "node scripts/send-missing-data-test-alert.js",
-    "test": "npm run smoke:routes"
+    "test": "npm run test:dtu && npm run smoke:routes"
   },
   "keywords": [
     "iot",
