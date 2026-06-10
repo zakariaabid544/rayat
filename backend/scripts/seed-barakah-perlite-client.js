@@ -77,7 +77,7 @@ async function seedBarakahPerliteClient() {
   const email = cleanString(process.env.BARAKAH_PERLITE_EMAIL || DEFAULT_EMAIL).toLowerCase();
   const password = cleanString(process.env.BARAKAH_PERLITE_PASSWORD);
   const shouldAssignDevice = cleanString(process.env.BARAKAH_PERLITE_ASSIGN_DEVICE).toLowerCase() === 'true';
-  const deviceId = cleanString(process.env.BARAKAH_PERLITE_DEVICE_ID || 'GW-001');
+  const deviceId = cleanString(process.env.BARAKAH_PERLITE_DEVICE_ID || 'GW-002');
 
   if (!email) {
     throw new Error('BARAKAH_PERLITE_EMAIL is empty');
@@ -140,7 +140,7 @@ async function seedBarakahPerliteClient() {
   }
 
   if (!shouldAssignDevice) {
-    console.log('Device assignment skipped. Set BARAKAH_PERLITE_ASSIGN_DEVICE=true to assign GW-001.');
+    console.log('Device assignment skipped. Set BARAKAH_PERLITE_ASSIGN_DEVICE=true to assign GW-002.');
     return;
   }
 

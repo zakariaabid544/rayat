@@ -63,7 +63,7 @@
             ANALYTICS_TRACK_URL: `${API_BASE_URL}/analytics/track`
         };
         // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.36'; // RAYAT-FIX
+        const FRONTEND_ASSET_VERSION = '1.1.37'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -137,6 +137,7 @@
         const ADMIN_ROLES = new Set(['admin', 'super_admin', 'operator', 'operator_admin']);
         const PRIVILEGED_ADMIN_ROLES = new Set(['super_admin', 'admin', 'operator_admin', 'operator']);
         const BARAKAH_PERLITE_EMAIL = 'support@barakahperlite.com';
+        const BARAKAH_PERLITE_DEVICE_ID = 'GW-002';
         const VIEW_PATHS = {
             home: '/',
             login: '/login',
@@ -2299,6 +2300,176 @@
         });
         /* PATCH-02 — end */
 
+        const PERLITE_TRACK_TRANSLATIONS = {
+            it: {
+                last3d: 'Ultimi 3 giorni',
+                perliteTrackTitle: 'RAYAT perlite track',
+                perliteTrackSubtitle: 'Pilot project per pomodoro in serra su substrato Barakah Perlite.',
+                perliteProjectTitle: 'Barakah Perlite Pilot Project',
+                perliteProjectCropTitle: 'Pomodori coltivati in serra',
+                perliteCustomerLabel: 'Cliente',
+                perliteCustomerValue: 'DUROC',
+                perliteCropLabel: 'Coltura',
+                perliteCropValue: 'Pomodori coltivati in serra',
+                perliteLocationLabel: 'Località',
+                perliteLocationValue: 'Souss-Massa, Marocco',
+                perliteSubstrateLabel: 'Substrato',
+                perliteSubstrateValue: 'Barakah Perlite',
+                perliteMonitoringLabel: 'Monitoraggio',
+                perliteMonitoringValue: 'Rayat Smart Monitoring',
+                perliteLastRealUpdate: 'Ultimo aggiornamento reale',
+                perliteMetricTemperature: 'Temperatura substrato',
+                perliteMetricEc: 'EC substrato',
+                perliteMetricMoisture: 'Umidità substrato',
+                perliteRangeTomato: 'Range indicativo per pomodoro in serra',
+                perliteRangeSubstrate: 'Range indicativo per substrato perlite',
+                perliteRangeSoilless: 'Range indicativo per coltura fuori suolo',
+                waitingForSensorData: 'In attesa dei dati del sensore',
+                notAvailableShort: 'N/A',
+                fromDate: 'Da',
+                toDate: 'A',
+                applyFilter: 'Applica',
+                invalidDateRange: 'Intervallo date non valido.',
+                invalidDateOrder: 'La data di fine non può essere precedente alla data di inizio.',
+                perliteNoHistory: 'Nessun dato substrate disponibile per il periodo selezionato.'
+            },
+            en: {
+                last3d: 'Last 3 Days',
+                perliteTrackTitle: 'RAYAT perlite track',
+                perliteTrackSubtitle: 'Pilot project for greenhouse tomatoes on Barakah Perlite substrate.',
+                perliteProjectTitle: 'Barakah Perlite Pilot Project',
+                perliteProjectCropTitle: 'Tomatoes grown in greenhouse',
+                perliteCustomerLabel: 'Customer',
+                perliteCustomerValue: 'DUROC',
+                perliteCropLabel: 'Crop',
+                perliteCropValue: 'Tomatoes grown in greenhouse',
+                perliteLocationLabel: 'Location',
+                perliteLocationValue: 'Souss-Massa, Morocco',
+                perliteSubstrateLabel: 'Substrate',
+                perliteSubstrateValue: 'Barakah Perlite',
+                perliteMonitoringLabel: 'Monitoring',
+                perliteMonitoringValue: 'Rayat Smart Monitoring',
+                perliteLastRealUpdate: 'Last real update',
+                perliteMetricTemperature: 'Substrate temperature',
+                perliteMetricEc: 'Substrate EC',
+                perliteMetricMoisture: 'Substrate moisture',
+                perliteRangeTomato: 'Indicative range for greenhouse tomato',
+                perliteRangeSubstrate: 'Indicative range for perlite substrate',
+                perliteRangeSoilless: 'Indicative range for soilless crop',
+                waitingForSensorData: 'Waiting for sensor data',
+                notAvailableShort: 'N/A',
+                fromDate: 'From',
+                toDate: 'To',
+                applyFilter: 'Apply',
+                invalidDateRange: 'Invalid date range.',
+                invalidDateOrder: 'End date cannot be before start date.',
+                perliteNoHistory: 'No substrate data available for the selected period.'
+            },
+            fr: {
+                last3d: '3 derniers jours',
+                perliteTrackTitle: 'RAYAT perlite track',
+                perliteTrackSubtitle: 'Projet pilote pour tomates sous serre sur substrat Barakah Perlite.',
+                perliteProjectTitle: 'Projet pilote Barakah Perlite',
+                perliteProjectCropTitle: 'Tomates cultivées sous serre',
+                perliteCustomerLabel: 'Client',
+                perliteCustomerValue: 'DUROC',
+                perliteCropLabel: 'Culture',
+                perliteCropValue: 'Tomates cultivées sous serre',
+                perliteLocationLabel: 'Localisation',
+                perliteLocationValue: 'Souss-Massa, Maroc',
+                perliteSubstrateLabel: 'Substrat',
+                perliteSubstrateValue: 'Barakah Perlite',
+                perliteMonitoringLabel: 'Monitoring',
+                perliteMonitoringValue: 'Rayat Smart Monitoring',
+                perliteLastRealUpdate: 'Dernière mise à jour réelle',
+                perliteMetricTemperature: 'Température substrat',
+                perliteMetricEc: 'EC substrat',
+                perliteMetricMoisture: 'Humidité substrat',
+                perliteRangeTomato: 'Plage indicative pour tomate sous serre',
+                perliteRangeSubstrate: 'Plage indicative pour substrat perlite',
+                perliteRangeSoilless: 'Plage indicative pour culture hors-sol',
+                waitingForSensorData: 'En attente des données du capteur',
+                notAvailableShort: 'N/A',
+                fromDate: 'Du',
+                toDate: 'Au',
+                applyFilter: 'Appliquer',
+                invalidDateRange: 'Plage de dates invalide.',
+                invalidDateOrder: 'La date de fin ne peut pas être avant la date de début.',
+                perliteNoHistory: 'Aucune donnée substrat disponible pour la période sélectionnée.'
+            },
+            ar: {
+                last3d: 'آخر 3 أيام',
+                perliteTrackTitle: 'RAYAT perlite track',
+                perliteTrackSubtitle: 'مشروع تجريبي للطماطم داخل دفيئة على ركيزة Barakah Perlite.',
+                perliteProjectTitle: 'مشروع Barakah Perlite التجريبي',
+                perliteProjectCropTitle: 'طماطم مزروعة داخل دفيئة',
+                perliteCustomerLabel: 'العميل',
+                perliteCustomerValue: 'DUROC',
+                perliteCropLabel: 'المحصول',
+                perliteCropValue: 'طماطم مزروعة داخل دفيئة',
+                perliteLocationLabel: 'الموقع',
+                perliteLocationValue: 'سوس ماسة، المغرب',
+                perliteSubstrateLabel: 'الركيزة',
+                perliteSubstrateValue: 'Barakah Perlite',
+                perliteMonitoringLabel: 'المراقبة',
+                perliteMonitoringValue: 'Rayat Smart Monitoring',
+                perliteLastRealUpdate: 'آخر تحديث حقيقي',
+                perliteMetricTemperature: 'حرارة الركيزة',
+                perliteMetricEc: 'EC الركيزة',
+                perliteMetricMoisture: 'رطوبة الركيزة',
+                perliteRangeTomato: 'نطاق إرشادي للطماطم داخل الدفيئة',
+                perliteRangeSubstrate: 'نطاق إرشادي لركيزة البيرلايت',
+                perliteRangeSoilless: 'نطاق إرشادي للزراعة خارج التربة',
+                waitingForSensorData: 'في انتظار بيانات المستشعر',
+                notAvailableShort: 'N/A',
+                fromDate: 'من',
+                toDate: 'إلى',
+                applyFilter: 'تطبيق',
+                invalidDateRange: 'نطاق التاريخ غير صالح.',
+                invalidDateOrder: 'لا يمكن أن يكون تاريخ النهاية قبل تاريخ البداية.',
+                perliteNoHistory: 'لا توجد بيانات ركيزة للفترة المحددة.'
+            },
+            zgh: {
+                last3d: '3 ⵓⵙⵙⴰⵏ',
+                perliteTrackTitle: 'RAYAT perlite track',
+                perliteTrackSubtitle: 'Projet pilot i tomate g serre f substrat Barakah Perlite.',
+                perliteProjectTitle: 'Projet pilot Barakah Perlite',
+                perliteProjectCropTitle: 'Tomates g serre',
+                perliteCustomerLabel: 'Client',
+                perliteCustomerValue: 'DUROC',
+                perliteCropLabel: 'Culture',
+                perliteCropValue: 'Tomates g serre',
+                perliteLocationLabel: 'Localisation',
+                perliteLocationValue: 'Souss-Massa, Maroc',
+                perliteSubstrateLabel: 'Substrat',
+                perliteSubstrateValue: 'Barakah Perlite',
+                perliteMonitoringLabel: 'Monitoring',
+                perliteMonitoringValue: 'Rayat Smart Monitoring',
+                perliteLastRealUpdate: 'Derniere mise a jour',
+                perliteMetricTemperature: 'Temperature substrat',
+                perliteMetricEc: 'EC substrat',
+                perliteMetricMoisture: 'Humidite substrat',
+                perliteRangeTomato: 'Range indicatif tomate serre',
+                perliteRangeSubstrate: 'Range indicatif substrat perlite',
+                perliteRangeSoilless: 'Range indicatif hors-sol',
+                waitingForSensorData: 'Attente data capteur',
+                notAvailableShort: 'N/A',
+                fromDate: 'De',
+                toDate: 'A',
+                applyFilter: 'Appliquer',
+                invalidDateRange: 'Intervalle dates invalide.',
+                invalidDateOrder: 'Date fin avant date debut.',
+                perliteNoHistory: 'Aucune data substrat pour cette periode.'
+            }
+        };
+        PERLITE_TRACK_TRANSLATIONS.ber = PERLITE_TRACK_TRANSLATIONS.zgh;
+        Object.entries(PERLITE_TRACK_TRANSLATIONS).forEach(([lang, values]) => {
+            translations[lang] = {
+                ...(translations[lang] || {}),
+                ...values
+            };
+        });
+
         function t(key) {
             let val = translations[currentLang]?.[key];
             if (!val && currentLang === 'ber') {
@@ -4070,6 +4241,8 @@
 
             if (filterState.period === '24h') {
                 start.setHours(start.getHours() - 24);
+            } else if (filterState.period === '3d') {
+                start.setDate(start.getDate() - 3);
             } else if (filterState.period === '7d') {
                 start.setDate(start.getDate() - 7);
             } else {
@@ -4084,6 +4257,8 @@
 
             if (filterState.period === '24h') {
                 params.set('hours', '24');
+            } else if (filterState.period === '3d') {
+                params.set('days', '3');
             } else if (filterState.period === '7d') {
                 params.set('days', '7');
             } else if (filterState.period === '30d') {
@@ -4187,6 +4362,10 @@
 
         async function setFilterPeriod(period) {
             filterState.period = period;
+            if (period !== 'custom') {
+                filterState.customStart = null;
+                filterState.customEnd = null;
+            }
             await loadHistoryData();
         }
 
@@ -4204,12 +4383,12 @@
             const endDate = new Date(`${end}T23:59:59.999`);
 
             if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-                alert('Intervallo date non valido.');
+                alert(t('invalidDateRange'));
                 return;
             }
 
             if (endDate < startDate) {
-                alert('La data di fine non può essere precedente alla data di inizio.');
+                alert(t('invalidDateOrder'));
                 return;
             }
 
@@ -6406,19 +6585,19 @@
                                         <div class="flex items-start justify-between gap-4">
                                             <div class="min-w-0">
                                                 <div class="text-3xl mb-4">🌱</div>
-                                                <h4 class="text-xl font-black text-slate-900 tracking-tight break-words">RAYAT perlite track</h4>
-                                                <p class="text-sm text-slate-500 mt-2">Substrate Rayat: umidita, EC e temperatura del substrato</p>
+                                                <h4 class="text-xl font-black text-slate-900 tracking-tight break-words">${escapeHtml(t('perliteTrackTitle'))}</h4>
+                                                <p class="text-sm text-slate-500 mt-2">${escapeHtml(t('perliteTrackSubtitle'))}</p>
                                             </div>
                                             <span class="inline-flex items-center justify-center px-3 py-1 rounded-full bg-green-50 text-green-700 font-black text-[11px] uppercase tracking-[0.14em]">${t('profileViewOnly')}</span>
                                         </div>
                                         <div class="space-y-3 mt-6">
                                             <div class="rayat-profile-meta-row">
                                                 <span>${escapeHtml(t('profileDeviceLabel'))}</span>
-                                                <strong>GW-001</strong>
+                                                <strong>${escapeHtml(BARAKAH_PERLITE_DEVICE_ID)}</strong>
                                             </div>
                                             <div class="rayat-profile-meta-row">
                                                 <span>${escapeHtml(t('profileLatestReading'))}</span>
-                                                <strong>Substrate Rayat</strong>
+                                                <strong>${escapeHtml(t('perliteMonitoringValue'))}</strong>
                                             </div>
                                         </div>
                                     </button>
@@ -6741,7 +6920,8 @@
 
             const renderWater = () => {
                 let numDays = 1;
-                if (filterState.period === '7d') numDays = 7;
+                if (filterState.period === '3d') numDays = 3;
+                else if (filterState.period === '7d') numDays = 7;
                 else if (filterState.period === '30d') numDays = 30;
                 else if (filterState.period === 'custom' && filterState.customStart && filterState.customEnd) {
                     numDays = Math.ceil(Math.abs(filterState.customEnd - filterState.customStart) / (86400000)) || 1;
@@ -6988,28 +7168,37 @@
             const isPerliteOffline = statusMeta.className === 'is-offline';
             const perliteLastUpdate = statusMeta.timestamp && statusMeta.timestamp !== '--'
                 ? statusMeta.timestamp
-                : 'Waiting for sensor data';
+                : t('waitingForSensorData');
+            const perliteDefaultStartDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const perliteDefaultEndDate = new Date().toISOString().split('T')[0];
+            const perliteInfoRows = [
+                ['perliteCustomerLabel', 'perliteCustomerValue'],
+                ['perliteCropLabel', 'perliteCropValue'],
+                ['perliteLocationLabel', 'perliteLocationValue'],
+                ['perliteSubstrateLabel', 'perliteSubstrateValue'],
+                ['perliteMonitoringLabel', 'perliteMonitoringValue']
+            ];
             const perliteMetricDefinitions = [
                 {
                     key: 'temperature',
-                    label: 'Temperatura substrato',
+                    label: t('perliteMetricTemperature'),
                     icon: '🌡️',
                     range: { min: 18, max: 26, unit: '°C' },
-                    rangeLabel: 'Range indicativo per pomodoro in serra'
+                    rangeLabel: t('perliteRangeTomato')
                 },
                 {
                     key: 'ec',
-                    label: 'EC substrato',
+                    label: t('perliteMetricEc'),
                     icon: '⚡',
                     range: { min: 2.0, max: 3.5, unit: 'mS/cm' },
-                    rangeLabel: 'Range indicativo per substrato perlite'
+                    rangeLabel: t('perliteRangeSubstrate')
                 },
                 {
                     key: 'moisture',
-                    label: 'Umidità substrato',
+                    label: t('perliteMetricMoisture'),
                     icon: '💧',
                     range: { min: 55, max: 75, unit: '%' },
-                    rangeLabel: 'Range indicativo per coltura fuori suolo'
+                    rangeLabel: t('perliteRangeSoilless')
                 }
             ];
             const rawPerliteMetrics = perliteMetricDefinitions.map((definition) => {
@@ -7044,7 +7233,7 @@
                     : {
                         level: isPerliteOffline ? 'offline' : 'loading',
                         cssModifier: 'rayat-metric-card--inactive',
-                        label: isPerliteOffline ? 'Offline' : 'Waiting for sensor data'
+                        label: isPerliteOffline ? t('homeStatusOffline') : t('waitingForSensorData')
                     };
                 const gauge = metric.range ? getGaugeMeta('soil', metric.key, metric.range) : null;
                 const gaugeMarkerPercent = hasLiveValue && gauge
@@ -7074,7 +7263,7 @@
                                 <span class="text-5xl font-black text-slate-900 leading-none">${formatMetricValue(normalizedValue)}</span>
                                 <span class="text-sm font-bold text-slate-400 uppercase">${unit}</span>
                             ` : `
-                                <span class="text-4xl font-black text-slate-300 leading-none">N/A</span>
+                                <span class="text-4xl font-black text-slate-300 leading-none">${escapeHtml(t('notAvailableShort'))}</span>
                             `}
                         </div>
                         ${gauge ? `
@@ -7088,7 +7277,7 @@
                                 <span>${formatMetricValue(gauge.max)}${unit ? ` ${unit}` : ''}</span>
                             </div>
                         ` : ''}
-                        <p class="rayat-metric-card-range ${hasLiveValue && state.level !== 'normal' ? getLevelClass(state.level) : 'text-slate-600'}">${escapeHtml(rangeText || 'Waiting for sensor data')}</p>
+                        <p class="rayat-metric-card-range ${hasLiveValue && state.level !== 'normal' ? getLevelClass(state.level) : 'text-slate-600'}">${escapeHtml(rangeText || t('waitingForSensorData'))}</p>
                     </article>
                 `;
             };
@@ -7097,7 +7286,7 @@
                     return `
                         <tr class="rayat-history-row">
                             <td colspan="5" class="py-10 text-center text-sm font-semibold text-slate-400">
-                                ${historyState.loading ? 'Caricamento storico in corso...' : 'Nessun dato substrate disponibile per il periodo selezionato.'}
+                                ${historyState.loading ? t('refreshingDataAction') : t('perliteNoHistory')}
                             </td>
                         </tr>
                     `;
@@ -7132,8 +7321,8 @@
                         ${renderSubscriptionWarningBanner()}
                         <div class="rayat-monitoring-toolbar rayat-monitoring-toolbar--demo-only">
                             <div class="rayat-monitoring-toolbar__copy">
-                                <h2 class="rayat-monitoring-toolbar__title">RAYAT perlite track</h2>
-                                <p class="rayat-monitoring-toolbar__subtitle">Pilot project per pomodoro in serra su substrato Barakah Perlite.</p>
+                                <h2 class="rayat-monitoring-toolbar__title">${escapeHtml(t('perliteTrackTitle'))}</h2>
+                                <p class="rayat-monitoring-toolbar__subtitle">${escapeHtml(t('perliteTrackSubtitle'))}</p>
                             </div>
                         </div>
 
@@ -7141,7 +7330,7 @@
                             <div class="relative z-10">
                                 <div class="rayat-demo-section-heading">
                                     <div class="rayat-demo-section-heading__row">
-                                        <h4 class="rayat-demo-section-heading__title">Substrate Rayat</h4>
+                                        <h4 class="rayat-demo-section-heading__title">${escapeHtml(t('perliteProjectTitle'))}</h4>
                                         <div class="rayat-demo-section-heading__meta">
                                             <span class="rayat-demo-section-heading__badge ${statusMeta.className}">
                                                 <span class="rayat-demo-section-heading__status ${statusMeta.className}" aria-hidden="true"></span>
@@ -7155,36 +7344,19 @@
                                 <div class="mb-8 rounded-[2rem] border border-green-100 bg-gradient-to-br from-green-50 via-white to-emerald-50 px-6 py-6 md:px-8 md:py-7 shadow-[0_24px_70px_rgba(22,101,52,0.08)]">
                                     <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
                                         <div>
-                                            <p class="text-xs font-black uppercase tracking-[0.24em] text-green-700 mb-2">Barakah Perlite Pilot Project</p>
-                                            <h5 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Tomatoes grown in greenhouse</h5>
-                                            <p class="mt-3 text-sm font-semibold text-slate-500">Last real update: ${escapeHtml(perliteLastUpdate)}</p>
+                                            <p class="text-xs font-black uppercase tracking-[0.24em] text-green-700 mb-2">${escapeHtml(t('perliteProjectTitle'))}</p>
+                                            <h5 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">${escapeHtml(t('perliteProjectCropTitle'))}</h5>
+                                            <p class="mt-3 text-sm font-semibold text-slate-500">${escapeHtml(t('perliteLastRealUpdate'))}: ${escapeHtml(perliteLastUpdate)}</p>
                                         </div>
-                                        <span class="rayat-demo-section-heading__badge ${statusMeta.className} self-start">
-                                            <span class="rayat-demo-section-heading__status ${statusMeta.className}" aria-hidden="true"></span>
-                                            <span class="rayat-demo-section-heading__badge-text">${escapeHtml(isPerliteOffline ? 'Offline' : statusMeta.label)}</span>
-                                        </span>
                                     </div>
-                                    <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-7">
-                                        ${[
-                                            ['Crop', 'Tomatoes grown in greenhouse'],
-                                            ['Location', 'Souss-Massa, Morocco'],
-                                            ['Substrate', 'Barakah Perlite'],
-                                            ['Monitoring', 'Rayat Smart Monitoring']
-                                        ].map(([label, value]) => `
+                                    <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-7">
+                                        ${perliteInfoRows.map(([labelKey, valueKey]) => `
                                             <div class="rounded-2xl bg-white/80 border border-green-100 px-4 py-4">
-                                                <dt class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">${label}</dt>
-                                                <dd class="mt-1 text-sm font-black text-slate-800">${value}</dd>
+                                                <dt class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">${escapeHtml(t(labelKey))}</dt>
+                                                <dd class="mt-1 text-sm font-black text-slate-800">${escapeHtml(t(valueKey))}</dd>
                                             </div>
                                         `).join('')}
                                     </dl>
-                                    <div class="mt-5 rounded-2xl bg-green-900 text-white px-5 py-4">
-                                        <div class="text-[10px] font-black uppercase tracking-[0.2em] text-green-200 mb-2">Parameters</div>
-                                        <div class="flex flex-wrap gap-2">
-                                            ${['Moisture', 'EC', 'Temperature'].map((parameter) => `
-                                                <span class="rounded-full bg-white/12 border border-white/15 px-4 py-2 text-xs font-black uppercase tracking-[0.12em]">${parameter}</span>
-                                            `).join('')}
-                                        </div>
-                                    </div>
                                 </div>
                                 <div class="rayat-sensor-card-grid rayat-sensor-card-grid--soil grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
                                     ${perliteMetrics.map((metric) => renderPerliteMetricCard(metric)).join('')}
@@ -7195,11 +7367,25 @@
                         <div class="mt-20 w-full mx-auto">
                             <div class="flex flex-nowrap items-center bg-white p-4 rounded-[2rem] shadow-2xl border border-gray-100 gap-4 mb-10 overflow-x-auto no-scrollbar">
                                 <div class="flex bg-gray-50 p-1.5 rounded-2xl shrink-0">
-                                    ${['24h', '7d', '30d'].map(period => `
+                                    ${['24h', '3d', '7d', '30d'].map(period => `
                                         <button onclick="setFilterPeriod('${period}')" class="px-5 py-2.5 rounded-xl font-bold uppercase tracking-tight text-[11px] whitespace-nowrap transition-all ${filterState.period === period ? 'bg-[#1e293b] text-white shadow-lg' : 'text-gray-400 hover:text-gray-900'}">
                                             ${t('last' + period)}
                                         </button>`).join('')}
                                 </div>
+                                <div class="flex items-center gap-2 bg-gray-50 p-2 rounded-2xl border border-gray-100 shrink-0">
+                                    <label class="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                        ${escapeHtml(t('fromDate'))}
+                                        <input type="date" id="startDate" class="bg-transparent font-black text-[11px] uppercase p-1.5 outline-none text-gray-700 cursor-pointer" value="${filterState.customStart ? filterState.customStart.toISOString().split('T')[0] : perliteDefaultStartDate}">
+                                    </label>
+                                    <span class="text-gray-300 font-bold">~</span>
+                                    <label class="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                        ${escapeHtml(t('toDate'))}
+                                        <input type="date" id="endDate" class="bg-transparent font-black text-[11px] uppercase p-1.5 outline-none text-gray-700 cursor-pointer" value="${filterState.customEnd ? filterState.customEnd.toISOString().split('T')[0] : perliteDefaultEndDate}">
+                                    </label>
+                                </div>
+                                <button onclick="setCustomFilter()" class="bg-[#1e293b] hover:bg-slate-800 text-white px-6 py-3 rounded-xl font-bold uppercase tracking-tight text-[11px] shadow-lg transition-all shrink-0 flex items-center gap-2">
+                                    <span>${escapeHtml(t('applyFilter'))}</span>
+                                </button>
                                 <button onclick="refreshData()" class="bg-[#10b981] hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold uppercase tracking-tight text-[11px] shadow-xl transition-all shrink-0 flex items-center gap-2">
                                     <span>${isRefreshingData ? t('refreshingDataAction') : t('refreshDataAction')}</span>
                                 </button>
@@ -7211,9 +7397,9 @@
                                         <thead>
                                             <tr class="border-b-8 border-gray-50">
                                                 <th class="rayat-history-head-cell">${t('time')}</th>
-                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">🌡️ Temperatura substrato</th>
-                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">⚡ EC substrato</th>
-                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">💧 Umidita substrato</th>
+                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">🌡️ ${escapeHtml(t('perliteMetricTemperature'))}</th>
+                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">⚡ ${escapeHtml(t('perliteMetricEc'))}</th>
+                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">💧 ${escapeHtml(t('perliteMetricMoisture'))}</th>
                                                 <th class="rayat-history-head-cell">${t('status')}</th>
                                             </tr>
                                         </thead>
