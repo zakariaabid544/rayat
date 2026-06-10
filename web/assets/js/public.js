@@ -7344,12 +7344,17 @@
                     ? getGaugeMarkerPercent(normalizedValue, gauge.min, gauge.max)
                     : null;
                 const unit = metric.range?.unit || metric.unit || '';
-                const rangeText = buildPerliteRangeText(metric);
+                const unitSuffix = metric.range?.unit ? ` ${metric.range.unit}` : '';
+                const rangeValueText = metric.range
+                    ? `${formatMetricValue(metric.range.min)} – ${formatMetricValue(metric.range.max)}${unitSuffix}`
+                    : '';
                 const stateClass = hasLiveValue ? getLevelClass(state.level) : 'text-slate-500';
+                const badgeClass = state.level === 'alert' ? 'rayat-alert-badge--alert' : 'rayat-alert-badge--attention';
+                const rangeStateClass = hasLiveValue && state.level !== 'normal' ? getLevelClass(state.level) : 'text-green-600';
 
                 return `
-                    <article class="rayat-metric-card ${hasLiveValue ? state.cssModifier : 'rayat-metric-card--inactive'}" data-metric-key="${metric.key}">
-                        <div class="rayat-metric-card-head mb-4">
+                    <article class="rayat-metric-card rayat-perlite-metric-card ${hasLiveValue ? state.cssModifier : 'rayat-metric-card--inactive'}" data-metric-key="${metric.key}">
+                        <div class="rayat-metric-card-head rayat-perlite-metric-card__head">
                             <div class="rayat-metric-card-header-main">
                                 <span class="rayat-metric-card-icon">${metric.icon}</span>
                                 <div class="rayat-metric-card-copy">
@@ -7357,28 +7362,35 @@
                                     <p class="rayat-metric-card-state ${stateClass}">${escapeHtml(state.label)}</p>
                                 </div>
                             </div>
-                            ${hasLiveValue && state.badge ? `<span class="rayat-alert-badge ${state.level === 'alert' ? 'rayat-alert-badge--alert' : 'rayat-alert-badge--attention'}">${state.badge}</span>` : ''}
+                            <span class="rayat-alert-badge rayat-perlite-metric-card__badge ${hasLiveValue && state.badge ? badgeClass : 'rayat-perlite-metric-card__badge--empty'}">
+                                ${hasLiveValue && state.badge ? state.badge : '&ndash;'}
+                            </span>
                         </div>
-                        <div class="flex items-end gap-2 mb-5">
+                        <div class="rayat-perlite-metric-card__value">
                             ${hasLiveValue ? `
-                                <span class="text-5xl font-black text-slate-900 leading-none">${formatMetricValue(normalizedValue)}</span>
-                                <span class="text-sm font-bold text-slate-400 uppercase">${unit}</span>
+                                <span class="rayat-perlite-metric-card__number">${formatMetricValue(normalizedValue)}</span>
+                                <span class="rayat-perlite-metric-card__unit">${unit}</span>
                             ` : `
-                                <span class="text-4xl font-black text-slate-300 leading-none">${escapeHtml(t('notAvailableShort'))}</span>
+                                <span class="rayat-perlite-metric-card__number rayat-perlite-metric-card__number--empty">${escapeHtml(t('notAvailableShort'))}</span>
                             `}
                         </div>
-                        ${gauge ? `
-                            <div class="rayat-range-track-shell">
+                        <div class="rayat-perlite-metric-card__gauge">
+                            ${gauge ? `
+                            <div class="rayat-range-track-shell rayat-perlite-metric-card__track-shell">
                                 <div class="rayat-range-track" style="background:${gauge.gradient};">
                                     ${gaugeMarkerPercent !== null ? `<div class="rayat-range-pointer" style="left:${gaugeMarkerPercent}%;" aria-hidden="true"></div>` : ''}
                                 </div>
                             </div>
-                            <div class="flex justify-between text-[11px] font-semibold text-slate-400 mt-3">
+                            <div class="rayat-perlite-metric-card__scale">
                                 <span>${formatMetricValue(gauge.min)}${unit ? ` ${unit}` : ''}</span>
                                 <span>${formatMetricValue(gauge.max)}${unit ? ` ${unit}` : ''}</span>
                             </div>
-                        ` : ''}
-                        <p class="rayat-metric-card-range ${hasLiveValue && state.level !== 'normal' ? getLevelClass(state.level) : 'text-slate-600'}">${escapeHtml(rangeText || t('waitingForSensorData'))}</p>
+                            ` : ''}
+                        </div>
+                        <div class="rayat-perlite-metric-card__range ${hasLiveValue && state.level !== 'normal' ? 'rayat-perlite-metric-card__range--alert' : 'rayat-perlite-metric-card__range--normal'}">
+                            <span class="rayat-perlite-metric-card__range-label ${rangeStateClass}">${escapeHtml(t('perliteOptimalRange'))}</span>
+                            <span class="rayat-perlite-metric-card__range-value">${escapeHtml(rangeValueText || t('waitingForSensorData'))}</span>
+                        </div>
                     </article>
                 `;
             };
