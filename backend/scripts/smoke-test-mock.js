@@ -65,6 +65,14 @@ function normalizeSql(sql) {
   return sql.replace(/\s+/g, ' ').trim();
 }
 
+function excludesPrivateSensorTopic(sql) {
+  return sql.includes('topic IS NULL OR topic NOT LIKE ?');
+}
+
+function isPrivateSensorTopic(topic) {
+  return String(topic || '').startsWith('sensors/GW-002/');
+}
+
 function parseInlineLimit(sql, fallbackLimit = 25, fallbackOffset = 0) {
   const match = sql.match(/LIMIT\s+(\d+)\s*,\s*(\d+)/i);
   if (!match) {
@@ -572,7 +580,13 @@ async function fakeQuery(sql, params = []) {
   }
 
   if (text.startsWith('SELECT sensor_type AS type, sensor_subtype AS subtype, value, topic, timestamp,')) {
-    return state.publicLatest
+    let rows = state.publicLatest.slice();
+
+    if (excludesPrivateSensorTopic(text)) {
+      rows = rows.filter((row) => !isPrivateSensorTopic(row.topic));
+    }
+
+    return rows
       .slice()
       .sort((a, b) => {
         const typeCompare = String(a.sensor_type).localeCompare(String(b.sensor_type));
@@ -592,12 +606,18 @@ async function fakeQuery(sql, params = []) {
   }
 
   if (text.startsWith('SELECT sensor_type AS type, sensor_subtype AS subtype, value, topic, timestamp FROM public_sensor_readings WHERE sensor_type = ?')) {
+    const hasPrivateTopicExclusion = excludesPrivateSensorTopic(text);
+    const subtypeParamIndex = hasPrivateTopicExclusion ? 4 : 3;
     let rows = state.publicSensorReadings
       .filter((row) => row.sensor_type === params[0])
       .filter((row) => new Date(row.timestamp) >= new Date(params[1]) && new Date(row.timestamp) <= new Date(params[2]));
 
-    if (params[3]) {
-      rows = rows.filter((row) => row.sensor_subtype === params[3]);
+    if (hasPrivateTopicExclusion) {
+      rows = rows.filter((row) => !isPrivateSensorTopic(row.topic));
+    }
+
+    if (params[subtypeParamIndex]) {
+      rows = rows.filter((row) => row.sensor_subtype === params[subtypeParamIndex]);
     }
 
     return rows
@@ -611,8 +631,15 @@ async function fakeQuery(sql, params = []) {
       }));
   }
 
-  if (text === 'SELECT MAX(timestamp) AS sensor_data_last_at FROM public_sensor_latest') {
-    const lastTimestamp = state.publicLatest
+  if (text === 'SELECT MAX(timestamp) AS sensor_data_last_at FROM public_sensor_latest'
+      || text.startsWith('SELECT MAX(timestamp) AS sensor_data_last_at FROM public_sensor_latest WHERE')) {
+    let rows = state.publicLatest.slice();
+
+    if (excludesPrivateSensorTopic(text)) {
+      rows = rows.filter((row) => !isPrivateSensorTopic(row.topic));
+    }
+
+    const lastTimestamp = rows
       .map((row) => row.timestamp)
       .filter(Boolean)
       .sort((left, right) => new Date(right) - new Date(left))[0] || null;

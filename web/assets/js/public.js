@@ -732,7 +732,17 @@
             return numeric;
         }
 
-        function getAlertThresholds(range) {
+        function getAlertThresholds(range, criticalThresholds = null) {
+            if (criticalThresholds
+                && Number.isFinite(criticalThresholds.low)
+                && Number.isFinite(criticalThresholds.high)
+                && criticalThresholds.low < criticalThresholds.high) {
+                return {
+                    lowerCritical: criticalThresholds.low,
+                    upperCritical: criticalThresholds.high
+                };
+            }
+
             const minSpan = Math.max(Math.abs(range.min) * 0.3, range.unit === '' ? 0.3 : 1);
             const maxSpan = Math.max(Math.abs(range.max) * 0.3, range.unit === '' ? 0.3 : 1);
             return {
@@ -741,7 +751,7 @@
             };
         }
 
-        function getMetricState(value, range) {
+        function getMetricState(value, range, criticalThresholds = null) {
             if (!range || !Number.isFinite(value)) {
                 return {
                     level: 'normal',
@@ -764,8 +774,11 @@
                 };
             }
 
-            const { lowerCritical, upperCritical } = getAlertThresholds(range);
-            const isAlert = value < lowerCritical || value > upperCritical;
+            const { lowerCritical, upperCritical } = getAlertThresholds(range, criticalThresholds);
+            const hasExplicitCriticalThresholds = Boolean(criticalThresholds);
+            const isAlert = hasExplicitCriticalThresholds
+                ? value <= lowerCritical || value >= upperCritical
+                : value < lowerCritical || value > upperCritical;
 
             return {
                 level: isAlert ? 'alert' : 'attention',
@@ -805,9 +818,9 @@
             };
         }
 
-        function getGaugeMeta(group, key, range) {
+        function getGaugeMeta(group, key, range, criticalThresholds = null) {
             const bounds = getGaugeBounds(group, key, range);
-            const { lowerCritical, upperCritical } = getAlertThresholds(range);
+            const { lowerCritical, upperCritical } = getAlertThresholds(range, criticalThresholds);
             const clamp = (value) => Math.max(bounds.min, Math.min(bounds.max, value));
             const toPct = (value) => ((clamp(value) - bounds.min) / (bounds.max - bounds.min)) * 100;
 
@@ -2331,9 +2344,14 @@
                 perliteMetricTemperature: 'Temperatura substrato',
                 perliteMetricEc: 'EC substrato',
                 perliteMetricMoisture: 'Umidità substrato',
-                perliteRangeTomato: 'Range indicativo per pomodoro in serra',
-                perliteRangeSubstrate: 'Range indicativo per substrato perlite',
-                perliteRangeSoilless: 'Range indicativo per coltura fuori suolo',
+                perliteRangeTomato: 'Range ottimale per pomodoro in serra',
+                perliteRangeSubstrate: 'Range ottimale per substrato perlite',
+                perliteRangeSoilless: 'Range ottimale per coltura fuori suolo',
+                perliteAlertCropLabel: 'Pomodoro in serra',
+                perliteAlertTemperatureTitle: 'Temperatura del substrato',
+                perliteAlertEcTitle: 'Conducibilità elettrica',
+                perliteAlertMoistureTitle: 'Umidità del substrato',
+                perliteOptimalRange: 'Range ottimale',
                 waitingForSensorData: 'In attesa dei dati del sensore',
                 notAvailableShort: 'N/A',
                 fromDate: 'Da',
@@ -2363,9 +2381,14 @@
                 perliteMetricTemperature: 'Substrate temperature',
                 perliteMetricEc: 'Substrate EC',
                 perliteMetricMoisture: 'Substrate moisture',
-                perliteRangeTomato: 'Indicative range for greenhouse tomato',
-                perliteRangeSubstrate: 'Indicative range for perlite substrate',
-                perliteRangeSoilless: 'Indicative range for soilless crop',
+                perliteRangeTomato: 'Optimal range for greenhouse tomato',
+                perliteRangeSubstrate: 'Optimal range for perlite substrate',
+                perliteRangeSoilless: 'Optimal range for soilless crop',
+                perliteAlertCropLabel: 'Greenhouse tomato',
+                perliteAlertTemperatureTitle: 'Substrate temperature',
+                perliteAlertEcTitle: 'Electrical conductivity',
+                perliteAlertMoistureTitle: 'Substrate moisture',
+                perliteOptimalRange: 'Optimal range',
                 waitingForSensorData: 'Waiting for sensor data',
                 notAvailableShort: 'N/A',
                 fromDate: 'From',
@@ -2395,9 +2418,14 @@
                 perliteMetricTemperature: 'Température substrat',
                 perliteMetricEc: 'EC substrat',
                 perliteMetricMoisture: 'Humidité substrat',
-                perliteRangeTomato: 'Plage indicative pour tomate sous serre',
-                perliteRangeSubstrate: 'Plage indicative pour substrat perlite',
-                perliteRangeSoilless: 'Plage indicative pour culture hors-sol',
+                perliteRangeTomato: 'Plage optimale pour tomate sous serre',
+                perliteRangeSubstrate: 'Plage optimale pour substrat perlite',
+                perliteRangeSoilless: 'Plage optimale pour culture hors-sol',
+                perliteAlertCropLabel: 'Tomate sous serre',
+                perliteAlertTemperatureTitle: 'Température du substrat',
+                perliteAlertEcTitle: 'Conductivité électrique',
+                perliteAlertMoistureTitle: 'Humidité du substrat',
+                perliteOptimalRange: 'Plage optimale',
                 waitingForSensorData: 'En attente des données du capteur',
                 notAvailableShort: 'N/A',
                 fromDate: 'Du',
@@ -2427,9 +2455,14 @@
                 perliteMetricTemperature: 'حرارة الركيزة',
                 perliteMetricEc: 'EC الركيزة',
                 perliteMetricMoisture: 'رطوبة الركيزة',
-                perliteRangeTomato: 'نطاق إرشادي للطماطم داخل الدفيئة',
-                perliteRangeSubstrate: 'نطاق إرشادي لركيزة البيرلايت',
-                perliteRangeSoilless: 'نطاق إرشادي للزراعة خارج التربة',
+                perliteRangeTomato: 'النطاق الأمثل للطماطم داخل الدفيئة',
+                perliteRangeSubstrate: 'النطاق الأمثل لركيزة البيرلايت',
+                perliteRangeSoilless: 'النطاق الأمثل للزراعة خارج التربة',
+                perliteAlertCropLabel: 'طماطم داخل الدفيئة',
+                perliteAlertTemperatureTitle: 'حرارة الركيزة',
+                perliteAlertEcTitle: 'التوصيل الكهربائي',
+                perliteAlertMoistureTitle: 'رطوبة الركيزة',
+                perliteOptimalRange: 'النطاق الأمثل',
                 waitingForSensorData: 'في انتظار بيانات المستشعر',
                 notAvailableShort: 'N/A',
                 fromDate: 'من',
@@ -2459,9 +2492,14 @@
                 perliteMetricTemperature: 'Temperature substrat',
                 perliteMetricEc: 'EC substrat',
                 perliteMetricMoisture: 'Humidite substrat',
-                perliteRangeTomato: 'Range indicatif tomate serre',
-                perliteRangeSubstrate: 'Range indicatif substrat perlite',
-                perliteRangeSoilless: 'Range indicatif hors-sol',
+                perliteRangeTomato: 'Range optimal tomate serre',
+                perliteRangeSubstrate: 'Range optimal substrat perlite',
+                perliteRangeSoilless: 'Range optimal hors-sol',
+                perliteAlertCropLabel: 'Tomate serre',
+                perliteAlertTemperatureTitle: 'Temperature substrat',
+                perliteAlertEcTitle: 'Conductivite electrique',
+                perliteAlertMoistureTitle: 'Humidite substrat',
+                perliteOptimalRange: 'Range optimal',
                 waitingForSensorData: 'Attente data capteur',
                 notAvailableShort: 'N/A',
                 fromDate: 'De',
@@ -7209,25 +7247,32 @@
                 {
                     key: 'temperature',
                     label: t('perliteMetricTemperature'),
+                    alertTitleKey: 'perliteAlertTemperatureTitle',
                     icon: '🌡️',
                     range: { min: 18, max: 26, unit: '°C' },
+                    alarm: { low: 15, high: 30 },
                     rangeLabel: t('perliteRangeTomato')
                 },
                 {
                     key: 'ec',
                     label: t('perliteMetricEc'),
+                    alertTitleKey: 'perliteAlertEcTitle',
                     icon: '⚡',
                     range: { min: 2.0, max: 3.5, unit: 'mS/cm' },
+                    alarm: { low: 1.5, high: 4.0 },
                     rangeLabel: t('perliteRangeSubstrate')
                 },
                 {
                     key: 'moisture',
                     label: t('perliteMetricMoisture'),
+                    alertTitleKey: 'perliteAlertMoistureTitle',
                     icon: '💧',
                     range: { min: 55, max: 75, unit: '%' },
+                    alarm: { low: 50, high: 80 },
                     rangeLabel: t('perliteRangeSoilless')
                 }
             ];
+            const perliteMetricByKey = new Map(perliteMetricDefinitions.map((metric) => [metric.key, metric]));
             const rawPerliteMetrics = perliteMetricDefinitions.map((definition) => {
                 const metric = sensorData.terreno.details.find((item) => item.key === definition.key) || {};
                 return {
@@ -7251,26 +7296,55 @@
                     ? metric
                     : { ...metric, value: null, installed: false };
             });
+            const buildPerliteRangeText = (metric) => {
+                if (!metric?.range) {
+                    return metric?.rangeLabel || '';
+                }
+
+                const unitSuffix = metric.range.unit ? ` ${metric.range.unit}` : '';
+                return `${metric.rangeLabel}: ${formatMetricValue(metric.range.min)} – ${formatMetricValue(metric.range.max)}${unitSuffix}`;
+            };
+            const getPerliteMetricState = (key, value) => {
+                const definition = perliteMetricByKey.get(key);
+                const normalizedValue = normalizeMetricValue('soil', key, value);
+                return getMetricState(normalizedValue, definition?.range || null, definition?.alarm || null);
+            };
+            const buildPerliteActiveAlerts = () => perliteMetrics.map((metric) => {
+                const normalizedValue = normalizeMetricValue('soil', metric.key, metric.value);
+                const hasLiveValue = metric.installed !== false && Number.isFinite(normalizedValue);
+                if (!hasLiveValue) {
+                    return null;
+                }
+
+                const state = getMetricState(normalizedValue, metric.range, metric.alarm);
+                if (state.level === 'normal') {
+                    return null;
+                }
+
+                return {
+                    key: metric.key,
+                    level: state.level,
+                    title: `${t(metric.alertTitleKey)} • ${t('perliteAlertCropLabel')}`,
+                    description: buildPerliteRangeText(metric)
+                };
+            }).filter(Boolean).sort((left, right) => ALERT_PRIORITY[right.level] - ALERT_PRIORITY[left.level]);
             const historyRows = getFilteredHistory();
             const renderPerliteMetricCard = (metric) => {
                 const normalizedValue = normalizeMetricValue('soil', metric.key, metric.value);
                 const hasLiveValue = metric.installed !== false && Number.isFinite(normalizedValue);
                 const state = hasLiveValue
-                    ? getMetricState(normalizedValue, metric.range)
+                    ? getMetricState(normalizedValue, metric.range, metric.alarm)
                     : {
                         level: isPerliteOffline ? 'offline' : 'loading',
                         cssModifier: 'rayat-metric-card--inactive',
                         label: isPerliteOffline ? t('homeStatusOffline') : t('waitingForSensorData')
                     };
-                const gauge = metric.range ? getGaugeMeta('soil', metric.key, metric.range) : null;
+                const gauge = metric.range ? getGaugeMeta('soil', metric.key, metric.range, metric.alarm) : null;
                 const gaugeMarkerPercent = hasLiveValue && gauge
                     ? getGaugeMarkerPercent(normalizedValue, gauge.min, gauge.max)
                     : null;
                 const unit = metric.range?.unit || metric.unit || '';
-                const rangeUnitSuffix = metric.range?.unit ? ` ${metric.range.unit}` : '';
-                const rangeText = metric.range
-                    ? `${metric.rangeLabel}: ${formatMetricValue(metric.range.min)} – ${formatMetricValue(metric.range.max)}${rangeUnitSuffix}`
-                    : metric.rangeLabel;
+                const rangeText = buildPerliteRangeText(metric);
                 const stateClass = hasLiveValue ? getLevelClass(state.level) : 'text-slate-500';
 
                 return `
@@ -7321,9 +7395,9 @@
 
                 return historyRows.map((row) => {
                     const levels = [
-                        getMetricLevel('soil', 'temperature', row.temperature),
-                        getMetricLevel('soil', 'ec', row.ec),
-                        getMetricLevel('soil', 'moisture', row.terreno)
+                        getPerliteMetricState('temperature', row.temperature).level,
+                        getPerliteMetricState('ec', row.ec).level,
+                        getPerliteMetricState('moisture', row.terreno).level
                     ];
 
                     return `
@@ -7339,6 +7413,37 @@
                         </tr>
                     `;
                 }).join('');
+            };
+            const renderPerliteActiveAlertFeed = () => {
+                const perliteAlerts = buildPerliteActiveAlerts();
+                if (!perliteAlerts.length) {
+                    return '';
+                }
+
+                return `
+                    <section class="rayat-dashboard-alert-feed">
+                        <div class="flex items-center justify-between gap-4 mb-5">
+                            <div>
+                                <p class="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">${t('activeAlertsTitle')}</p>
+                                <h5 class="text-2xl font-black text-slate-900">${t('activeAlertsSubtitle')}</h5>
+                            </div>
+                            <span class="text-sm font-bold text-slate-500">${perliteAlerts.length}</span>
+                        </div>
+                        <div class="space-y-3">
+                            ${perliteAlerts.slice(0, 3).map((alert) => `
+                                <button type="button" onclick="setSensor('terreno')" class="w-full text-left bg-white/90 border border-white rounded-2xl px-4 py-4 shadow-sm transition hover:shadow-md">
+                                    <div class="flex items-start justify-between gap-4">
+                                        <div>
+                                            <p class="font-black text-slate-900">${escapeHtml(alert.title)}</p>
+                                            <p class="text-sm text-slate-500 mt-1">${escapeHtml(alert.description)}</p>
+                                        </div>
+                                        <span class="text-xs font-black uppercase tracking-[0.16em] ${alert.level === 'alert' ? 'text-red-600' : 'text-amber-600'}">${escapeHtml(getAlertBadgeLabel(alert.level))}</span>
+                                    </div>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </section>
+                `;
             };
 
             return `
@@ -7388,7 +7493,7 @@
                                 <div class="rayat-sensor-card-grid rayat-sensor-card-grid--soil grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
                                     ${perliteMetrics.map((metric) => renderPerliteMetricCard(metric)).join('')}
                                 </div>
-                                ${renderActiveAlertFeed('terreno')}
+                                ${renderPerliteActiveAlertFeed()}
                             </div>
                         </div>
 
