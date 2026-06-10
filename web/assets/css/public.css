@@ -1010,6 +1010,14 @@
             background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
         }
 
+        body[data-view="perlite-track"] .rayat-dashboard-alert-feed {
+            margin-top: 0.5rem;
+            border-radius: 2rem;
+            border: 1px solid rgba(186, 230, 253, 0.55);
+            background: linear-gradient(135deg, rgba(240, 253, 250, 0.92), rgba(255, 255, 255, 0.94));
+            padding: 1.4rem;
+        }
+
         .rayat-history-table {
             min-width: 720px;
         }
@@ -2295,6 +2303,11 @@
                 margin-bottom: 0.55rem;
             }
 
+            body[data-view="perlite-track"] .rayat-monitoring-toolbar__title {
+                font-size: clamp(2.05rem, 10.4vw, 3rem);
+                overflow-wrap: anywhere;
+            }
+
             .rayat-monitoring-toolbar__subtitle {
                 font-size: 0.82rem;
                 letter-spacing: 0.16em;
@@ -2309,6 +2322,16 @@
 
             .rayat-monitoring-toolbar--demo-only .rayat-monitoring-toolbar__copy {
                 text-align: center;
+            }
+
+            body[data-view="perlite-track"] .rayat-dashboard-alert-feed {
+                padding: 1rem;
+                border-radius: 1.45rem;
+            }
+
+            body[data-view="perlite-track"] .rayat-dashboard-alert-feed button > div {
+                flex-direction: column;
+                align-items: flex-start;
             }
 
             .rayat-home-sensors-shell {

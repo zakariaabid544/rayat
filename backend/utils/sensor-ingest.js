@@ -10,6 +10,7 @@ const {
 } = require('./dtu-decoder');
 
 const VALID_SENSOR_TYPES = new Set(['energia', 'acqua', 'terreno', 'clima']);
+const DEFAULT_PRIVATE_SENSOR_DEVICE_IDS = new Set(['GW-002']);
 const DEFAULT_SENSOR_PROFILES = {
     energia: { subtype: 'energia_consumption', name: 'Sensore Energia', unit: 'kW' },
     acqua: { subtype: 'acqua_level', name: 'Sensore Acqua', unit: 'm' },
@@ -162,6 +163,25 @@ function createExecutor(connection) {
 
 function cleanString(value) {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function getPrivateSensorDeviceIds() {
+    const configured = cleanString(process.env.PRIVATE_SENSOR_DEVICE_IDS);
+    if (!configured) {
+        return DEFAULT_PRIVATE_SENSOR_DEVICE_IDS;
+    }
+
+    return new Set(
+        configured
+            .split(',')
+            .map((deviceId) => cleanString(deviceId))
+            .filter(Boolean)
+    );
+}
+
+function shouldExposeDeviceReadingsPublicly(device = {}) {
+    const deviceId = cleanString(device.device_id);
+    return Boolean(deviceId) && !getPrivateSensorDeviceIds().has(deviceId);
 }
 
 function isPlainObject(value) {
@@ -579,7 +599,9 @@ async function persistReadingsForDevice(execute, device, normalizedReadings, rea
         });
     }
 
-    await persistPublicSensorLatest(execute, normalizedReadings, readingTimestamp);
+    if (shouldExposeDeviceReadingsPublicly(device)) {
+        await persistPublicSensorLatest(execute, normalizedReadings, readingTimestamp);
+    }
 
     return {
         deviceId: device.device_id,

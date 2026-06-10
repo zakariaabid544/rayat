@@ -138,6 +138,8 @@
         const PRIVILEGED_ADMIN_ROLES = new Set(['super_admin', 'admin', 'operator_admin', 'operator']);
         const BARAKAH_PERLITE_EMAIL = 'support@barakahperlite.com';
         const BARAKAH_PERLITE_DEVICE_ID = 'GW-002';
+        const PRIVATE_SENSOR_DEVICE_IDS = new Set([BARAKAH_PERLITE_DEVICE_ID]);
+        const PRIVATE_SENSOR_TOPIC_PREFIXES = [`sensors/${BARAKAH_PERLITE_DEVICE_ID}/`];
         const VIEW_PATHS = {
             home: '/',
             login: '/login',
@@ -1096,6 +1098,14 @@
 
         function isBarakahPerliteClientSession(userData = user, role = currentRole) {
             return isAuthenticated() && isCustomerRole(role) && isBarakahPerliteCustomer(userData);
+        }
+
+        function getPrivateSensorAuthToken() {
+            if (isAuthenticated() && isCustomerRole(currentRole)) {
+                return authToken;
+            }
+
+            return getPrivilegedAdminSessionUser() ? getAdminSessionTokenCandidate() : null;
         }
 
         function normalizeViewForCurrentUser(view) {
@@ -3384,12 +3394,13 @@
             return changed; // RAYAT-FIX
         }
 
-        async function fetchGatewayStatusPayload(requestScope) { // RAYAT-FIX
+        async function fetchGatewayStatusPayload(requestScope, tokenOverride = null) { // RAYAT-FIX
             const isPrivateScope = requestScope === 'private'; // RAYAT-FIX
             const endpoint = isPrivateScope ? CONFIG.PRIVATE_GATEWAY_STATUS_URL : CONFIG.PUBLIC_GATEWAY_STATUS_URL; // RAYAT-FIX
+            const privateToken = tokenOverride || authToken; // RAYAT-FIX
             const response = await fetch(`${endpoint}?t=${Date.now()}`, { // RAYAT-FIX
                 cache: 'no-store', // RAYAT-FIX
-                headers: isPrivateScope ? { 'Authorization': `Bearer ${authToken}` } : undefined // RAYAT-FIX
+                headers: isPrivateScope && privateToken ? { 'Authorization': `Bearer ${privateToken}` } : undefined // RAYAT-FIX
             }); // RAYAT-FIX
             if (!response.ok) { // RAYAT-FIX
                 throw new Error(`HTTP ${response.status}`); // RAYAT-FIX
@@ -3441,6 +3452,19 @@
                 data,
                 monitoring: normalizeMonitoringConfig(monitoring)
             }));
+        }
+
+        function isPrivateSensorPayloadRow(row = {}) {
+            const deviceId = String(row.device_id || row.deviceId || row.gateway_id || row.gatewayId || '').trim();
+            const topic = String(row.topic || row.mqtt_topic || row.mqttTopic || '').trim();
+            return (deviceId && PRIVATE_SENSOR_DEVICE_IDS.has(deviceId))
+                || (topic && PRIVATE_SENSOR_TOPIC_PREFIXES.some((prefix) => topic.startsWith(prefix)));
+        }
+
+        function filterPublicSensorPayloadRows(data) {
+            return Array.isArray(data)
+                ? data.filter((row) => !isPrivateSensorPayloadRow(row))
+                : data;
         }
 
         function resolveSensorOnlineStatus(reading) {
@@ -4277,8 +4301,9 @@
                 return false;
             }
 
+            const privateSensorAuthToken = getPrivateSensorAuthToken();
             const requestKey = [
-                isAuthenticated() && isCustomerRole(currentRole) ? 'private' : 'public',
+                privateSensorAuthToken ? 'private' : 'public',
                 selectedSensor,
                 buildHistoryQueryParams().toString()
             ].join(':');
@@ -4298,9 +4323,9 @@
                 try {
                     let response;
 
-                    if (isAuthenticated() && isCustomerRole(currentRole)) {
+                    if (privateSensorAuthToken) {
                         response = await fetch(`${CONFIG.API_BASE_URL}/sensors/${selectedSensor}/history?${params.toString()}`, {
-                            headers: { 'Authorization': `Bearer ${authToken}` },
+                            headers: { 'Authorization': `Bearer ${privateSensorAuthToken}` },
                             cache: 'no-store'
                         });
                     } else {
@@ -4761,9 +4786,8 @@
                 return false;
             }
 
-            const requestScope = !isAuthenticated()
-                ? 'public'
-                : (isCustomerRole(currentRole) ? 'private' : 'skip');
+            const privateSensorAuthToken = getPrivateSensorAuthToken();
+            const requestScope = privateSensorAuthToken ? 'private' : 'public';
 
             if (requestScope === 'skip') {
                 hideSubscriptionExpiredModal();
@@ -4795,7 +4819,7 @@
                         if (sensorResponse.status === 'fulfilled' && sensorResponse.value.ok) { // RAYAT-FIX
                             const result = await sensorResponse.value.json(); // RAYAT-FIX
                             if (result.success && Array.isArray(result.data)) { // RAYAT-FIX
-                                const data = result.data; // RAYAT-FIX
+                                const data = filterPublicSensorPayloadRows(result.data); // RAYAT-FIX
                                 const monitoring = applyMonitoringConfig(result.monitoring); // RAYAT-FIX
                                 writeSensorCache(PUBLIC_SENSOR_CACHE_KEY, data, monitoring); // RAYAT-FIX
                                 const didRender = updateSensorData(data, true); // RAYAT-FIX
@@ -4814,7 +4838,7 @@
                         const hadGatewayState = Boolean(gatewayStatusSignature); // RAYAT-FIX
                         resetGatewayStatusState(); // RAYAT-FIX
                         applyMonitoringConfig(cached.monitoring); // RAYAT-FIX
-                        const didRender = updateSensorData(cached.data, true); // RAYAT-FIX
+                        const didRender = updateSensorData(filterPublicSensorPayloadRows(cached.data), true); // RAYAT-FIX
                         dataError = false; // RAYAT-FIX
                         setOfflineBannerVisibility(true, t('usingCache')); // RAYAT-FIX
                         if (!didRender && hadGatewayState) { // RAYAT-FIX
@@ -4845,8 +4869,8 @@
 
                 try {
                     const [sensorResponse, gatewayStatusResult] = await Promise.allSettled([ // RAYAT-FIX
-                        fetch(`${CONFIG.API_BASE_URL}/sensors/latest`, { headers: { 'Authorization': `Bearer ${authToken}` } }), // RAYAT-FIX
-                        fetchGatewayStatusPayload('private') // RAYAT-FIX
+                        fetch(`${CONFIG.API_BASE_URL}/sensors/latest`, { headers: { 'Authorization': `Bearer ${privateSensorAuthToken}` } }), // RAYAT-FIX
+                        fetchGatewayStatusPayload('private', privateSensorAuthToken) // RAYAT-FIX
                     ]); // RAYAT-FIX
                     const gatewayStatusChanged = gatewayStatusResult.status === 'fulfilled' // RAYAT-FIX
                         ? applyGatewayStatusResponse(gatewayStatusResult.value) // RAYAT-FIX
@@ -4989,7 +5013,10 @@
 
         function updateSensorData(apiData, fromCache = false) {
             if (!apiData || !Array.isArray(apiData)) return;
-            const normalizedApiData = normalizeSoilApiPayloadRows(apiData, { includeTimestamp: true });
+            const scopedApiData = (isAuthenticated() || hasPrivilegedAdminShortcut())
+                ? apiData
+                : filterPublicSensorPayloadRows(apiData);
+            const normalizedApiData = normalizeSoilApiPayloadRows(scopedApiData, { includeTimestamp: true });
             latestAssignedSensors = buildProfileSensorSnapshot(normalizedApiData);
             const nextPayloadSignature = buildSensorPayloadSignature(normalizedApiData);
 
@@ -7361,6 +7388,7 @@
                                 <div class="rayat-sensor-card-grid rayat-sensor-card-grid--soil grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
                                     ${perliteMetrics.map((metric) => renderPerliteMetricCard(metric)).join('')}
                                 </div>
+                                ${renderActiveAlertFeed('terreno')}
                             </div>
                         </div>
 
