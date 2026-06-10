@@ -7502,7 +7502,7 @@
                                         `).join('')}
                                     </dl>
                                 </div>
-                                <div class="rayat-sensor-card-grid rayat-sensor-card-grid--soil grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                                <div class="rayat-sensor-card-grid rayat-sensor-card-grid--soil grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
                                     ${perliteMetrics.map((metric) => renderPerliteMetricCard(metric)).join('')}
                                 </div>
                                 ${renderPerliteActiveAlertFeed()}
