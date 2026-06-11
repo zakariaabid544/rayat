@@ -2,31 +2,19 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 
-const DEFAULT_PRIVATE_SENSOR_TOPIC_PREFIXES = ['sensors/GW-002/'];
+const DEFAULT_PUBLIC_SENSOR_DEVICE_ID = 'GW-001';
 
 function cleanString(value) {
     return String(value || '').trim();
 }
 
-function getPrivateSensorTopicPrefixes() {
-    const configured = cleanString(process.env.PRIVATE_SENSOR_TOPIC_PREFIXES);
-    if (!configured) {
-        return DEFAULT_PRIVATE_SENSOR_TOPIC_PREFIXES;
-    }
-
-    return configured
-        .split(',')
-        .map((prefix) => cleanString(prefix))
-        .filter(Boolean);
+function getPublicSensorDeviceId() {
+    return cleanString(process.env.PUBLIC_GATEWAY_DEVICE_ID) || DEFAULT_PUBLIC_SENSOR_DEVICE_ID;
 }
 
-function appendPrivateTopicExclusion(sql, params, columnName = 'topic') {
-    let nextSql = sql;
-    getPrivateSensorTopicPrefixes().forEach((prefix) => {
-        nextSql += ` AND (${columnName} IS NULL OR ${columnName} NOT LIKE ?)`;
-        params.push(`${prefix}%`);
-    });
-    return nextSql;
+function appendPublicTopicScope(sql, params, columnName = 'topic') {
+    params.push(`sensors/${getPublicSensorDeviceId()}/%`);
+    return `${sql} AND ${columnName} LIKE ?`;
 }
 
 function parseNumericValue(value) {
@@ -49,7 +37,7 @@ function shouldSwapSoilPair(soilTemperature, soilMoisture) {
 router.get('/latest', async (req, res) => {
     try {
         const params = [];
-        const sql = appendPrivateTopicExclusion(
+        const sql = appendPublicTopicScope(
             `SELECT
                 sensor_subtype AS subtype,
                 value,

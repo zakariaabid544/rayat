@@ -24,31 +24,40 @@ const { cleanString, parseGatewaySignalUpdate, parseSensorUpdate } = require('..
 
 const DEFAULT_BRIDGE_TOKEN_HEADER = 'x-rayat-bridge-token';
 const SENSOR_UPDATE_UNAUTHORIZED = { error: 'Non autorizzato' }; // RAYAT-FIX
-const DEFAULT_PRIVATE_SENSOR_TOPIC_PREFIXES = ['sensors/GW-002/'];
+const DEFAULT_PUBLIC_SENSOR_DEVICE_ID = 'GW-001';
 
-function getPrivateSensorTopicPrefixes() {
-    const configured = cleanString(process.env.PRIVATE_SENSOR_TOPIC_PREFIXES);
-    if (!configured) {
-        return DEFAULT_PRIVATE_SENSOR_TOPIC_PREFIXES;
-    }
-
-    return configured
-        .split(',')
-        .map((prefix) => cleanString(prefix))
-        .filter(Boolean);
+function getPublicSensorDeviceId() {
+    return cleanString(process.env.PUBLIC_GATEWAY_DEVICE_ID) || DEFAULT_PUBLIC_SENSOR_DEVICE_ID;
 }
 
-function appendPrivateTopicExclusion(sql, params, columnName = 'topic') {
-    let nextSql = sql;
-    getPrivateSensorTopicPrefixes().forEach((prefix) => {
-        nextSql += ` AND (${columnName} IS NULL OR ${columnName} NOT LIKE ?)`;
-        params.push(`${prefix}%`);
-    });
-    return nextSql;
+function appendPublicTopicScope(sql, params, columnName = 'topic') {
+    params.push(`sensors/${getPublicSensorDeviceId()}/%`);
+    return `${sql} AND ${columnName} LIKE ?`;
 }
 
 function resolveSensorScopeUserId(user = {}) {
     return isPrivilegedAdminRole(user.role) ? null : user.id;
+}
+
+function getRequestedDeviceId(req = {}) {
+    return cleanString(req.query?.device_id || req.query?.deviceId || req.query?.device);
+}
+
+function appendDeviceScope(sql, params, userId, requestedDeviceId) {
+    let nextSql = sql;
+    const cleanDeviceId = cleanString(requestedDeviceId);
+
+    if (cleanDeviceId) {
+        nextSql += ' AND d.device_id = ?';
+        params.push(cleanDeviceId);
+    }
+
+    if (userId) {
+        nextSql += ' AND d.user_id = ?';
+        params.push(userId);
+    }
+
+    return nextSql;
 }
 
 function parseNumericValue(value) {
@@ -306,7 +315,7 @@ function compareGatewayStatusCandidates(left = {}, right = {}) { // RAYAT-FIX
 
 async function getPublicSensorDataLastAt() { // RAYAT-FIX
     const params = []; // RAYAT-FIX
-    const sql = appendPrivateTopicExclusion( // RAYAT-FIX
+    const sql = appendPublicTopicScope( // RAYAT-FIX
         'SELECT MAX(timestamp) AS sensor_data_last_at FROM public_sensor_latest WHERE 1 = 1', // RAYAT-FIX
         params // RAYAT-FIX
     ); // RAYAT-FIX
@@ -331,9 +340,17 @@ async function resolveGatewayStatusPayload(options = {}) { // RAYAT-FIX
     `; // RAYAT-FIX
     const params = []; // RAYAT-FIX
 
+    const where = []; // RAYAT-FIX
     if (options.userId) { // RAYAT-FIX
-        sql += ' WHERE d.user_id = ?'; // RAYAT-FIX
+        where.push('d.user_id = ?'); // RAYAT-FIX
         params.push(options.userId); // RAYAT-FIX
+    } // RAYAT-FIX
+    if (options.deviceId) { // RAYAT-FIX
+        where.push('d.device_id = ?'); // RAYAT-FIX
+        params.push(options.deviceId); // RAYAT-FIX
+    } // RAYAT-FIX
+    if (where.length) { // RAYAT-FIX
+        sql += ` WHERE ${where.join(' AND ')}`; // RAYAT-FIX
     } // RAYAT-FIX
 
     sql += ' GROUP BY d.id, d.device_id, d.name, d.metadata'; // RAYAT-FIX
@@ -374,7 +391,7 @@ router.get('/public/latest', async (_req, res) => {
              FROM public_sensor_latest
              WHERE 1 = 1`;
         const params = [];
-        sql = appendPrivateTopicExclusion(sql, params);
+        sql = appendPublicTopicScope(sql, params);
         sql += ' ORDER BY sensor_type ASC, sensor_subtype ASC';
         const rows = await query(sql, params);
         const normalizedRows = normalizeSoilReadingPairs(rows, { includeTimestamp: true });
@@ -395,7 +412,7 @@ router.get('/public/latest', async (_req, res) => {
 
 router.get('/public/status', async (_req, res) => { // RAYAT-FIX
     try { // RAYAT-FIX
-        res.json(await resolveGatewayStatusPayload({})); // RAYAT-FIX
+        res.json(await resolveGatewayStatusPayload({ deviceId: getPublicSensorDeviceId() })); // RAYAT-FIX
     } catch (error) { // RAYAT-FIX
         console.error('Get public gateway status error:', error); // RAYAT-FIX
         return sendDatabaseAwareError(res, error, {
@@ -430,7 +447,7 @@ router.get('/public/history', async (req, res) => {
         `;
         const params = [sensorType, startDate, endDate];
 
-        sql = appendPrivateTopicExclusion(sql, params);
+        sql = appendPublicTopicScope(sql, params);
 
         if (subtype) {
             sql += ' AND sensor_subtype = ?';
@@ -573,7 +590,10 @@ router.post('/update', async (req, res) => {
 
 router.get('/status', authenticateToken, checkSubscription, async (req, res) => { // RAYAT-FIX
     try { // RAYAT-FIX
-        res.json(await resolveGatewayStatusPayload({ userId: resolveSensorScopeUserId(req.user) })); // RAYAT-FIX
+        res.json(await resolveGatewayStatusPayload({
+            userId: resolveSensorScopeUserId(req.user),
+            deviceId: getRequestedDeviceId(req)
+        })); // RAYAT-FIX
     } catch (error) { // RAYAT-FIX
         console.error('Get gateway status error:', error); // RAYAT-FIX
         return sendDatabaseAwareError(res, error, {
@@ -613,10 +633,7 @@ router.get('/latest', authenticateToken, checkSubscription, async (req, res) => 
   WHERE s.enabled = TRUE
 `;
         const params = [];
-        if (userId) {
-            sql += ' AND d.user_id = ?';
-            params.push(userId);
-        }
+        sql = appendDeviceScope(sql, params, userId, getRequestedDeviceId(req));
         sql += ' ORDER BY s.type, s.subtype';
 
         const readings = normalizeSoilReadingPairs(await query(sql, params), { includeTimestamp: true });
@@ -686,10 +703,7 @@ router.get('/:type/latest', authenticateToken, checkSubscription, async (req, re
         AND s.enabled = TRUE
     `;
         const params = [sensorType];
-        if (userId) {
-            sql += ' AND d.user_id = ?';
-            params.push(userId);
-        }
+        sql = appendDeviceScope(sql, params, userId, getRequestedDeviceId(req));
 
         const readings = normalizeSoilReadingPairs(await query(sql, params), { includeTimestamp: true });
         res.json({
@@ -730,10 +744,7 @@ router.get('/:type/history', authenticateToken, checkSubscription, async (req, r
     `;
 
         const params = [sensorType, startDate, endDate];
-        if (userId) {
-            sql += ' AND d.user_id = ?';
-            params.push(userId);
-        }
+        sql = appendDeviceScope(sql, params, userId, getRequestedDeviceId(req));
 
         // Se specificato subtype (es: terreno_moisture)
         if (subtype) {

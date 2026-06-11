@@ -63,7 +63,7 @@
             ANALYTICS_TRACK_URL: `${API_BASE_URL}/analytics/track`
         };
         // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.43'; // RAYAT-FIX
+        const FRONTEND_ASSET_VERSION = '1.1.44'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -3436,7 +3436,11 @@
             const isPrivateScope = requestScope === 'private'; // RAYAT-FIX
             const endpoint = isPrivateScope ? CONFIG.PRIVATE_GATEWAY_STATUS_URL : CONFIG.PUBLIC_GATEWAY_STATUS_URL; // RAYAT-FIX
             const privateToken = tokenOverride || authToken; // RAYAT-FIX
-            const response = await fetch(`${endpoint}?t=${Date.now()}`, { // RAYAT-FIX
+            const params = new URLSearchParams({ t: String(Date.now()) }); // RAYAT-FIX
+            if (isPrivateScope && currentView === 'perlite-track') { // RAYAT-FIX
+                params.set('device_id', BARAKAH_PERLITE_DEVICE_ID); // RAYAT-FIX
+            } // RAYAT-FIX
+            const response = await fetch(`${endpoint}?${params.toString()}`, { // RAYAT-FIX
                 cache: 'no-store', // RAYAT-FIX
                 headers: isPrivateScope && privateToken ? { 'Authorization': `Bearer ${privateToken}` } : undefined // RAYAT-FIX
             }); // RAYAT-FIX
@@ -4342,6 +4346,7 @@
             const privateSensorAuthToken = getPrivateSensorAuthToken();
             const requestKey = [
                 privateSensorAuthToken ? 'private' : 'public',
+                targetView === 'perlite-track' && privateSensorAuthToken ? BARAKAH_PERLITE_DEVICE_ID : '',
                 selectedSensor,
                 buildHistoryQueryParams().toString()
             ].join(':');
@@ -4362,6 +4367,9 @@
                     let response;
 
                     if (privateSensorAuthToken) {
+                        if (targetView === 'perlite-track') {
+                            params.set('device_id', BARAKAH_PERLITE_DEVICE_ID);
+                        }
                         response = await fetch(`${CONFIG.API_BASE_URL}/sensors/${selectedSensor}/history?${params.toString()}`, {
                             headers: { 'Authorization': `Bearer ${privateSensorAuthToken}` },
                             cache: 'no-store'
@@ -4825,7 +4833,8 @@
             }
 
             const privateSensorAuthToken = getPrivateSensorAuthToken();
-            const requestScope = privateSensorAuthToken ? 'private' : 'public';
+            const privateDeviceId = privateSensorAuthToken && targetView === 'perlite-track' ? BARAKAH_PERLITE_DEVICE_ID : '';
+            const requestScope = privateSensorAuthToken ? `private:${privateDeviceId || 'all'}` : 'public';
 
             if (requestScope === 'skip') {
                 hideSubscriptionExpiredModal();
@@ -4906,8 +4915,14 @@
                 }
 
                 try {
+                    const privateLatestParams = new URLSearchParams();
+                    if (privateDeviceId) {
+                        privateLatestParams.set('device_id', privateDeviceId);
+                    }
+                    const privateLatestQuery = privateLatestParams.toString();
+                    const privateLatestUrl = `${CONFIG.API_BASE_URL}/sensors/latest${privateLatestQuery ? `?${privateLatestQuery}` : ''}`;
                     const [sensorResponse, gatewayStatusResult] = await Promise.allSettled([ // RAYAT-FIX
-                        fetch(`${CONFIG.API_BASE_URL}/sensors/latest`, { headers: { 'Authorization': `Bearer ${privateSensorAuthToken}` } }), // RAYAT-FIX
+                        fetch(privateLatestUrl, { headers: { 'Authorization': `Bearer ${privateSensorAuthToken}` } }), // RAYAT-FIX
                         fetchGatewayStatusPayload('private', privateSensorAuthToken) // RAYAT-FIX
                     ]); // RAYAT-FIX
                     const gatewayStatusChanged = gatewayStatusResult.status === 'fulfilled' // RAYAT-FIX

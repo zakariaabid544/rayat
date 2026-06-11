@@ -69,6 +69,10 @@ function excludesPrivateSensorTopic(sql) {
   return sql.includes('topic IS NULL OR topic NOT LIKE ?');
 }
 
+function scopesPublicSensorTopic(sql) {
+  return sql.includes('topic = ?') || sql.includes('topic LIKE ?');
+}
+
 function isPrivateSensorTopic(topic) {
   return String(topic || '').startsWith('sensors/GW-002/');
 }
@@ -580,6 +584,11 @@ async function fakeQuery(sql, params = []) {
       rows = rows.filter((row) => !isPrivateSensorTopic(row.topic));
     }
 
+    if (scopesPublicSensorTopic(text)) {
+      const prefix = String(params[0] || '').replace(/%$/, '');
+      rows = rows.filter((row) => String(row.topic || '').startsWith(prefix));
+    }
+
     return rows.map((row) => ({
       subtype: row.sensor_subtype,
       value: row.value,
@@ -592,6 +601,11 @@ async function fakeQuery(sql, params = []) {
 
     if (excludesPrivateSensorTopic(text)) {
       rows = rows.filter((row) => !isPrivateSensorTopic(row.topic));
+    }
+
+    if (scopesPublicSensorTopic(text)) {
+      const prefix = String(params[0] || '').replace(/%$/, '');
+      rows = rows.filter((row) => String(row.topic || '').startsWith(prefix));
     }
 
     return rows
@@ -615,13 +629,19 @@ async function fakeQuery(sql, params = []) {
 
   if (text.startsWith('SELECT sensor_type AS type, sensor_subtype AS subtype, value, topic, timestamp FROM public_sensor_readings WHERE sensor_type = ?')) {
     const hasPrivateTopicExclusion = excludesPrivateSensorTopic(text);
-    const subtypeParamIndex = hasPrivateTopicExclusion ? 4 : 3;
+    const hasPublicTopicScope = scopesPublicSensorTopic(text);
+    const subtypeParamIndex = hasPrivateTopicExclusion || hasPublicTopicScope ? 4 : 3;
     let rows = state.publicSensorReadings
       .filter((row) => row.sensor_type === params[0])
       .filter((row) => new Date(row.timestamp) >= new Date(params[1]) && new Date(row.timestamp) <= new Date(params[2]));
 
     if (hasPrivateTopicExclusion) {
       rows = rows.filter((row) => !isPrivateSensorTopic(row.topic));
+    }
+
+    if (hasPublicTopicScope) {
+      const prefix = String(params[3] || '').replace(/%$/, '');
+      rows = rows.filter((row) => String(row.topic || '').startsWith(prefix));
     }
 
     if (params[subtypeParamIndex]) {
@@ -645,6 +665,11 @@ async function fakeQuery(sql, params = []) {
 
     if (excludesPrivateSensorTopic(text)) {
       rows = rows.filter((row) => !isPrivateSensorTopic(row.topic));
+    }
+
+    if (scopesPublicSensorTopic(text)) {
+      const prefix = String(params[0] || '').replace(/%$/, '');
+      rows = rows.filter((row) => String(row.topic || '').startsWith(prefix));
     }
 
     const lastTimestamp = rows
@@ -1038,13 +1063,13 @@ async function run() {
         const rawFrameTimestamp = new Date().toISOString(); // RAYAT-FIX
         const rawFrames = [
           {
-            sensor_id: 'sensors/CLIMA-GW-001/telemetry',
-            device_id: 'CLIMA-GW-001',
+            sensor_id: 'sensors/GW-001/telemetry',
+            device_id: 'GW-001',
             raw_hex: '01030400d403357aec'
           },
           {
-            sensor_id: 'sensors/CLIMA-GW-001/telemetry',
-            device_id: 'CLIMA-GW-001',
+            sensor_id: 'sensors/GW-001/telemetry',
+            device_id: 'GW-001',
             raw_hex: '0203020117bdda'
           },
           {
@@ -1113,9 +1138,8 @@ async function run() {
         assert.equal(publicLatestJson.monitoring.routerIntervalMinutes, 30);
         assert.equal(publicLatestJson.monitoring.offlineAfterMinutes, 35);
         assert.equal(publicLatestJson.monitoring.emailAfterMinutes, 45);
-        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_temperature'));
-        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_temperature' && Number(row.value) === 21.2));
-        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_humidity' && Number(row.value) === 82.1));
+        assert.ok(publicLatestJson.data.every((row) => String(row.topic || '').startsWith('sensors/GW-001/')));
+        assert.ok(publicLatestJson.data.every((row) => !String(row.topic || '').includes('GW-002')));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_co2' && Number(row.value) === 279));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_temperature' && Number(row.value) === 19.6));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_moisture' && Number(row.value) === 38.4));
@@ -1142,6 +1166,8 @@ async function run() {
         assert.equal(publicHistoryRes.status, 200);
         const publicHistoryJson = await publicHistoryRes.json();
         assert.equal(publicHistoryJson.success, true);
+        assert.ok(publicHistoryJson.data.every((row) => String(row.topic || '').startsWith('sensors/GW-001/')));
+        assert.ok(publicHistoryJson.data.every((row) => !String(row.topic || '').includes('GW-002')));
         assert.ok(publicHistoryJson.data.some((row) => row.subtype === 'terreno_temperature' && Number(row.value) === 19.6));
         assert.ok(publicHistoryJson.data.some((row) => row.subtype === 'terreno_ec' && Number(row.value) === 0.795));
 
@@ -1149,8 +1175,8 @@ async function run() {
         assert.equal(simpleLatestRes.status, 200);
         const simpleLatestJson = await simpleLatestRes.json();
         assert.equal(simpleLatestJson.water, null);
-        assert.equal(Number(simpleLatestJson.temperature), 21.2);
-        assert.equal(Number(simpleLatestJson.humidity), 82.1);
+        assert.equal(Number(simpleLatestJson.temperature), 29.4);
+        assert.equal(Number(simpleLatestJson.humidity), 0);
         assert.equal(Number(simpleLatestJson.co2), 279);
         assert.equal(Number(simpleLatestJson.soil), 38.4);
 
@@ -1160,7 +1186,7 @@ async function run() {
         assert.equal(sensorsRes.status, 200);
         const sensorsJson = await sensorsRes.json();
         assert.ok(sensorsJson.data.length >= 11);
-        const climateSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'clima_temperature' && Number(sensor.latest_value) === 21.2);
+        const climateSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'clima_temperature' && Number(sensor.latest_value) === 29.4);
         const soilPhosphorusSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'terreno_p');
         assert.ok(climateSensor);
         assert.equal(Number(soilPhosphorusSensor.latest_value), 26);
