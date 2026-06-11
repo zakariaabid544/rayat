@@ -3123,3 +3123,40 @@
                 height: 220px;
             }
         }
+
+        @media (min-width: 1024px) {
+            body[data-view="perlite-track"] .rayat-sensor-card-grid--soil {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            }
+        }
+
+        @media (min-width: 641px) and (max-width: 1023px) {
+            body[data-view="perlite-track"] .rayat-sensor-card-grid--soil {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+        }
+
+        @media (max-width: 640px) {
+            body[data-view="perlite-track"] .rayat-sensor-card-grid--soil {
+                grid-template-columns: minmax(0, 1fr) !important;
+                gap: 1rem !important;
+            }
+
+            body[data-view="perlite-track"] .rayat-sensor-card-grid--soil .rayat-perlite-metric-card {
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card__gauge,
+            body[data-view="perlite-track"] .rayat-perlite-metric-card__track-shell,
+            body[data-view="perlite-track"] .rayat-perlite-metric-card .rayat-range-track,
+            body[data-view="perlite-track"] .rayat-perlite-metric-card__scale {
+                width: 100%;
+                max-width: 100%;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card__scale {
+                gap: 0.5rem;
+            }
+        }
