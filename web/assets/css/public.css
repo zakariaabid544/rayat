@@ -2491,12 +2491,43 @@
             }
 
             body[data-view="perlite-track"] .rayat-perlite-metric-card__head {
-                min-height: 92px;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.75rem;
+                min-height: 132px;
             }
 
             body[data-view="perlite-track"] .rayat-perlite-metric-card__badge {
-                width: 7.1rem;
-                min-height: 2.35rem;
+                width: auto;
+                min-width: 6.9rem;
+                max-width: 100%;
+                min-height: 2.15rem;
+                align-self: flex-start;
+                padding-inline: 0.68rem;
+                white-space: nowrap;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card__badge--empty {
+                visibility: hidden;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card .rayat-metric-card-header-main {
+                width: 100%;
+                flex: 0 0 auto;
+                gap: 0.75rem;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card .rayat-metric-card-title {
+                min-height: 0;
+                align-items: flex-start;
+                font-size: 0.72rem;
+                letter-spacing: 0.12em;
+                overflow-wrap: anywhere;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card .rayat-metric-card-state {
+                min-height: 1.35rem;
+                font-size: 0.95rem;
             }
 
             body[data-view="perlite-track"] .rayat-perlite-metric-card__value {
@@ -2935,6 +2966,37 @@
 
             .rayat-sensor-card-grid .rayat-metric-card {
                 padding: 0.9rem;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card {
+                padding: 1rem;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card__head {
+                min-height: 126px;
+                gap: 0.68rem;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card .rayat-metric-card-header-main {
+                gap: 0.62rem;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card .rayat-metric-card-icon {
+                width: 2rem;
+                font-size: 1.95rem;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card .rayat-metric-card-title {
+                font-size: 0.68rem;
+                letter-spacing: 0.1em;
+                line-height: 1.22;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-metric-card__badge {
+                min-width: 6.35rem;
+                min-height: 2rem;
+                font-size: 0.62rem;
+                letter-spacing: 0.1em;
             }
 
             .rayat-demo-panel .text-4xl,

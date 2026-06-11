@@ -572,10 +572,18 @@ async function fakeQuery(sql, params = []) {
     return { insertId: state.publicSensorReadings.length };
   }
 
-  if (text === 'SELECT sensor_subtype AS subtype, value FROM public_sensor_latest') {
-    return state.publicLatest.map((row) => ({
+  if (text === 'SELECT sensor_subtype AS subtype, value FROM public_sensor_latest'
+      || text.startsWith('SELECT sensor_subtype AS subtype, value, topic FROM public_sensor_latest WHERE')) {
+    let rows = state.publicLatest.slice();
+
+    if (excludesPrivateSensorTopic(text)) {
+      rows = rows.filter((row) => !isPrivateSensorTopic(row.topic));
+    }
+
+    return rows.map((row) => ({
       subtype: row.sensor_subtype,
-      value: row.value
+      value: row.value,
+      topic: row.topic
     }));
   }
 

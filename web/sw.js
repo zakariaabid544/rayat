@@ -3,20 +3,20 @@
 // =============================================
 // RAYAT FIX - mobile app ready optimization
 // RAYAT-FIX: bump service worker cache so the gateway heartbeat rollout is applied immediately.
-const CACHE_VERSION = '1.1.41'; // RAYAT-FIX
+const CACHE_VERSION = '1.1.42'; // RAYAT-FIX
 const CACHE_NAME = `rayat-${CACHE_VERSION}`;
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
     './admin/index.html',
     './manifest.json',
-    './config.js?v=1.1.41',
+    './config.js?v=1.1.42',
     './favicon.png',
     './favicon-32.png',
     './favicon.ico',
-    './assets/css/public.css?v=1.1.41', // RAYAT-FIX
-    './assets/js/analytics-loader.js?v=1.1.41',
-    './assets/js/public.js?v=1.1.41', // RAYAT-FIX
+    './assets/css/public.css?v=1.1.42', // RAYAT-FIX
+    './assets/js/analytics-loader.js?v=1.1.42',
+    './assets/js/public.js?v=1.1.42', // RAYAT-FIX
     './assets/logo/logo-black.svg',
     './assets/logo/logo-green.svg',
     './assets/logo/logo-white.svg',

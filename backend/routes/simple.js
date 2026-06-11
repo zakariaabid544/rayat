@@ -2,6 +2,33 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 
+const DEFAULT_PRIVATE_SENSOR_TOPIC_PREFIXES = ['sensors/GW-002/'];
+
+function cleanString(value) {
+    return String(value || '').trim();
+}
+
+function getPrivateSensorTopicPrefixes() {
+    const configured = cleanString(process.env.PRIVATE_SENSOR_TOPIC_PREFIXES);
+    if (!configured) {
+        return DEFAULT_PRIVATE_SENSOR_TOPIC_PREFIXES;
+    }
+
+    return configured
+        .split(',')
+        .map((prefix) => cleanString(prefix))
+        .filter(Boolean);
+}
+
+function appendPrivateTopicExclusion(sql, params, columnName = 'topic') {
+    let nextSql = sql;
+    getPrivateSensorTopicPrefixes().forEach((prefix) => {
+        nextSql += ` AND (${columnName} IS NULL OR ${columnName} NOT LIKE ?)`;
+        params.push(`${prefix}%`);
+    });
+    return nextSql;
+}
+
 function parseNumericValue(value) {
     const numeric = Number.parseFloat(value);
     return Number.isFinite(numeric) ? numeric : null;
@@ -21,34 +48,19 @@ function shouldSwapSoilPair(soilTemperature, soilMoisture) {
 // GET /api/sensors/latest - Formato semplificato per compatibilità
 router.get('/latest', async (req, res) => {
     try {
-        const publicReadings = await query(
+        const params = [];
+        const sql = appendPrivateTopicExclusion(
             `SELECT
                 sensor_subtype AS subtype,
-                value
-             FROM public_sensor_latest`
+                value,
+                topic
+             FROM public_sensor_latest
+             WHERE 1 = 1`,
+            params
         );
 
-        // Query per ottenere ultimi valori di ogni tipo di sensore
-        const sql = `
-      SELECT
-        s.subtype,
-        sr.value
-      FROM sensor_readings sr
-      INNER JOIN sensors s ON sr.sensor_id = s.id
-      WHERE sr.timestamp = (
-        SELECT MAX(timestamp)
-        FROM sensor_readings
-        WHERE sensor_id = s.id
-      )
-      AND s.enabled = TRUE
-    `;
-
-        const dbReadings = await query(sql);
+        const publicReadings = await query(sql, params);
         const readingMap = new Map();
-
-        for (const reading of dbReadings) {
-            readingMap.set(reading.subtype, reading.value);
-        }
 
         for (const reading of publicReadings) {
             readingMap.set(reading.subtype, reading.value);
