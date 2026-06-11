@@ -1140,6 +1140,8 @@ async function run() {
         assert.equal(publicLatestJson.monitoring.emailAfterMinutes, 45);
         assert.ok(publicLatestJson.data.every((row) => String(row.topic || '').startsWith('sensors/GW-001/')));
         assert.ok(publicLatestJson.data.every((row) => !String(row.topic || '').includes('GW-002')));
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_temperature' && Number(row.value) === 21.2));
+        assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_humidity' && Number(row.value) === 82.1));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'clima_co2' && Number(row.value) === 279));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_temperature' && Number(row.value) === 19.6));
         assert.ok(publicLatestJson.data.some((row) => row.subtype === 'terreno_moisture' && Number(row.value) === 38.4));
@@ -1175,8 +1177,8 @@ async function run() {
         assert.equal(simpleLatestRes.status, 200);
         const simpleLatestJson = await simpleLatestRes.json();
         assert.equal(simpleLatestJson.water, null);
-        assert.equal(Number(simpleLatestJson.temperature), 29.4);
-        assert.equal(Number(simpleLatestJson.humidity), 0);
+        assert.equal(Number(simpleLatestJson.temperature), 21.2);
+        assert.equal(Number(simpleLatestJson.humidity), 82.1);
         assert.equal(Number(simpleLatestJson.co2), 279);
         assert.equal(Number(simpleLatestJson.soil), 38.4);
 
@@ -1186,7 +1188,7 @@ async function run() {
         assert.equal(sensorsRes.status, 200);
         const sensorsJson = await sensorsRes.json();
         assert.ok(sensorsJson.data.length >= 11);
-        const climateSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'clima_temperature' && Number(sensor.latest_value) === 29.4);
+        const climateSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'clima_temperature' && Number(sensor.latest_value) === 21.2);
         const soilPhosphorusSensor = sensorsJson.data.find((sensor) => sensor.subtype === 'terreno_p');
         assert.ok(climateSensor);
         assert.equal(Number(soilPhosphorusSensor.latest_value), 26);

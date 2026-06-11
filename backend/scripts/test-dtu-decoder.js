@@ -25,15 +25,15 @@ function testLegacySlaveOneClimateFrame() {
   assertReading(decoded.readings, 'clima_humidity', 0, 'clima');
 }
 
-function testGw001TwoRegisterSubstratePartialFrame() {
-  const decoded = decodeModbusTelemetryFrame(Buffer.from('01030409550000E9BF', 'hex'), { deviceId: 'GW-001' });
+function testGw001TwoRegisterClimateFrame() {
+  const decoded = decodeModbusTelemetryFrame(Buffer.from('01030400ec02a83b18', 'hex'), { deviceId: 'GW-001' });
 
   assert.equal(decoded.slaveId, 1);
-  assert.equal(decoded.layout, 'substrate_2_register_partial');
+  assert.equal(decoded.layout, 'climate_temperature_humidity');
   assert.equal(decoded.registerCount, 2);
-  assert.deepEqual(decoded.registers, [2389, 0]);
-  assertReading(decoded.readings, 'terreno_temperature', 23.89);
-  assertReading(decoded.readings, 'terreno_moisture', 0);
+  assert.deepEqual(decoded.registers, [236, 680]);
+  assertReading(decoded.readings, 'clima_temperature', 23.6, 'clima');
+  assertReading(decoded.readings, 'clima_humidity', 68, 'clima');
 }
 
 function testGw002TwoRegisterSubstratePartialFrame() {
@@ -83,17 +83,17 @@ function testSubstrateMqttPayloadParsing() {
   assertReading(parsed.readings, 'terreno_ec', 0.268);
 }
 
-function testGw001TwoRegisterMqttPayloadParsing() {
+function testGw001TwoRegisterClimateMqttPayloadParsing() {
   const parsed = parseSensorUpdate({
     topic: 'sensors/GW-001/telemetry',
-    raw_hex: '01030409550000E9BF'
+    raw_hex: '01030400ec02a83b18'
   });
 
   assert.equal(parsed.deviceId, 'GW-001');
   assert.equal(parsed.readings.length, 2);
-  assertReading(parsed.readings, 'terreno_temperature', 23.89);
-  assertReading(parsed.readings, 'terreno_moisture', 0);
-  assert.equal(bySubtype(parsed.readings, 'clima_temperature'), undefined);
+  assertReading(parsed.readings, 'clima_temperature', 23.6, 'clima');
+  assertReading(parsed.readings, 'clima_humidity', 68, 'clima');
+  assert.equal(bySubtype(parsed.readings, 'terreno_temperature'), undefined);
 }
 
 function testGw002TwoRegisterMqttPayloadParsing() {
@@ -125,12 +125,12 @@ function testLegacySevenInOneSoilFrame() {
 }
 
 testLegacySlaveOneClimateFrame();
-testGw001TwoRegisterSubstratePartialFrame();
+testGw001TwoRegisterClimateFrame();
 testGw002TwoRegisterSubstratePartialFrame();
 testSubstrateThreeRegisterFrame();
 testSubstrateInputRegisterFrame();
 testSubstrateMqttPayloadParsing();
-testGw001TwoRegisterMqttPayloadParsing();
+testGw001TwoRegisterClimateMqttPayloadParsing();
 testGw002TwoRegisterMqttPayloadParsing();
 testLegacySevenInOneSoilFrame();
 

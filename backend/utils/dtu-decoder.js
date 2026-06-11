@@ -133,7 +133,7 @@ const SUBSTRATE_2_REGISTER_PARTIAL_LAYOUT = {
     ]
 };
 
-const SUBSTRATE_DEVICE_IDS = new Set(['GW-001', 'RAYAT-GW-001', 'GW-002', 'RAYAT-GW-002']);
+const SUBSTRATE_DEVICE_IDS = new Set(['GW-002', 'RAYAT-GW-002']);
 
 const FRAME_LAYOUTS = {
     1: {
