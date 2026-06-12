@@ -135,6 +135,9 @@ app.get(
         '/admin/devices',
         '/admin/devices/',
         '/admin/devices.html',
+        '/admin/device-manager',
+        '/admin/device-manager/',
+        '/admin/device-manager.html',
         '/admin/analytics',
         '/admin/analytics/',
         '/admin/analytics.html'
