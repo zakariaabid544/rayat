@@ -270,6 +270,26 @@
         /* ─── Misc ───────────────────── */
         .page-title { font-size: 1.5rem; font-weight: 900; color: #064e3b; letter-spacing: -0.02em; }
         .section-card { background: white; border-radius: 1rem; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .device-manager-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr); gap: 1rem; align-items: start; }
+        .device-manager-detail { min-height: 420px; }
+        .device-manager-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+        .device-manager-kv { border: 1px solid #e5e7eb; border-radius: 0.85rem; padding: 0.8rem 0.9rem; background: #f8fafc; }
+        .device-manager-label { color: #64748b; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.25rem; }
+        .device-manager-value { color: #111827; font-size: 0.9rem; font-weight: 800; word-break: break-word; }
+        .device-manager-code {
+            background: #0f172a;
+            color: #d1fae5;
+            border-radius: 0.9rem;
+            padding: 0.9rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 0.72rem;
+            line-height: 1.5;
+            max-height: 260px;
+            overflow: auto;
+        }
+        .device-manager-param-list { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .device-manager-empty { color: #94a3b8; font-size: 0.875rem; padding: 2rem; text-align: center; }
         .alert-box { padding: 0.875rem 1rem; border-radius: 0.75rem; font-size: 0.875rem; font-weight: 600; margin-bottom: 1rem; }
         .alert-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
         .alert-success { background: #f0fdf4; color: #065f46; border: 1px solid #bbf7d0; }
@@ -500,6 +520,14 @@
             #tab-analytics .grid.grid-cols-2.xl\:grid-cols-3 {
                 grid-template-columns: 1fr;
             }
+
+            .device-manager-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .device-manager-grid {
+                grid-template-columns: 1fr;
+            }
             .data-table {
                 min-width: 660px;
             }
@@ -588,6 +616,9 @@
             </a>
             <a class="nav-item" data-tab="devices" onclick="showTab('devices')">
                 <span class="nav-icon">📱</span> <span id="nav-devices-label">Dispositivi</span>
+            </a>
+            <a class="nav-item super-admin-only hidden" data-tab="device-manager" onclick="showTab('device-manager')">
+                <span class="nav-icon">🧭</span> <span id="nav-device-manager-label">Device Manager</span>
             </a>
             <a class="nav-item super-admin-only hidden" data-tab="analytics" onclick="showTab('analytics')">
                 <span class="nav-icon">📈</span> <span id="nav-analytics-label">Analytics</span>
@@ -830,6 +861,44 @@
                         <button id="devices-prev" onclick="changeDeviceRegistryPage(-1)" class="btn btn-outline btn-sm">← Precedente</button>
                         <span class="text-xs text-gray-500 font-semibold" id="devices-page-info">Pagina 1 / 1</span>
                         <button id="devices-next" onclick="changeDeviceRegistryPage(1)" class="btn btn-outline btn-sm">Successiva →</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── DEVICE MANAGER (super_admin only) ─────────────────── -->
+            <div id="tab-device-manager" class="hidden fade-in super-admin-only">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                    <div>
+                        <div class="page-title mb-0" id="device-manager-page-title">Device Manager</div>
+                        <p class="text-sm text-gray-400" id="device-manager-page-subtitle">Vista reale gateway, topic, cliente e ultimi dati ricevuti</p>
+                    </div>
+                    <button onclick="loadDeviceManager()" class="btn btn-outline" id="device-manager-refresh-btn">↻ Aggiorna</button>
+                </div>
+
+                <div class="device-manager-layout">
+                    <div class="section-card overflow-x-auto">
+                        <table class="data-table" id="device-manager-table">
+                            <thead>
+                                <tr>
+                                    <th id="device-manager-th-device">Device ID</th>
+                                    <th id="device-manager-th-name">Nome</th>
+                                    <th id="device-manager-th-client">Cliente</th>
+                                    <th id="device-manager-th-visibility">Tipo</th>
+                                    <th id="device-manager-th-topic">Topic MQTT</th>
+                                    <th id="device-manager-th-status">Stato</th>
+                                    <th id="device-manager-th-updated">Ultimo aggiornamento</th>
+                                    <th id="device-manager-th-params">Parametri</th>
+                                    <th id="device-manager-th-dashboard">Dashboard</th>
+                                </tr>
+                            </thead>
+                            <tbody id="device-manager-body">
+                                <tr><td colspan="9" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="section-card device-manager-detail" id="device-manager-detail">
+                        <div class="device-manager-empty" id="device-manager-detail-empty">Seleziona un gateway per vedere il dettaglio reale.</div>
                     </div>
                 </div>
             </div>
@@ -1449,6 +1518,8 @@
     const registrationListState = { page: 1, pageSize: 20, total: 0, totalPages: 1, query: '', status: '' };
     const deviceListState = { page: 1, pageSize: 50, total: 0, totalPages: 1, query: '', clientId: '', type: '' };
     const deviceRegistryState = { page: 1, pageSize: 25, total: 0, totalPages: 1, status: '' };
+    let deviceManagerGateways = [];
+    let selectedDeviceManagerGatewayId = null;
     const locationPickers = {
         client: {
             map: null,
@@ -1503,6 +1574,7 @@
             navRegistrations: 'Registrazioni Recenti',
             navSensors: 'Sensori IoT',
             navDevices: 'Dispositivi',
+            navDeviceManager: 'Device Manager',
             navAnalytics: 'Analytics',
             navUsers: 'Utenti Admin',
             logout: 'Esci',
@@ -1618,6 +1690,27 @@
             sensorsSubtitle: 'Aggiungi, modifica e monitora i sensori collegati ai clienti',
             devicesPageTitle: 'Dispositivi',
             devicesSubtitle: 'Panoramica dei dispositivi assegnati ai clienti',
+            deviceManager: 'Device Manager',
+            deviceManagerSubtitle: 'Vista reale gateway, topic, cliente e ultimi dati ricevuti',
+            deviceId: 'Device ID',
+            gatewayName: 'Nome',
+            gatewayVisibility: 'Tipo',
+            mqttTopic: 'Topic MQTT',
+            latestUpdate: 'Ultimo aggiornamento',
+            parameters: 'Parametri',
+            dashboardLink: 'Dashboard',
+            publicGateway: 'Pubblico',
+            privateGateway: 'Privato',
+            openDashboard: 'Apri',
+            gatewayDetails: 'Dettaglio Gateway',
+            gatewayInfo: 'Informazioni device',
+            latestData: 'Latest data',
+            latestRaw: 'Ultimo payload/raw',
+            recentHistory: 'Storico recente',
+            selectGateway: 'Seleziona un gateway per vedere il dettaglio reale.',
+            noLatestData: 'Nessun dato latest disponibile.',
+            noRecentHistory: 'Nessuno storico recente disponibile.',
+            rawUnavailable: 'Raw payload non disponibile nello schema attuale.',
             addSensor: '+ Aggiungi Sensore',
             allRouterDevices: 'Tutti i Router/Device',
             unassignedRouters: 'Router non assegnati',
@@ -1741,6 +1834,7 @@
             navRegistrations: 'Recent Registrations',
             navSensors: 'IoT Sensors',
             navDevices: 'Devices',
+            navDeviceManager: 'Device Manager',
             navAnalytics: 'Analytics',
             navUsers: 'Admin Users',
             logout: 'Logout',
@@ -1856,6 +1950,27 @@
             sensorsSubtitle: 'Add, edit and monitor sensors assigned to clients',
             devicesPageTitle: 'Devices',
             devicesSubtitle: 'Overview of devices assigned to clients',
+            deviceManager: 'Device Manager',
+            deviceManagerSubtitle: 'Real gateway view with topic, client and latest received data',
+            deviceId: 'Device ID',
+            gatewayName: 'Name',
+            gatewayVisibility: 'Type',
+            mqttTopic: 'MQTT Topic',
+            latestUpdate: 'Latest update',
+            parameters: 'Parameters',
+            dashboardLink: 'Dashboard',
+            publicGateway: 'Public',
+            privateGateway: 'Private',
+            openDashboard: 'Open',
+            gatewayDetails: 'Gateway Detail',
+            gatewayInfo: 'Device information',
+            latestData: 'Latest data',
+            latestRaw: 'Latest payload/raw',
+            recentHistory: 'Recent history',
+            selectGateway: 'Select a gateway to view the real detail.',
+            noLatestData: 'No latest data available.',
+            noRecentHistory: 'No recent history available.',
+            rawUnavailable: 'Raw payload is not available in the current schema.',
             addSensor: '+ Add Sensor',
             allRouterDevices: 'All Router/Devices',
             unassignedRouters: 'Unassigned Routers',
@@ -1979,6 +2094,7 @@
             navRegistrations: 'Inscriptions Récentes',
             navSensors: 'Capteurs IoT',
             navDevices: 'Appareils',
+            navDeviceManager: 'Device Manager',
             navAnalytics: 'Analytics',
             navUsers: 'Utilisateurs Admin',
             logout: 'Déconnexion',
@@ -2094,6 +2210,27 @@
             sensorsSubtitle: 'Ajouter, modifier et surveiller les capteurs liés aux clients',
             devicesPageTitle: 'Appareils',
             devicesSubtitle: 'Vue d’ensemble des appareils attribués aux clients',
+            deviceManager: 'Device Manager',
+            deviceManagerSubtitle: 'Vue réelle des gateways, topics, client et dernières données reçues',
+            deviceId: 'Device ID',
+            gatewayName: 'Nom',
+            gatewayVisibility: 'Type',
+            mqttTopic: 'Topic MQTT',
+            latestUpdate: 'Dernière mise à jour',
+            parameters: 'Paramètres',
+            dashboardLink: 'Dashboard',
+            publicGateway: 'Public',
+            privateGateway: 'Privé',
+            openDashboard: 'Ouvrir',
+            gatewayDetails: 'Détail Gateway',
+            gatewayInfo: 'Informations device',
+            latestData: 'Dernières données',
+            latestRaw: 'Dernier payload/raw',
+            recentHistory: 'Historique récent',
+            selectGateway: 'Sélectionnez un gateway pour voir le détail réel.',
+            noLatestData: 'Aucune donnée latest disponible.',
+            noRecentHistory: 'Aucun historique récent disponible.',
+            rawUnavailable: 'Payload raw indisponible dans le schéma actuel.',
             addSensor: '+ Ajouter Capteur',
             allRouterDevices: 'Tous les routeurs/appareils',
             unassignedRouters: 'Routeurs non attribués',
@@ -2217,6 +2354,7 @@
             navRegistrations: 'التسجيلات الحديثة',
             navSensors: 'حساسات إنترنت الأشياء',
             navDevices: 'الأجهزة',
+            navDeviceManager: 'Device Manager',
             navAnalytics: 'التحليلات',
             navUsers: 'مستخدمو الإدارة',
             logout: 'تسجيل الخروج',
@@ -2332,6 +2470,27 @@
             sensorsSubtitle: 'إضافة وتعديل ومتابعة الحساسات المرتبطة بالعملاء',
             devicesPageTitle: 'الأجهزة',
             devicesSubtitle: 'نظرة عامة على الأجهزة المرتبطة بالعملاء',
+            deviceManager: 'Device Manager',
+            deviceManagerSubtitle: 'عرض حقيقي للبوابات والمواضيع والعميل وآخر البيانات',
+            deviceId: 'معرف الجهاز',
+            gatewayName: 'الاسم',
+            gatewayVisibility: 'النوع',
+            mqttTopic: 'موضوع MQTT',
+            latestUpdate: 'آخر تحديث',
+            parameters: 'المعاملات',
+            dashboardLink: 'لوحة البيانات',
+            publicGateway: 'عام',
+            privateGateway: 'خاص',
+            openDashboard: 'فتح',
+            gatewayDetails: 'تفاصيل البوابة',
+            gatewayInfo: 'معلومات الجهاز',
+            latestData: 'آخر البيانات',
+            latestRaw: 'آخر payload/raw',
+            recentHistory: 'السجل الحديث',
+            selectGateway: 'اختر بوابة لعرض التفاصيل الحقيقية.',
+            noLatestData: 'لا توجد بيانات حديثة.',
+            noRecentHistory: 'لا يوجد سجل حديث.',
+            rawUnavailable: 'البيانات الخام غير متاحة في المخطط الحالي.',
             addSensor: '+ إضافة حساس',
             allRouterDevices: 'كل الراوترات/الأجهزة',
             unassignedRouters: 'راوترات غير مخصصة',
@@ -2447,6 +2606,7 @@
         ['#nav-registrations-label', 'navRegistrations'],
         ['#nav-sensors-label', 'navSensors'],
         ['#nav-devices-label', 'navDevices'],
+        ['#nav-device-manager-label', 'navDeviceManager'],
         ['#nav-analytics-label', 'navAnalytics'],
         ['#nav-users-label', 'navUsers'],
         ['#logout-label', 'logout'],
@@ -2503,6 +2663,19 @@
         ['#devices-th-actions', 'actions'],
         ['#devices-prev', 'previous'],
         ['#devices-next', 'next'],
+        ['#device-manager-page-title', 'deviceManager'],
+        ['#device-manager-page-subtitle', 'deviceManagerSubtitle'],
+        ['#device-manager-refresh-btn', 'refresh'],
+        ['#device-manager-th-device', 'deviceId'],
+        ['#device-manager-th-name', 'gatewayName'],
+        ['#device-manager-th-client', 'client'],
+        ['#device-manager-th-visibility', 'gatewayVisibility'],
+        ['#device-manager-th-topic', 'mqttTopic'],
+        ['#device-manager-th-status', 'status'],
+        ['#device-manager-th-updated', 'latestUpdate'],
+        ['#device-manager-th-params', 'parameters'],
+        ['#device-manager-th-dashboard', 'dashboardLink'],
+        ['#device-manager-detail-empty', 'selectGateway'],
         ['#tab-sensors .page-title', 'sensorsTitle'],
         ['#tab-sensors > div:nth-child(1) p', 'sensorsSubtitle'],
         ['#tab-sensors > div:nth-child(1) .btn-primary', 'addSensor'],
@@ -2930,6 +3103,7 @@
         if (path.includes('/admin/clients')) return 'clients';
         if (path.includes('/admin/recent-clients')) return 'registrations';
         if (path.includes('/admin/sensors')) return 'sensors';
+        if (path.includes('/admin/device-manager')) return 'device-manager';
         if (path.includes('/admin/devices')) return 'devices';
         if (path.includes('/admin/analytics')) return 'analytics';
         return 'dashboard';
@@ -2942,6 +3116,7 @@
             registrations: '/admin/recent-clients',
             sensors: '/admin/sensors',
             devices: '/admin/devices',
+            'device-manager': '/admin/device-manager',
             analytics: '/admin/analytics',
             users: '/admin/'
         };
@@ -3320,12 +3495,12 @@
             return;
         }
 
-        if ((tab === 'analytics' || tab === 'users') && currentAdmin?.role !== 'super_admin') {
+        if ((tab === 'analytics' || tab === 'users' || tab === 'device-manager') && currentAdmin?.role !== 'super_admin') {
             tab = 'dashboard';
             window.history.replaceState({ tab }, '', pathForTab('dashboard'));
         }
 
-        ['dashboard', 'clients', 'registrations', 'devices', 'sensors', 'analytics', 'users'].forEach(t => {
+        ['dashboard', 'clients', 'registrations', 'devices', 'device-manager', 'sensors', 'analytics', 'users'].forEach(t => {
             document.getElementById('tab-' + t).classList.add('hidden');
         });
         document.querySelectorAll('.nav-item').forEach(el => {
@@ -3348,6 +3523,7 @@
             clients: t('clients'),
             registrations: t('recentRegistrations'),
             devices: t('devicesTitleNav'),
+            'device-manager': t('deviceManager'),
             sensors: t('sensorsTitleNav'),
             analytics: t('analytics'),
             users: t('adminUsers')
@@ -3358,6 +3534,7 @@
         else if (tab === 'clients') loadClients();
         else if (tab === 'registrations') loadRegistrations();
         else if (tab === 'devices') loadDeviceRegistry();
+        else if (tab === 'device-manager') loadDeviceManager();
         else if (tab === 'sensors') loadAllDevices();
         else if (tab === 'analytics') loadAnalytics();
         else if (tab === 'users') loadAdminUsers();
@@ -4062,6 +4239,239 @@
         if (document.getElementById('tab-devices') && !document.getElementById('tab-devices').classList.contains('hidden')) {
             loadDeviceRegistry(deviceRegistryState.page);
         }
+    }
+
+    function formatDeviceManagerDate(value) {
+        return value ? fmtDate(value) : '—';
+    }
+
+    function formatDeviceManagerNumber(value) {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? Number(numeric.toFixed(3)).toLocaleString(getCurrentLocale()) : '—';
+    }
+
+    function deviceManagerVisibilityBadge(visibility) {
+        return visibility === 'public'
+            ? `<span class="badge badge-blue">${t('publicGateway')}</span>`
+            : `<span class="badge badge-silver">${t('privateGateway')}</span>`;
+    }
+
+    function renderDeviceManagerParameters(parameters = []) {
+        if (!parameters.length) {
+            return '<span class="text-gray-300">—</span>';
+        }
+
+        return `<div class="device-manager-param-list">${parameters.map((parameter) =>
+            `<span class="badge badge-silver">${esc(parameter)}</span>`
+        ).join('')}</div>`;
+    }
+
+    async function loadDeviceManager() {
+        if (!currentAdmin || currentAdmin.role !== 'super_admin') {
+            return;
+        }
+
+        const body = document.getElementById('device-manager-body');
+        const detail = document.getElementById('device-manager-detail');
+        if (body) {
+            body.innerHTML = `<tr><td colspan="9" class="text-center text-gray-400 py-8">${t('loading')}</td></tr>`;
+        }
+
+        try {
+            const response = await api('/device-manager/gateways');
+            if (!response) return;
+
+            deviceManagerGateways = response.data || [];
+            renderDeviceManagerTable();
+
+            if (deviceManagerGateways.length) {
+                const selected = deviceManagerGateways.find((gateway) => String(gateway.id) === String(selectedDeviceManagerGatewayId))
+                    || deviceManagerGateways[0];
+                openDeviceManagerGateway(selected.id);
+            } else if (detail) {
+                selectedDeviceManagerGatewayId = null;
+                detail.innerHTML = `<div class="device-manager-empty">${t('noDevices')}</div>`;
+            }
+        } catch (err) {
+            if (body) {
+                body.innerHTML = `<tr><td colspan="9" class="text-center text-red-400 py-8">${esc(err.message)}</td></tr>`;
+            }
+            if (detail) {
+                detail.innerHTML = `<div class="device-manager-empty text-red-500">${esc(err.message)}</div>`;
+            }
+        }
+    }
+
+    function renderDeviceManagerTable() {
+        const body = document.getElementById('device-manager-body');
+        if (!body) return;
+
+        body.innerHTML = deviceManagerGateways.length ? deviceManagerGateways.map((gateway) => `
+            <tr>
+                <td>
+                    <button type="button" onclick="openDeviceManagerGateway(${gateway.id})" class="font-black text-green-700 bg-transparent border-0 p-0 cursor-pointer">
+                        ${esc(gateway.device_id)}
+                    </button>
+                </td>
+                <td>
+                    <div class="font-semibold text-gray-800">${esc(gateway.name || gateway.device_id)}</div>
+                    <div class="text-xs text-gray-400">${esc(gateway.device_status || '—')}</div>
+                </td>
+                <td>
+                    <div class="font-semibold text-gray-800">${esc(gateway.client_name || '—')}</div>
+                    <div class="text-xs text-gray-400">${esc(gateway.client_email || gateway.client_code || '—')}</div>
+                </td>
+                <td>${deviceManagerVisibilityBadge(gateway.visibility)}</td>
+                <td><code class="text-xs text-gray-500">${esc(gateway.mqtt_topic || '—')}</code></td>
+                <td>${statusBadge(gateway.status)}</td>
+                <td class="text-xs text-gray-500">${formatDeviceManagerDate(gateway.latest_activity)}</td>
+                <td><span class="badge badge-silver">${gateway.sensor_count || 0} / ${gateway.parameter_count || 0}</span></td>
+                <td>
+                    <a href="${esc(gateway.dashboard_path || '/')}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">${t('openDashboard')}</a>
+                </td>
+            </tr>
+        `).join('') : `<tr><td colspan="9" class="text-center text-gray-400 py-8">${t('noDevices')}</td></tr>`;
+    }
+
+    async function openDeviceManagerGateway(id) {
+        selectedDeviceManagerGatewayId = id;
+        const detail = document.getElementById('device-manager-detail');
+        if (!detail) return;
+
+        detail.innerHTML = `<div class="device-manager-empty">${t('loading')}</div>`;
+
+        try {
+            const response = await api('/device-manager/gateways/' + encodeURIComponent(id));
+            if (!response) return;
+            renderDeviceManagerDetail(response.data);
+        } catch (err) {
+            detail.innerHTML = `<div class="device-manager-empty text-red-500">${esc(err.message)}</div>`;
+        }
+    }
+
+    function renderDeviceManagerLatestRows(rows = []) {
+        if (!rows.length) {
+            return `<tr><td colspan="4" class="text-center text-gray-400 py-4">${t('noLatestData')}</td></tr>`;
+        }
+
+        return rows.map((row) => `
+            <tr>
+                <td><span class="badge badge-silver">${esc(row.type || '—')}</span></td>
+                <td>
+                    <div class="font-semibold text-gray-800">${esc(row.name || row.subtype || '—')}</div>
+                    <div class="text-xs text-gray-400">${esc(row.subtype || '—')}</div>
+                </td>
+                <td><span class="font-black text-gray-800">${formatDeviceManagerNumber(row.value)}</span> <span class="text-xs text-gray-400">${esc(row.unit || '')}</span></td>
+                <td class="text-xs text-gray-500">${formatDeviceManagerDate(row.timestamp)}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderDeviceManagerHistoryRows(rows = []) {
+        if (!rows.length) {
+            return `<tr><td colspan="4" class="text-center text-gray-400 py-4">${t('noRecentHistory')}</td></tr>`;
+        }
+
+        return rows.slice(0, 12).map((row) => `
+            <tr>
+                <td class="text-xs text-gray-500">${formatDeviceManagerDate(row.timestamp)}</td>
+                <td><span class="badge badge-silver">${esc(row.subtype || row.type || '—')}</span></td>
+                <td><span class="font-black text-gray-800">${formatDeviceManagerNumber(row.value)}</span> <span class="text-xs text-gray-400">${esc(row.unit || '')}</span></td>
+                <td class="text-xs text-gray-400">${row.metadata ? esc(JSON.stringify(row.metadata).slice(0, 80)) : '—'}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderDeviceManagerDetail(data = {}) {
+        const detail = document.getElementById('device-manager-detail');
+        const gateway = data.gateway || {};
+        const latestData = data.latest_data || [];
+        const recentHistory = data.recent_history || [];
+        const latestRaw = data.latest_raw || {};
+        const rawText = latestRaw.available
+            ? JSON.stringify(latestRaw.metadata || latestRaw, null, 2)
+            : (latestRaw.message || t('rawUnavailable'));
+
+        detail.innerHTML = `
+            <div class="px-5 py-4 border-b border-gray-100">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs text-gray-400 font-black uppercase tracking-wide">${t('gatewayDetails')}</div>
+                        <h3 class="text-xl font-black text-gray-900 mt-1">${esc(gateway.device_id || '—')}</h3>
+                        <p class="text-sm text-gray-500">${esc(gateway.name || '')}</p>
+                    </div>
+                    <div class="flex flex-col items-end gap-2">
+                        ${statusBadge(gateway.status)}
+                        ${deviceManagerVisibilityBadge(gateway.visibility)}
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-5 space-y-5">
+                <div>
+                    <h4 class="font-black text-gray-800 mb-3">${t('gatewayInfo')}</h4>
+                    <div class="device-manager-grid">
+                        <div class="device-manager-kv">
+                            <div class="device-manager-label">${t('client')}</div>
+                            <div class="device-manager-value">${esc(gateway.client_name || '—')}</div>
+                            <div class="text-xs text-gray-400 mt-1">${esc(gateway.client_email || gateway.client_code || '—')}</div>
+                        </div>
+                        <div class="device-manager-kv">
+                            <div class="device-manager-label">${t('mqttTopic')}</div>
+                            <div class="device-manager-value">${esc(gateway.mqtt_topic || '—')}</div>
+                        </div>
+                        <div class="device-manager-kv">
+                            <div class="device-manager-label">${t('latestUpdate')}</div>
+                            <div class="device-manager-value">${formatDeviceManagerDate(gateway.latest_activity)}</div>
+                        </div>
+                        <div class="device-manager-kv">
+                            <div class="device-manager-label">${t('parameters')}</div>
+                            <div class="device-manager-value">${gateway.sensor_count || 0} / ${gateway.parameter_count || 0}</div>
+                        </div>
+                    </div>
+                    <div class="mt-3">${renderDeviceManagerParameters(gateway.parameters || [])}</div>
+                </div>
+
+                <div>
+                    <h4 class="font-black text-gray-800 mb-3">${t('latestData')}</h4>
+                    <div class="overflow-x-auto border border-gray-100 rounded-xl">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>${t('sensorType')}</th>
+                                    <th>${t('parameters')}</th>
+                                    <th>${t('valueLabel')}</th>
+                                    <th>${t('updatedAtLabel')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>${renderDeviceManagerLatestRows(latestData)}</tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="font-black text-gray-800 mb-3">${t('latestRaw')}</h4>
+                    <pre class="device-manager-code">${esc(rawText)}</pre>
+                </div>
+
+                <div>
+                    <h4 class="font-black text-gray-800 mb-3">${t('recentHistory')}</h4>
+                    <div class="overflow-x-auto border border-gray-100 rounded-xl">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>${t('registeredAt')}</th>
+                                    <th>${t('parameters')}</th>
+                                    <th>${t('valueLabel')}</th>
+                                    <th>Metadata</th>
+                                </tr>
+                            </thead>
+                            <tbody>${renderDeviceManagerHistoryRows(recentHistory)}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     // ── Sensors ───────────────────────────────────────────────────────────

@@ -43,6 +43,8 @@ attachPasswordResetRoutes(router, {
 });
 
 const VALID_SENSOR_TYPES = new Set(['energia', 'acqua', 'terreno', 'clima']);
+const DEFAULT_PUBLIC_SENSOR_DEVICE_ID = 'GW-001';
+const PERLITE_TRACK_DEVICE_ID = 'GW-002';
 const DEFAULT_SENSOR_PROFILES = {
     energia: {
         subtype: 'energia_consumption',
@@ -146,6 +148,79 @@ function buildPaginationMeta(total, page, pageSize) {
         totalPages,
         hasNext: page < totalPages,
         hasPrev: page > 1
+    };
+}
+
+function getPublicGatewayDeviceId() {
+    return String(process.env.PUBLIC_GATEWAY_DEVICE_ID || DEFAULT_PUBLIC_SENSOR_DEVICE_ID).trim() || DEFAULT_PUBLIC_SENSOR_DEVICE_ID;
+}
+
+function getGatewayTopic(deviceId) {
+    const cleanDeviceId = String(deviceId || '').trim();
+    return cleanDeviceId ? `sensors/${cleanDeviceId}/telemetry` : null;
+}
+
+function getGatewayVisibility(deviceId) {
+    return String(deviceId || '').trim() === getPublicGatewayDeviceId() ? 'public' : 'private';
+}
+
+function getGatewayDashboardPath(deviceId) {
+    const cleanDeviceId = String(deviceId || '').trim();
+    if (cleanDeviceId === getPublicGatewayDeviceId()) {
+        return '/demo';
+    }
+    if (cleanDeviceId === PERLITE_TRACK_DEVICE_ID) {
+        return '/perlite-track';
+    }
+    return '/login';
+}
+
+function parseMetadata(value) {
+    if (!value) {
+        return null;
+    }
+    if (typeof value === 'object') {
+        return value;
+    }
+    try {
+        return JSON.parse(value);
+    } catch (_error) {
+        return null;
+    }
+}
+
+function normalizeDeviceManagerGateway(row = {}) {
+    const deviceId = row.device_id || row.serial_number || '';
+    const latestActivity = row.last_reading || row.last_seen || row.updated_at || null;
+    const visibility = getGatewayVisibility(deviceId);
+
+    return {
+        id: row.id,
+        device_id: deviceId,
+        name: row.name || deviceId,
+        client_id: row.client_id || null,
+        client_name: row.client_name || null,
+        client_email: row.client_email || null,
+        client_code: row.client_code || null,
+        visibility,
+        visibility_label: visibility === 'public' ? 'pubblico' : 'privato',
+        mqtt_topic: getGatewayTopic(deviceId),
+        subscribe_topic: deviceId ? `sensors/${deviceId}/commands/#` : null,
+        dashboard_path: getGatewayDashboardPath(deviceId),
+        status: row.online_status || 'offline',
+        device_status: row.status || null,
+        last_seen: row.last_seen || null,
+        last_reading: row.last_reading || null,
+        latest_activity: latestActivity,
+        sensor_count: Number(row.sensor_count || 0),
+        parameter_count: Number(row.parameter_count || row.sensor_count || 0),
+        parameters: String(row.parameter_keys || '')
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        metadata: parseMetadata(row.metadata),
+        created_at: row.created_at || null,
+        updated_at: row.updated_at || null
     };
 }
 
@@ -1810,6 +1885,218 @@ router.get('/devices', isAdminRole, async (req, res) => {
     } catch (error) {
         console.error('Get devices error:', error);
         res.status(500).json({ error: 'Errore nel recupero dispositivi' });
+    }
+});
+
+// ─── DEVICE MANAGER (SUPER ADMIN ONLY) ────────────────────────────────────────
+
+router.get('/device-manager/gateways', isAdminRole, isSuperAdmin, async (_req, res) => {
+    try {
+        const flags = await getUserColumnFlags();
+        const offlineIntervalLiteral = getPostgresMinuteIntervalLiteral(getOfflineAfterMinutes());
+        const gateways = await query(
+            `SELECT
+                d.id,
+                d.device_id,
+                d.name,
+                d.status,
+                d.last_seen,
+                d.created_at,
+                d.updated_at,
+                d.metadata,
+                d.user_id AS client_id,
+                u.name AS client_name,
+                u.email AS client_email,
+                ${resolvedClientCodeExpr(flags)} AS client_code,
+                COALESCE(sm.sensor_count, 0) AS sensor_count,
+                COALESCE(sm.parameter_count, 0) AS parameter_count,
+                sm.parameter_keys,
+                sm.last_reading,
+                CASE
+                    WHEN GREATEST(
+                        COALESCE(d.last_seen, TIMESTAMPTZ 'epoch'),
+                        COALESCE(sm.last_reading, TIMESTAMPTZ 'epoch')
+                    ) >= NOW() - INTERVAL '${offlineIntervalLiteral}' THEN 'online'
+                    WHEN d.last_seen IS NULL AND sm.last_reading IS NULL THEN 'never'
+                    ELSE 'offline'
+                END AS online_status
+             FROM devices d
+             LEFT JOIN users u ON d.user_id = u.id
+             LEFT JOIN (
+                SELECT
+                    s.device_id,
+                    COUNT(*) AS sensor_count,
+                    COUNT(DISTINCT COALESCE(s.subtype, s.type)) AS parameter_count,
+                    STRING_AGG(DISTINCT COALESCE(s.subtype, s.type)::text, ',') AS parameter_keys,
+                    MAX(sl.timestamp) AS last_reading
+                FROM sensors s
+                LEFT JOIN sensor_latest sl ON sl.sensor_id = s.id
+                WHERE s.enabled = TRUE
+                GROUP BY s.device_id
+             ) sm ON sm.device_id = d.id
+             ORDER BY
+                CASE WHEN d.device_id = ? THEN 0 ELSE 1 END,
+                d.device_id ASC`,
+            [getPublicGatewayDeviceId()]
+        );
+
+        res.json({
+            success: true,
+            data: gateways.map(normalizeDeviceManagerGateway)
+        });
+    } catch (error) {
+        console.error('Get device manager gateways error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore nel recupero gateway Device Manager',
+            databaseMessage: 'Device Manager temporaneamente non disponibile'
+        });
+    }
+});
+
+router.get('/device-manager/gateways/:id', isAdminRole, isSuperAdmin, async (req, res) => {
+    try {
+        const flags = await getUserColumnFlags();
+        const offlineIntervalLiteral = getPostgresMinuteIntervalLiteral(getOfflineAfterMinutes());
+        const [gatewayRow] = await query(
+            `SELECT
+                d.id,
+                d.device_id,
+                d.name,
+                d.status,
+                d.last_seen,
+                d.created_at,
+                d.updated_at,
+                d.metadata,
+                d.user_id AS client_id,
+                u.name AS client_name,
+                u.email AS client_email,
+                ${resolvedClientCodeExpr(flags)} AS client_code,
+                COALESCE(sm.sensor_count, 0) AS sensor_count,
+                COALESCE(sm.parameter_count, 0) AS parameter_count,
+                sm.parameter_keys,
+                sm.last_reading,
+                CASE
+                    WHEN GREATEST(
+                        COALESCE(d.last_seen, TIMESTAMPTZ 'epoch'),
+                        COALESCE(sm.last_reading, TIMESTAMPTZ 'epoch')
+                    ) >= NOW() - INTERVAL '${offlineIntervalLiteral}' THEN 'online'
+                    WHEN d.last_seen IS NULL AND sm.last_reading IS NULL THEN 'never'
+                    ELSE 'offline'
+                END AS online_status
+             FROM devices d
+             LEFT JOIN users u ON d.user_id = u.id
+             LEFT JOIN (
+                SELECT
+                    s.device_id,
+                    COUNT(*) AS sensor_count,
+                    COUNT(DISTINCT COALESCE(s.subtype, s.type)) AS parameter_count,
+                    STRING_AGG(DISTINCT COALESCE(s.subtype, s.type)::text, ',') AS parameter_keys,
+                    MAX(sl.timestamp) AS last_reading
+                FROM sensors s
+                LEFT JOIN sensor_latest sl ON sl.sensor_id = s.id
+                WHERE s.enabled = TRUE
+                GROUP BY s.device_id
+             ) sm ON sm.device_id = d.id
+             WHERE CAST(d.id AS TEXT) = ?
+                OR d.device_id = ?
+             LIMIT 1`,
+            [req.params.id, req.params.id]
+        );
+
+        if (!gatewayRow) {
+            return res.status(404).json({ error: 'Gateway non trovato' });
+        }
+
+        const latestData = await query(
+            `SELECT
+                s.id AS sensor_id,
+                s.type,
+                s.subtype,
+                s.name,
+                s.unit,
+                s.enabled,
+                sl.value,
+                sl.timestamp,
+                sr.metadata AS latest_metadata
+             FROM sensors s
+             LEFT JOIN sensor_latest sl ON sl.sensor_id = s.id
+             LEFT JOIN LATERAL (
+                SELECT metadata
+                FROM sensor_readings
+                WHERE sensor_id = s.id
+                ORDER BY timestamp DESC, id DESC
+                LIMIT 1
+             ) sr ON TRUE
+             WHERE s.device_id = ?
+               AND s.enabled = TRUE
+             ORDER BY s.type ASC, s.subtype ASC`,
+            [gatewayRow.id]
+        );
+
+        const recentHistory = await query(
+            `SELECT
+                sr.id,
+                sr.timestamp,
+                sr.value,
+                sr.metadata,
+                s.type,
+                s.subtype,
+                s.name,
+                s.unit
+             FROM sensor_readings sr
+             INNER JOIN sensors s ON s.id = sr.sensor_id
+             WHERE s.device_id = ?
+             ORDER BY sr.timestamp DESC, sr.id DESC
+             LIMIT 30`,
+            [gatewayRow.id]
+        );
+
+        const latestMetadata = recentHistory
+            .map((row) => parseMetadata(row.metadata))
+            .find((metadata) => metadata && Object.keys(metadata).length) || null;
+
+        res.json({
+            success: true,
+            data: {
+                gateway: normalizeDeviceManagerGateway(gatewayRow),
+                latest_data: latestData.map((row) => ({
+                    sensor_id: row.sensor_id,
+                    type: row.type,
+                    subtype: row.subtype,
+                    name: row.name,
+                    unit: row.unit,
+                    enabled: row.enabled,
+                    value: row.value === null || row.value === undefined ? null : Number(row.value),
+                    timestamp: row.timestamp || null,
+                    metadata: parseMetadata(row.latest_metadata)
+                })),
+                recent_history: recentHistory.map((row) => ({
+                    id: row.id,
+                    type: row.type,
+                    subtype: row.subtype,
+                    name: row.name,
+                    unit: row.unit,
+                    value: row.value === null || row.value === undefined ? null : Number(row.value),
+                    timestamp: row.timestamp || null,
+                    metadata: parseMetadata(row.metadata)
+                })),
+                latest_raw: latestMetadata
+                    ? {
+                        available: true,
+                        metadata: latestMetadata
+                    }
+                    : {
+                        available: false,
+                        message: 'Raw payload non disponibile nello schema attuale; sono disponibili latest data e metadati lettura.'
+                    }
+            }
+        });
+    } catch (error) {
+        console.error('Get device manager gateway detail error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore nel recupero dettaglio gateway',
+            databaseMessage: 'Dettaglio gateway temporaneamente non disponibile'
+        });
     }
 });
 
