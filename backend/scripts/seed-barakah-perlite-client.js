@@ -152,7 +152,7 @@ async function seedBarakahPerliteClient() {
     client: 'barakah_perlite',
     product: 'RAYAT Perlite Track',
     sensor_model: 'Substrate Rayat',
-    expected_metrics: ['terreno_moisture', 'terreno_ec', 'terreno_temperature']
+    expected_metrics: ['terreno_moisture', 'ec_substrate', 'ec_root', 'terreno_temperature']
   });
   const existingDevices = await query('SELECT id FROM devices WHERE device_id = ? LIMIT 1', [deviceId]);
 

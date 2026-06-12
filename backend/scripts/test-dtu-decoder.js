@@ -70,6 +70,21 @@ function testSubstrateInputRegisterFrame() {
   assertReading(decoded.readings, 'terreno_ec', 0.268);
 }
 
+function testGw002SixRegisterPoreEcFrame() {
+  const decoded = decodeModbusTelemetryFrame(Buffer.from('01030c09421004010c0000000009926871', 'hex'), { deviceId: 'GW-002' });
+
+  assert.equal(decoded.slaveId, 1);
+  assert.equal(decoded.layout, 'substrate_6_register_pore_ec');
+  assert.equal(decoded.registerCount, 6);
+  assert.deepEqual(decoded.registers, [2370, 4100, 268, 0, 0, 2450]);
+  assertReading(decoded.readings, 'terreno_temperature', 23.7);
+  assertReading(decoded.readings, 'terreno_moisture', 41);
+  assertReading(decoded.readings, 'ec_substrate', 0.268);
+  assertReading(decoded.readings, 'ec_root', 2.45);
+  assert.equal(bySubtype(decoded.readings, 'ec_substrate').metadata.register_address, '0x0002');
+  assert.equal(bySubtype(decoded.readings, 'ec_root').metadata.register_address, '0x0005');
+}
+
 function testSubstrateMqttPayloadParsing() {
   const parsed = parseSensorUpdate({
     topic: 'sensors/GW-001/telemetry',
@@ -109,6 +124,21 @@ function testGw002TwoRegisterMqttPayloadParsing() {
   assert.equal(bySubtype(parsed.readings, 'clima_temperature'), undefined);
 }
 
+function testGw002SixRegisterPoreEcMqttPayloadParsing() {
+  const parsed = parseSensorUpdate({
+    topic: 'sensors/GW-002/telemetry',
+    raw_hex: '01030c09421004010c0000000009926871'
+  });
+
+  assert.equal(parsed.deviceId, 'GW-002');
+  assert.equal(parsed.readings.length, 4);
+  assertReading(parsed.readings, 'terreno_temperature', 23.7);
+  assertReading(parsed.readings, 'terreno_moisture', 41);
+  assertReading(parsed.readings, 'ec_substrate', 0.268);
+  assertReading(parsed.readings, 'ec_root', 2.45);
+  assert.equal(bySubtype(parsed.readings, 'terreno_ec'), undefined);
+}
+
 function testLegacySevenInOneSoilFrame() {
   const decoded = decodeModbusTelemetryFrame(Buffer.from('03030E00F0022604D200B4002D0104028A1F8C', 'hex'));
 
@@ -129,9 +159,11 @@ testGw001TwoRegisterClimateFrame();
 testGw002TwoRegisterSubstratePartialFrame();
 testSubstrateThreeRegisterFrame();
 testSubstrateInputRegisterFrame();
+testGw002SixRegisterPoreEcFrame();
 testSubstrateMqttPayloadParsing();
 testGw001TwoRegisterClimateMqttPayloadParsing();
 testGw002TwoRegisterMqttPayloadParsing();
+testGw002SixRegisterPoreEcMqttPayloadParsing();
 testLegacySevenInOneSoilFrame();
 
 console.log('DTU decoder tests passed');

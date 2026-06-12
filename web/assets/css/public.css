@@ -1152,6 +1152,146 @@
             line-height: 1.18;
         }
 
+        body[data-view="perlite-track"] .rayat-perlite-education-card {
+            margin: 0 0 1.65rem;
+            border: 1px solid rgba(96, 165, 250, 0.48);
+            border-left: 3px solid #3b82f6;
+            border-radius: 1.45rem;
+            background: linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(255, 255, 255, 0.96));
+            box-shadow: 0 24px 60px rgba(37, 99, 235, 0.08);
+            overflow: hidden;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__summary {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem 1.15rem;
+            cursor: pointer;
+            list-style: none;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__summary::-webkit-details-marker {
+            display: none;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__icon {
+            width: 3.6rem;
+            height: 3.6rem;
+            flex: 0 0 3.6rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            color: #ffffff;
+            background: linear-gradient(135deg, #60a5fa, #2563eb);
+            box-shadow: 0 18px 36px rgba(37, 99, 235, 0.22);
+            font-size: 1.55rem;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__copy {
+            min-width: 0;
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.24rem;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__title {
+            color: #0f172a;
+            font-size: clamp(1rem, 1.4vw, 1.25rem);
+            font-weight: 900;
+            line-height: 1.2;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__subtitle {
+            color: #475569;
+            font-size: 0.92rem;
+            font-weight: 650;
+            line-height: 1.45;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__button {
+            min-height: 3rem;
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.62rem;
+            padding: 0.78rem 1rem;
+            border: 1px solid rgba(59, 130, 246, 0.34);
+            border-radius: 0.95rem;
+            background: rgba(255, 255, 255, 0.74);
+            color: #1d4ed8;
+            font-size: 0.88rem;
+            font-weight: 900;
+            line-height: 1;
+            white-space: nowrap;
+            transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__summary:hover .rayat-perlite-education-card__button {
+            background: #ffffff;
+            box-shadow: 0 14px 28px rgba(37, 99, 235, 0.1);
+            transform: translateY(-1px);
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__arrow {
+            display: inline-flex;
+            font-size: 1.25rem;
+            line-height: 1;
+            transition: transform 0.2s ease;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card[open] .rayat-perlite-education-card__arrow {
+            transform: rotate(90deg);
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__panel {
+            border-top: 1px solid rgba(147, 197, 253, 0.34);
+            padding: 0 1.15rem 1.15rem;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.8rem;
+            padding-top: 1rem;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.7rem;
+            min-width: 0;
+            padding: 0.95rem;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            border-radius: 1rem;
+            background: rgba(255, 255, 255, 0.82);
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__item-icon {
+            flex: 0 0 auto;
+            font-size: 1.2rem;
+            line-height: 1.1;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__item h6 {
+            margin: 0 0 0.28rem;
+            color: #0f172a;
+            font-size: 0.86rem;
+            font-weight: 900;
+            line-height: 1.2;
+        }
+
+        body[data-view="perlite-track"] .rayat-perlite-education-card__item p {
+            margin: 0;
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 650;
+            line-height: 1.45;
+        }
+
         .rayat-alert-badge--attention {
             color: #b45309;
             background: rgba(245, 158, 11, 0.14);
@@ -2485,6 +2625,15 @@
                 border-radius: 1.45rem;
             }
 
+            body[data-view="perlite-track"] .rayat-perlite-education-card__summary {
+                align-items: flex-start;
+                gap: 0.85rem;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-education-card__grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
             body[data-view="perlite-track"] .rayat-perlite-metric-card {
                 min-height: 340px;
                 padding: 1.35rem;
@@ -2972,6 +3121,31 @@
                 padding: 1rem;
             }
 
+            body[data-view="perlite-track"] .rayat-perlite-education-card {
+                border-radius: 1.15rem;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-education-card__summary {
+                flex-direction: column;
+                padding: 1rem;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-education-card__icon {
+                width: 3rem;
+                height: 3rem;
+                flex-basis: 3rem;
+                font-size: 1.35rem;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-education-card__button {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            body[data-view="perlite-track"] .rayat-perlite-education-card__grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
             body[data-view="perlite-track"] .rayat-perlite-metric-card__head {
                 min-height: 126px;
                 gap: 0.68rem;
@@ -3124,13 +3298,13 @@
             }
         }
 
-        @media (min-width: 1024px) {
+        @media (min-width: 1280px) {
             body[data-view="perlite-track"] .rayat-sensor-card-grid--soil {
-                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
             }
         }
 
-        @media (min-width: 641px) and (max-width: 1023px) {
+        @media (min-width: 641px) and (max-width: 1279px) {
             body[data-view="perlite-track"] .rayat-sensor-card-grid--soil {
                 grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             }

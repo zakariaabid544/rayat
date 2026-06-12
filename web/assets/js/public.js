@@ -510,6 +510,8 @@
                 moisture: 'terreno_moisture',
                 temperature: 'terreno_temperature',
                 ec: 'terreno_ec',
+                ecSubstrate: 'ec_substrate',
+                ecRoot: 'ec_root',
                 pH: 'terreno_ph',
                 nitrogen: 'terreno_n',
                 phosphorus: 'terreno_p',
@@ -725,7 +727,7 @@
                 return null;
             }
 
-            if (group === 'soil' && key === 'ec' && numeric > 20) {
+            if (group === 'soil' && (key === 'ec' || key === 'ecSubstrate' || key === 'ecRoot') && numeric > 20) {
                 return numeric / 1000;
             }
 
@@ -799,7 +801,7 @@
                 return { min: Math.max(0, range.min - 1.5), max: range.max + 1.5 };
             }
 
-            if (group === 'soil' && key === 'ec') {
+            if (group === 'soil' && (key === 'ec' || key === 'ecSubstrate' || key === 'ecRoot')) {
                 return { min: 0, max: Math.max(4, range.max + 1) };
             }
 
@@ -2343,6 +2345,8 @@
                 perliteLastRealUpdate: 'Ultimo aggiornamento reale',
                 perliteMetricTemperature: 'Temperatura substrato',
                 perliteMetricEc: 'EC substrato',
+                perliteMetricEcRoot: 'EC Racinaire',
+                perliteMetricEcSubstrate: 'EC Substrat',
                 perliteMetricMoisture: 'Umidità substrato',
                 perliteRangeTomato: 'Range ottimale per pomodoro in serra',
                 perliteRangeSubstrate: 'Range ottimale per substrato perlite',
@@ -2350,8 +2354,25 @@
                 perliteAlertCropLabel: 'Pomodoro in serra',
                 perliteAlertTemperatureTitle: 'Temperatura del substrato',
                 perliteAlertEcTitle: 'Conducibilità elettrica',
+                perliteAlertEcRootTitle: 'EC Racinaire',
+                perliteAlertEcSubstrateTitle: 'EC Substrat',
                 perliteAlertMoistureTitle: 'Umidità del substrato',
                 perliteOptimalRange: 'Range ottimale',
+                perliteEducationTitle: 'Comprendere i parametri di monitoraggio',
+                perliteEducationSubtitle: 'Scopri il significato di ogni parametro e il suo impatto sulle colture.',
+                perliteEducationButton: 'Scopri di più',
+                perliteEducationTemperatureTitle: 'Temperatura substrato',
+                perliteEducationTemperatureBody: 'Indica quanto è caldo il substrato vicino alle radici. Aiuta a capire se la pianta può assorbire bene acqua e nutrienti.',
+                perliteEducationMoistureTitle: 'Umidità substrato',
+                perliteEducationMoistureBody: 'Mostra quanta acqua è presente nella perlite. Serve a evitare sia stress idrico sia eccesso di irrigazione.',
+                perliteEducationEcRootTitle: 'EC Racinaire',
+                perliteEducationEcRootBody: 'Rappresenta la concentrazione di sali nella zona dove lavorano le radici. Aiuta a regolare fertirrigazione e lavaggi.',
+                perliteEducationEcSubstrateTitle: 'EC Substrat',
+                perliteEducationEcSubstrateBody: 'Misura la salinità generale del substrato. Valori troppo bassi o troppo alti possono ridurre crescita e produzione.',
+                perliteEducationPhTitle: 'pH',
+                perliteEducationPhBody: 'Indica se la soluzione è acida o basica. Un pH corretto aiuta la pianta ad assorbire gli elementi nutritivi.',
+                perliteEducationNpkTitle: 'N / P / K',
+                perliteEducationNpkBody: 'Sono i nutrienti principali: azoto per crescita, fosforo per radici e fioritura, potassio per qualità e resistenza.',
                 waitingForSensorData: 'In attesa dei dati del sensore',
                 notAvailableShort: 'N/A',
                 fromDate: 'Da',
@@ -2380,6 +2401,8 @@
                 perliteLastRealUpdate: 'Last real update',
                 perliteMetricTemperature: 'Substrate temperature',
                 perliteMetricEc: 'Substrate EC',
+                perliteMetricEcRoot: 'Root-zone EC',
+                perliteMetricEcSubstrate: 'Substrate EC',
                 perliteMetricMoisture: 'Substrate moisture',
                 perliteRangeTomato: 'Optimal range for greenhouse tomato',
                 perliteRangeSubstrate: 'Optimal range for perlite substrate',
@@ -2387,8 +2410,25 @@
                 perliteAlertCropLabel: 'Greenhouse tomato',
                 perliteAlertTemperatureTitle: 'Substrate temperature',
                 perliteAlertEcTitle: 'Electrical conductivity',
+                perliteAlertEcRootTitle: 'Root-zone EC',
+                perliteAlertEcSubstrateTitle: 'Substrate EC',
                 perliteAlertMoistureTitle: 'Substrate moisture',
                 perliteOptimalRange: 'Optimal range',
+                perliteEducationTitle: 'Understand monitoring parameters',
+                perliteEducationSubtitle: 'Discover what each parameter means and how it affects your crops.',
+                perliteEducationButton: 'Learn more',
+                perliteEducationTemperatureTitle: 'Substrate temperature',
+                perliteEducationTemperatureBody: 'Shows how warm the root zone is. It helps understand whether the plant can absorb water and nutrients properly.',
+                perliteEducationMoistureTitle: 'Substrate moisture',
+                perliteEducationMoistureBody: 'Shows how much water is available in the perlite. It helps avoid water stress and over-irrigation.',
+                perliteEducationEcRootTitle: 'Root-zone EC',
+                perliteEducationEcRootBody: 'Shows salt concentration around the active roots. It helps adjust fertigation and flushing decisions.',
+                perliteEducationEcSubstrateTitle: 'Substrate EC',
+                perliteEducationEcSubstrateBody: 'Shows the general salinity of the substrate. Values that are too low or too high can reduce growth and yield.',
+                perliteEducationPhTitle: 'pH',
+                perliteEducationPhBody: 'Shows whether the solution is acidic or basic. A good pH helps plants take up nutrients.',
+                perliteEducationNpkTitle: 'N / P / K',
+                perliteEducationNpkBody: 'The main nutrients: nitrogen for growth, phosphorus for roots and flowering, potassium for fruit quality and plant strength.',
                 waitingForSensorData: 'Waiting for sensor data',
                 notAvailableShort: 'N/A',
                 fromDate: 'From',
@@ -2417,6 +2457,8 @@
                 perliteLastRealUpdate: 'Dernière mise à jour réelle',
                 perliteMetricTemperature: 'Température substrat',
                 perliteMetricEc: 'EC substrat',
+                perliteMetricEcRoot: 'EC Racinaire',
+                perliteMetricEcSubstrate: 'EC Substrat',
                 perliteMetricMoisture: 'Humidité substrat',
                 perliteRangeTomato: 'Plage optimale pour tomate sous serre',
                 perliteRangeSubstrate: 'Plage optimale pour substrat perlite',
@@ -2424,8 +2466,25 @@
                 perliteAlertCropLabel: 'Tomate sous serre',
                 perliteAlertTemperatureTitle: 'Température du substrat',
                 perliteAlertEcTitle: 'Conductivité électrique',
+                perliteAlertEcRootTitle: 'EC Racinaire',
+                perliteAlertEcSubstrateTitle: 'EC Substrat',
                 perliteAlertMoistureTitle: 'Humidité du substrat',
                 perliteOptimalRange: 'Plage optimale',
+                perliteEducationTitle: 'Comprendre les paramètres de surveillance',
+                perliteEducationSubtitle: 'Découvrez la signification de chaque paramètre et son impact sur vos cultures.',
+                perliteEducationButton: 'En savoir plus',
+                perliteEducationTemperatureTitle: 'Température Substrat',
+                perliteEducationTemperatureBody: 'Indique la chaleur du substrat autour des racines. Cela aide à savoir si la plante peut bien absorber l’eau et les nutriments.',
+                perliteEducationMoistureTitle: 'Humidité Substrat',
+                perliteEducationMoistureBody: 'Montre la quantité d’eau disponible dans la perlite. Cela aide à éviter le manque d’eau et l’excès d’irrigation.',
+                perliteEducationEcRootTitle: 'EC Racinaire',
+                perliteEducationEcRootBody: 'Montre la concentration de sels autour des racines actives. Elle aide à ajuster la fertigation et les rinçages.',
+                perliteEducationEcSubstrateTitle: 'EC Substrat',
+                perliteEducationEcSubstrateBody: 'Indique la salinité générale du substrat. Des valeurs trop basses ou trop élevées peuvent freiner la croissance.',
+                perliteEducationPhTitle: 'pH',
+                perliteEducationPhBody: 'Indique si la solution est acide ou basique. Un bon pH aide la plante à absorber les éléments nutritifs.',
+                perliteEducationNpkTitle: 'N / P / K',
+                perliteEducationNpkBody: 'Ce sont les nutriments principaux : azote pour la croissance, phosphore pour les racines et la floraison, potassium pour la qualité des fruits.',
                 waitingForSensorData: 'En attente des données du capteur',
                 notAvailableShort: 'N/A',
                 fromDate: 'Du',
@@ -2454,6 +2513,8 @@
                 perliteLastRealUpdate: 'آخر تحديث حقيقي',
                 perliteMetricTemperature: 'حرارة الركيزة',
                 perliteMetricEc: 'EC الركيزة',
+                perliteMetricEcRoot: 'EC الجذور',
+                perliteMetricEcSubstrate: 'EC الركيزة',
                 perliteMetricMoisture: 'رطوبة الركيزة',
                 perliteRangeTomato: 'النطاق الأمثل للطماطم داخل الدفيئة',
                 perliteRangeSubstrate: 'النطاق الأمثل لركيزة البيرلايت',
@@ -2461,8 +2522,25 @@
                 perliteAlertCropLabel: 'طماطم داخل الدفيئة',
                 perliteAlertTemperatureTitle: 'حرارة الركيزة',
                 perliteAlertEcTitle: 'التوصيل الكهربائي',
+                perliteAlertEcRootTitle: 'EC الجذور',
+                perliteAlertEcSubstrateTitle: 'EC الركيزة',
                 perliteAlertMoistureTitle: 'رطوبة الركيزة',
                 perliteOptimalRange: 'النطاق الأمثل',
+                perliteEducationTitle: 'فهم مؤشرات المراقبة',
+                perliteEducationSubtitle: 'تعرّف على معنى كل مؤشر وتأثيره على المحصول.',
+                perliteEducationButton: 'اعرف المزيد',
+                perliteEducationTemperatureTitle: 'حرارة الركيزة',
+                perliteEducationTemperatureBody: 'توضح حرارة الوسط حول الجذور. تساعد على معرفة قدرة النبات على امتصاص الماء والعناصر الغذائية.',
+                perliteEducationMoistureTitle: 'رطوبة الركيزة',
+                perliteEducationMoistureBody: 'توضح كمية الماء المتوفرة في البيرلايت. تساعد على تجنب نقص الماء أو الري الزائد.',
+                perliteEducationEcRootTitle: 'EC الجذور',
+                perliteEducationEcRootBody: 'توضح تركيز الأملاح حول الجذور النشطة. تساعد على ضبط التسميد والغسل.',
+                perliteEducationEcSubstrateTitle: 'EC الركيزة',
+                perliteEducationEcSubstrateBody: 'توضح الملوحة العامة للركيزة. القيم المنخفضة أو المرتفعة جدا قد تقلل النمو والإنتاج.',
+                perliteEducationPhTitle: 'pH',
+                perliteEducationPhBody: 'يوضح هل المحلول حمضي أو قلوي. pH مناسب يساعد النبات على امتصاص العناصر الغذائية.',
+                perliteEducationNpkTitle: 'N / P / K',
+                perliteEducationNpkBody: 'هي العناصر الرئيسية: الآزوت للنمو، الفوسفور للجذور والإزهار، والبوتاسيوم لجودة الثمار وقوة النبات.',
                 waitingForSensorData: 'في انتظار بيانات المستشعر',
                 notAvailableShort: 'N/A',
                 fromDate: 'من',
@@ -2491,6 +2569,8 @@
                 perliteLastRealUpdate: 'Derniere mise a jour',
                 perliteMetricTemperature: 'Temperature substrat',
                 perliteMetricEc: 'EC substrat',
+                perliteMetricEcRoot: 'EC Racinaire',
+                perliteMetricEcSubstrate: 'EC Substrat',
                 perliteMetricMoisture: 'Humidite substrat',
                 perliteRangeTomato: 'Range optimal tomate serre',
                 perliteRangeSubstrate: 'Range optimal substrat perlite',
@@ -2498,8 +2578,25 @@
                 perliteAlertCropLabel: 'Tomate serre',
                 perliteAlertTemperatureTitle: 'Temperature substrat',
                 perliteAlertEcTitle: 'Conductivite electrique',
+                perliteAlertEcRootTitle: 'EC Racinaire',
+                perliteAlertEcSubstrateTitle: 'EC Substrat',
                 perliteAlertMoistureTitle: 'Humidite substrat',
                 perliteOptimalRange: 'Range optimal',
+                perliteEducationTitle: 'Comprendre les parametres de surveillance',
+                perliteEducationSubtitle: 'Decouvrez la signification de chaque parametre et son impact sur vos cultures.',
+                perliteEducationButton: 'En savoir plus',
+                perliteEducationTemperatureTitle: 'Temperature Substrat',
+                perliteEducationTemperatureBody: 'Indique la chaleur du substrat autour des racines. Cela aide a savoir si la plante absorbe bien eau et nutriments.',
+                perliteEducationMoistureTitle: 'Humidite Substrat',
+                perliteEducationMoistureBody: 'Montre la quantite d eau disponible dans la perlite. Cela aide a eviter manque d eau et exces d irrigation.',
+                perliteEducationEcRootTitle: 'EC Racinaire',
+                perliteEducationEcRootBody: 'Montre la concentration de sels autour des racines actives. Elle aide a ajuster fertigation et rincage.',
+                perliteEducationEcSubstrateTitle: 'EC Substrat',
+                perliteEducationEcSubstrateBody: 'Indique la salinite generale du substrat. Trop bas ou trop haut peut freiner la croissance.',
+                perliteEducationPhTitle: 'pH',
+                perliteEducationPhBody: 'Indique si la solution est acide ou basique. Un bon pH aide la plante a absorber les nutriments.',
+                perliteEducationNpkTitle: 'N / P / K',
+                perliteEducationNpkBody: 'Nutriments principaux: azote pour croissance, phosphore pour racines et floraison, potassium pour qualite des fruits.',
                 waitingForSensorData: 'Attente data capteur',
                 notAvailableShort: 'N/A',
                 fromDate: 'De',
@@ -3220,6 +3317,10 @@
                     { key: 'nitrogen', label: 'sensorSoF5', value: 120, unit: 'ppm', icon: '🌿' },
                     { key: 'phosphorus', label: 'sensorSoF6', value: 45, unit: 'ppm', icon: '🌿' },
                     { key: 'potassium', label: 'sensorSoF7', value: 180, unit: 'ppm', icon: '🌿' }
+                ],
+                perliteDetails: [
+                    { key: 'ecRoot', label: 'perliteMetricEcRoot', value: null, unit: 'dS/m', icon: '⚡' },
+                    { key: 'ecSubstrate', label: 'perliteMetricEcSubstrate', value: null, unit: 'dS/m', icon: '⚡' }
                 ]
             },
             clima: {
@@ -3243,6 +3344,10 @@
             sensorData.terreno.valore = null;
             sensorData.terreno.percentuale = 0;
             sensorData.terreno.details.forEach((metric) => {
+                metric.value = null;
+                metric.timestamp = null;
+            });
+            sensorData.terreno.perliteDetails.forEach((metric) => {
                 metric.value = null;
                 metric.timestamp = null;
             });
@@ -3616,6 +3721,8 @@
             const soilTemp = parseNumericValue(sensorData.terreno?.details?.[1]?.value) ?? 0;
             const soilMoisture = parseNumericValue(sensorData.terreno?.details?.[0]?.value ?? sensorData.terreno?.valore) ?? 0;
             const ec = parseNumericValue(sensorData.terreno?.details?.[2]?.value) ?? 0;
+            const ecRoot = parseNumericValue(sensorData.terreno?.perliteDetails?.find((metric) => metric.key === 'ecRoot')?.value) ?? null;
+            const ecSubstrate = parseNumericValue(sensorData.terreno?.perliteDetails?.find((metric) => metric.key === 'ecSubstrate')?.value) ?? null;
             const pH = parseNumericValue(sensorData.terreno?.details?.[3]?.value) ?? 0;
             const nitrogen = parseNumericValue(sensorData.terreno?.details?.[4]?.value) ?? 0;
             const phosphorus = parseNumericValue(sensorData.terreno?.details?.[5]?.value) ?? 0;
@@ -3632,6 +3739,8 @@
                 temperature: soilTemp,
                 terreno: soilMoisture,
                 ec: ec * 1000,
+                ecRoot,
+                ecSubstrate,
                 pH,
                 nitrogen,
                 phosphorus,
@@ -4168,6 +4277,8 @@
             terreno_temperature: 'temperature',
             terreno_moisture: 'terreno',
             terreno_ec: 'ec',
+            ec_substrate: 'ecSubstrate',
+            ec_root: 'ecRoot',
             terreno_ph: 'pH',
             terreno_n: 'nitrogen',
             terreno_nitrogen: 'nitrogen',
@@ -4193,6 +4304,8 @@
                 temperature: null,
                 terreno: null,
                 ec: null,
+                ecSubstrate: null,
+                ecRoot: null,
                 pH: null,
                 nitrogen: null,
                 phosphorus: null,
@@ -4202,7 +4315,11 @@
         }
 
         function applyHistoryReading(row, reading) {
-            const field = HISTORY_FIELD_MAP[reading.subtype];
+            const subtype = reading.subtype === 'terreno_ec'
+                && (currentView === 'perlite-track' || String(reading.device_id || reading.deviceId || '') === BARAKAH_PERLITE_DEVICE_ID)
+                ? 'ec_substrate'
+                : reading.subtype;
+            const field = HISTORY_FIELD_MAP[subtype];
             if (!field) {
                 return row;
             }
@@ -5079,6 +5196,8 @@
                 'terreno_moisture': { s: 'terreno', val: true, key: 'moisture' },
                 'terreno_temperature': { s: 'terreno', key: 'temperature' },
                 'terreno_ec': { s: 'terreno', key: 'ec' },
+                'ec_substrate': { s: 'terreno', key: 'ecSubstrate', perlite: true },
+                'ec_root': { s: 'terreno', key: 'ecRoot', perlite: true },
                 'terreno_ph': { s: 'terreno', key: 'pH' },
                 'terreno_n': { s: 'terreno', key: 'nitrogen' },
                 'terreno_nitrogen': { s: 'terreno', key: 'nitrogen' },
@@ -5110,7 +5229,10 @@
                     return;
                 }
 
-                const m = typeMap[r.subtype];
+                const subtype = r.subtype === 'terreno_ec' && String(r.device_id || r.deviceId || '') === BARAKAH_PERLITE_DEVICE_ID
+                    ? 'ec_substrate'
+                    : r.subtype;
+                const m = typeMap[subtype];
                 if (!m) return;
                 const s = sensorData[m.s];
                 if (!s) return;
@@ -5123,8 +5245,9 @@
                     s.percentuale = Math.min(100, val);
                     updated = true;
                 }
-                if (m.key && s.details) {
-                    const d = s.details.find(x => x.key === m.key);
+                if (m.key && (s.details || s.perliteDetails)) {
+                    const details = m.perlite ? s.perliteDetails : s.details;
+                    const d = details?.find(x => x.key === m.key);
                     if (d) {
                         d.value = val;
                         d.timestamp = r.timestamp || null;
@@ -7258,6 +7381,14 @@
                 ['perliteSubstrateLabel', 'perliteSubstrateValue'],
                 ['perliteMonitoringLabel', 'perliteMonitoringValue']
             ];
+            const perliteEducationItems = [
+                ['🌡️', 'perliteEducationTemperatureTitle', 'perliteEducationTemperatureBody'],
+                ['💧', 'perliteEducationMoistureTitle', 'perliteEducationMoistureBody'],
+                ['⚡', 'perliteEducationEcRootTitle', 'perliteEducationEcRootBody'],
+                ['⚡', 'perliteEducationEcSubstrateTitle', 'perliteEducationEcSubstrateBody'],
+                ['🧪', 'perliteEducationPhTitle', 'perliteEducationPhBody'],
+                ['🌿', 'perliteEducationNpkTitle', 'perliteEducationNpkBody']
+            ];
             const perliteMetricDefinitions = [
                 {
                     key: 'temperature',
@@ -7266,16 +7397,28 @@
                     icon: '🌡️',
                     range: { min: 18, max: 26, unit: '°C' },
                     alarm: { low: 15, high: 30 },
-                    rangeLabel: t('perliteRangeTomato')
+                    rangeLabel: t('perliteRangeTomato'),
+                    sourceKeys: ['temperature']
                 },
                 {
-                    key: 'ec',
-                    label: t('perliteMetricEc'),
-                    alertTitleKey: 'perliteAlertEcTitle',
+                    key: 'ecRoot',
+                    label: t('perliteMetricEcRoot'),
+                    alertTitleKey: 'perliteAlertEcRootTitle',
                     icon: '⚡',
                     range: { min: 2.0, max: 3.5, unit: 'mS/cm' },
                     alarm: { low: 1.5, high: 4.0 },
-                    rangeLabel: t('perliteRangeSubstrate')
+                    rangeLabel: t('perliteRangeSubstrate'),
+                    sourceKeys: ['ecRoot']
+                },
+                {
+                    key: 'ecSubstrate',
+                    label: t('perliteMetricEcSubstrate'),
+                    alertTitleKey: 'perliteAlertEcSubstrateTitle',
+                    icon: '⚡',
+                    range: { min: 2.0, max: 3.5, unit: 'mS/cm' },
+                    alarm: { low: 1.5, high: 4.0 },
+                    rangeLabel: t('perliteRangeSubstrate'),
+                    sourceKeys: ['ecSubstrate', 'ec']
                 },
                 {
                     key: 'moisture',
@@ -7284,12 +7427,42 @@
                     icon: '💧',
                     range: { min: 55, max: 75, unit: '%' },
                     alarm: { low: 50, high: 80 },
-                    rangeLabel: t('perliteRangeSoilless')
+                    rangeLabel: t('perliteRangeSoilless'),
+                    sourceKeys: ['moisture']
                 }
             ];
             const perliteMetricByKey = new Map(perliteMetricDefinitions.map((metric) => [metric.key, metric]));
+            const findPerliteMetricSource = (definition) => {
+                const sourceKeys = Array.isArray(definition.sourceKeys) && definition.sourceKeys.length
+                    ? definition.sourceKeys
+                    : [definition.key];
+                const detailCollections = [
+                    sensorData.terreno.perliteDetails || [],
+                    sensorData.terreno.details || []
+                ];
+
+                for (const key of sourceKeys) {
+                    for (const details of detailCollections) {
+                        const metric = details.find((item) => item.key === key);
+                        if (metric && (metric.value !== null && metric.value !== undefined || metric.timestamp)) {
+                            return metric;
+                        }
+                    }
+                }
+
+                for (const key of sourceKeys) {
+                    for (const details of detailCollections) {
+                        const metric = details.find((item) => item.key === key);
+                        if (metric) {
+                            return metric;
+                        }
+                    }
+                }
+
+                return {};
+            };
             const rawPerliteMetrics = perliteMetricDefinitions.map((definition) => {
-                const metric = sensorData.terreno.details.find((item) => item.key === definition.key) || {};
+                const metric = findPerliteMetricSource(definition);
                 return {
                     ...metric,
                     ...definition
@@ -7413,7 +7586,7 @@
                 if (!historyRows.length) {
                     return `
                         <tr class="rayat-history-row">
-                            <td colspan="5" class="py-10 text-center text-sm font-semibold text-slate-400">
+                            <td colspan="6" class="py-10 text-center text-sm font-semibold text-slate-400">
                                 ${historyState.loading ? t('refreshingDataAction') : t('perliteNoHistory')}
                             </td>
                         </tr>
@@ -7423,7 +7596,8 @@
                 return historyRows.map((row) => {
                     const levels = [
                         getPerliteMetricState('temperature', row.temperature).level,
-                        getPerliteMetricState('ec', row.ec).level,
+                        getPerliteMetricState('ecRoot', row.ecRoot).level,
+                        getPerliteMetricState('ecSubstrate', row.ecSubstrate).level,
                         getPerliteMetricState('moisture', row.terreno).level
                     ];
 
@@ -7434,8 +7608,9 @@
                                 <div class="rayat-history-time-secondary">${formatLocalizedTime(row.date)}</div>
                             </td>
                             <td class="rayat-history-value-cell ${getLevelClass(levels[0])}">${formatHistoryNumber(row.temperature, { group: 'soil', key: 'temperature' })}</td>
-                            <td class="rayat-history-value-cell ${getLevelClass(levels[1])}">${formatHistoryNumber(row.ec, { group: 'soil', key: 'ec' })}</td>
-                            <td class="rayat-history-value-cell ${getLevelClass(levels[2])}">${formatHistoryNumber(row.terreno, { group: 'soil', key: 'moisture' })}</td>
+                            <td class="rayat-history-value-cell ${getLevelClass(levels[1])}">${formatHistoryNumber(row.ecRoot, { group: 'soil', key: 'ecRoot' })}</td>
+                            <td class="rayat-history-value-cell ${getLevelClass(levels[2])}">${formatHistoryNumber(row.ecSubstrate, { group: 'soil', key: 'ecSubstrate' })}</td>
+                            <td class="rayat-history-value-cell ${getLevelClass(levels[3])}">${formatHistoryNumber(row.terreno, { group: 'soil', key: 'moisture' })}</td>
                             ${renderHistoryStatusCell(getOverallLevel(levels))}
                         </tr>
                     `;
@@ -7472,6 +7647,35 @@
                     </section>
                 `;
             };
+            const renderPerliteEducationCard = () => `
+                <details class="rayat-perlite-education-card">
+                    <summary class="rayat-perlite-education-card__summary">
+                        <span class="rayat-perlite-education-card__icon" aria-hidden="true">💡</span>
+                        <span class="rayat-perlite-education-card__copy">
+                            <span class="rayat-perlite-education-card__title">${escapeHtml(t('perliteEducationTitle'))}</span>
+                            <span class="rayat-perlite-education-card__subtitle">${escapeHtml(t('perliteEducationSubtitle'))}</span>
+                        </span>
+                        <span class="rayat-perlite-education-card__button">
+                            <span aria-hidden="true">📖</span>
+                            <span>${escapeHtml(t('perliteEducationButton'))}</span>
+                            <span class="rayat-perlite-education-card__arrow" aria-hidden="true">›</span>
+                        </span>
+                    </summary>
+                    <div class="rayat-perlite-education-card__panel">
+                        <div class="rayat-perlite-education-card__grid">
+                            ${perliteEducationItems.map(([icon, titleKey, bodyKey]) => `
+                                <article class="rayat-perlite-education-card__item">
+                                    <span class="rayat-perlite-education-card__item-icon" aria-hidden="true">${icon}</span>
+                                    <div>
+                                        <h6>${escapeHtml(t(titleKey))}</h6>
+                                        <p>${escapeHtml(t(bodyKey))}</p>
+                                    </div>
+                                </article>
+                            `).join('')}
+                        </div>
+                    </div>
+                </details>
+            `;
 
             return `
                 ${renderHeader(!!user)}
@@ -7517,7 +7721,8 @@
                                         `).join('')}
                                     </dl>
                                 </div>
-                                <div class="rayat-sensor-card-grid rayat-sensor-card-grid--soil grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
+                                ${renderPerliteEducationCard()}
+                                <div class="rayat-sensor-card-grid rayat-sensor-card-grid--soil grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-12">
                                     ${perliteMetrics.map((metric) => renderPerliteMetricCard(metric)).join('')}
                                 </div>
                                 ${renderPerliteActiveAlertFeed()}
@@ -7558,7 +7763,8 @@
                                             <tr class="border-b-8 border-gray-50">
                                                 <th class="rayat-history-head-cell">${t('time')}</th>
                                                 <th class="rayat-history-head-cell rayat-history-head-cell--metric">🌡️ ${escapeHtml(t('perliteMetricTemperature'))}</th>
-                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">⚡ ${escapeHtml(t('perliteMetricEc'))}</th>
+                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">⚡ ${escapeHtml(t('perliteMetricEcRoot'))}</th>
+                                                <th class="rayat-history-head-cell rayat-history-head-cell--metric">⚡ ${escapeHtml(t('perliteMetricEcSubstrate'))}</th>
                                                 <th class="rayat-history-head-cell rayat-history-head-cell--metric">💧 ${escapeHtml(t('perliteMetricMoisture'))}</th>
                                                 <th class="rayat-history-head-cell">${t('status')}</th>
                                             </tr>

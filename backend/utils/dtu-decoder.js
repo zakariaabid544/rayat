@@ -112,6 +112,51 @@ const SUBSTRATE_3_REGISTER_LAYOUT = {
     ]
 };
 
+const SUBSTRATE_6_REGISTER_LAYOUT = {
+    name: 'substrate_6_register_pore_ec',
+    readings: [
+        {
+            type: 'terreno',
+            subtype: 'terreno_temperature',
+            name: 'Sensore Temperatura Substrato',
+            unit: '°C',
+            scale: 0.01,
+            signed: true,
+            registerIndex: 0,
+            registerAddress: 0x0000
+        },
+        {
+            type: 'terreno',
+            subtype: 'terreno_moisture',
+            name: 'Sensore Umidita Substrato',
+            unit: '%',
+            scale: 0.01,
+            registerIndex: 1,
+            registerAddress: 0x0001
+        },
+        {
+            type: 'terreno',
+            subtype: 'ec_substrate',
+            name: 'EC Substrat',
+            unit: 'dS/m',
+            scale: 0.001,
+            registerIndex: 2,
+            registerAddress: 0x0002,
+            sourceRegister: 'SUBSTRATE_BULK_EC'
+        },
+        {
+            type: 'terreno',
+            subtype: 'ec_root',
+            name: 'EC Racinaire',
+            unit: 'dS/m',
+            scale: 0.001,
+            registerIndex: 5,
+            registerAddress: 0x0005,
+            sourceRegister: 'SUBSTRATE_PORE_EC'
+        }
+    ]
+};
+
 const SUBSTRATE_2_REGISTER_PARTIAL_LAYOUT = {
     name: 'substrate_2_register_partial',
     readings: [
@@ -157,7 +202,8 @@ const FRAME_LAYOUTS = {
                 }
             ]
         },
-        3: SUBSTRATE_3_REGISTER_LAYOUT
+        3: SUBSTRATE_3_REGISTER_LAYOUT,
+        6: SUBSTRATE_6_REGISTER_LAYOUT
     },
     2: {
         1: {
@@ -295,7 +341,8 @@ function decodeModbusTelemetryFrame(buffer, options = {}) {
     }
 
     const readings = layout.readings.map((definition, index) => {
-        const rawValue = registers[index];
+        const registerIndex = Number.isInteger(definition.registerIndex) ? definition.registerIndex : index;
+        const rawValue = registers[registerIndex];
         const sourceValue = definition.signed ? readSignedRegister(rawValue) : rawValue;
         const value = Number((sourceValue * definition.scale).toFixed(definition.scale < 1 ? 3 : 0));
 
@@ -310,8 +357,10 @@ function decodeModbusTelemetryFrame(buffer, options = {}) {
                 slave_id: slaveId,
                 function_code: functionCode,
                 layout: layout.name,
-                register_index: index,
-                raw_register: rawValue
+                register_index: registerIndex,
+                raw_register: rawValue,
+                ...(Number.isInteger(definition.registerAddress) ? { register_address: `0x${definition.registerAddress.toString(16).padStart(4, '0')}` } : {}),
+                ...(definition.sourceRegister ? { source_register: definition.sourceRegister } : {})
             }
         };
     });
