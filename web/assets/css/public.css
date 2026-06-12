@@ -1342,6 +1342,12 @@
             text-align: center;
         }
 
+        .rayat-history-head-cell--status {
+            width: 11.5rem;
+            min-width: 11.5rem;
+            text-align: center;
+        }
+
         .rayat-history-row {
             background: transparent;
         }
@@ -1386,7 +1392,9 @@
 
         .rayat-history-status-cell {
             padding: 1.15rem 1rem;
-            text-align: right;
+            width: 11.5rem;
+            min-width: 11.5rem;
+            text-align: center;
             white-space: nowrap;
         }
 
@@ -1395,6 +1403,7 @@
             align-items: center;
             justify-content: center;
             padding: 0.65rem 0.95rem;
+            min-width: 9.75rem;
             border-radius: 0.95rem;
             font-size: 11px;
             font-weight: 900;
@@ -2927,10 +2936,24 @@
                 font-size: 11px;
             }
 
+            .rayat-history-head-cell--status {
+                width: 10.5rem;
+                min-width: 10.5rem;
+            }
+
             .rayat-history-time-cell,
             .rayat-history-status-cell,
             .rayat-history-value-cell {
                 padding: 1rem 0.85rem;
+            }
+
+            .rayat-history-status-cell {
+                width: 10.5rem;
+                min-width: 10.5rem;
+            }
+
+            .rayat-history-status-badge {
+                min-width: 9rem;
             }
 
             .rayat-history-time-primary {

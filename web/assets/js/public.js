@@ -63,7 +63,7 @@
             ANALYTICS_TRACK_URL: `${API_BASE_URL}/analytics/track`
         };
         // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.45'; // RAYAT-FIX
+        const FRONTEND_ASSET_VERSION = '1.1.46'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -7257,7 +7257,11 @@
                         terreno: [t('time'), '🌡️ ' + t('tempShort'), '💧 ' + t('humidityShort'), '⚡ EC', '🌿 N', '🌿 P', '🌿 K', '🧪 pH', t('status')],
                         clima: [t('time'), '🌡️ ' + t('tempShort'), '💧 ' + t('humidityShort'), '💨 CO2', '🌬️ ' + t('windSpeed'), t('status')],
                     };
-                    return (cols[selectedSensor] || []).map(h => `<th class="rayat-history-head-cell ${h.includes('⚡') || h.includes('💧') || h.includes('🌡️') || h.includes('💨') || h.includes('🌬️') ? 'rayat-history-head-cell--metric' : ''}">${h}</th>`).join('');
+                    return (cols[selectedSensor] || []).map((h, index, list) => {
+                        const isMetricColumn = h.includes('⚡') || h.includes('💧') || h.includes('🌡️') || h.includes('💨') || h.includes('🌬️');
+                        const isStatusColumn = index === list.length - 1;
+                        return `<th class="rayat-history-head-cell ${isMetricColumn ? 'rayat-history-head-cell--metric' : ''} ${isStatusColumn ? 'rayat-history-head-cell--status' : ''}">${h}</th>`;
+                    }).join('');
                 })()}
                                             </tr>
                                         </thead>
@@ -7761,7 +7765,7 @@
                                                 <th class="rayat-history-head-cell rayat-history-head-cell--metric">⚡ ${escapeHtml(t('perliteMetricEcRoot'))}</th>
                                                 <th class="rayat-history-head-cell rayat-history-head-cell--metric">⚡ ${escapeHtml(t('perliteMetricEcSubstrate'))}</th>
                                                 <th class="rayat-history-head-cell rayat-history-head-cell--metric">💧 ${escapeHtml(t('perliteMetricMoisture'))}</th>
-                                                <th class="rayat-history-head-cell">${t('status')}</th>
+                                                <th class="rayat-history-head-cell rayat-history-head-cell--status">${t('status')}</th>
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-gray-50">
