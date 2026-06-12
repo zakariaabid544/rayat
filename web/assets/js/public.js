@@ -5223,6 +5223,18 @@
             resetSensorLatestTimestamps();
 
             let updated = false;
+            const detailSelectionState = new Map();
+            const getReadingTimestampMs = (reading) => {
+                const timestamp = new Date(reading?.timestamp || 0).getTime();
+                return Number.isFinite(timestamp) ? timestamp : 0;
+            };
+            const getDetailSourcePriority = (mapping, reading) => {
+                if (mapping?.perlite && mapping.key === 'ecSubstrate') {
+                    return reading?.subtype === 'ec_substrate' ? 2 : 1;
+                }
+
+                return 1;
+            };
             normalizedApiData.forEach(r => {
                 if (r?.type && sensorConnectionState[r.type] !== 'online') {
                     sensorConnectionState[r.type] = resolveSensorOnlineStatus(r);
@@ -5256,6 +5268,26 @@
                     const details = m.perlite ? s.perliteDetails : s.details;
                     const d = details?.find(x => x.key === m.key);
                     if (d) {
+                        const detailKey = `${m.s}:${m.perlite ? 'perlite' : 'standard'}:${m.key}`;
+                        const candidateSource = {
+                            priority: getDetailSourcePriority(m, r),
+                            timestamp: getReadingTimestampMs(r)
+                        };
+                        const selectedSource = detailSelectionState.get(detailKey);
+                        if (
+                            selectedSource &&
+                            (
+                                candidateSource.priority < selectedSource.priority ||
+                                (
+                                    candidateSource.priority === selectedSource.priority &&
+                                    candidateSource.timestamp < selectedSource.timestamp
+                                )
+                            )
+                        ) {
+                            return;
+                        }
+
+                        detailSelectionState.set(detailKey, candidateSource);
                         d.value = val;
                         d.timestamp = r.timestamp || null;
                         updated = true;
