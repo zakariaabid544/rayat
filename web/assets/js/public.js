@@ -1115,12 +1115,24 @@
             return isAuthenticated() && isCustomerRole(role) && isBarakahPerliteCustomer(userData);
         }
 
-        function getPrivateSensorAuthToken() {
-            if (isAuthenticated() && isCustomerRole(currentRole)) {
+        function getPrivateSensorAuthToken(view = currentView) {
+            if (view === 'perlite-track') {
+                if (isAuthenticated() && isCustomerRole(currentRole) && isBarakahPerliteCustomer(user)) {
+                    return authToken;
+                }
+
+                return getPrivilegedAdminSessionUser() ? getAdminSessionTokenCandidate() : null;
+            }
+
+            if (view === 'profilo' && isAuthenticated() && isCustomerRole(currentRole)) {
                 return authToken;
             }
 
-            return getPrivilegedAdminSessionUser() ? getAdminSessionTokenCandidate() : null;
+            if (view === 'demo' && isAuthenticated() && isCustomerRole(currentRole) && !isBarakahPerliteCustomer(user)) {
+                return authToken;
+            }
+
+            return null;
         }
 
         function normalizeViewForCurrentUser(view) {
@@ -4455,7 +4467,7 @@
                 return false;
             }
 
-            const privateSensorAuthToken = getPrivateSensorAuthToken();
+            const privateSensorAuthToken = getPrivateSensorAuthToken(targetView);
             const requestKey = [
                 privateSensorAuthToken ? 'private' : 'public',
                 targetView === 'perlite-track' && privateSensorAuthToken ? BARAKAH_PERLITE_DEVICE_ID : '',
@@ -4944,7 +4956,7 @@
                 return false;
             }
 
-            const privateSensorAuthToken = getPrivateSensorAuthToken();
+            const privateSensorAuthToken = getPrivateSensorAuthToken(targetView);
             const privateDeviceId = privateSensorAuthToken && targetView === 'perlite-track' ? BARAKAH_PERLITE_DEVICE_ID : '';
             const requestScope = privateSensorAuthToken ? `private:${privateDeviceId || 'all'}` : 'public';
 
