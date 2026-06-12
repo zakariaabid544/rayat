@@ -2369,10 +2369,6 @@
                 perliteEducationEcRootBody: 'Rappresenta la concentrazione di sali nella zona dove lavorano le radici. Aiuta a regolare fertirrigazione e lavaggi.',
                 perliteEducationEcSubstrateTitle: 'EC Substrat',
                 perliteEducationEcSubstrateBody: 'Misura la salinità generale del substrato. Valori troppo bassi o troppo alti possono ridurre crescita e produzione.',
-                perliteEducationPhTitle: 'pH',
-                perliteEducationPhBody: 'Indica se la soluzione è acida o basica. Un pH corretto aiuta la pianta ad assorbire gli elementi nutritivi.',
-                perliteEducationNpkTitle: 'N / P / K',
-                perliteEducationNpkBody: 'Sono i nutrienti principali: azoto per crescita, fosforo per radici e fioritura, potassio per qualità e resistenza.',
                 waitingForSensorData: 'In attesa dei dati del sensore',
                 notAvailableShort: 'N/A',
                 fromDate: 'Da',
@@ -2425,10 +2421,6 @@
                 perliteEducationEcRootBody: 'Shows salt concentration around the active roots. It helps adjust fertigation and flushing decisions.',
                 perliteEducationEcSubstrateTitle: 'Substrate EC',
                 perliteEducationEcSubstrateBody: 'Shows the general salinity of the substrate. Values that are too low or too high can reduce growth and yield.',
-                perliteEducationPhTitle: 'pH',
-                perliteEducationPhBody: 'Shows whether the solution is acidic or basic. A good pH helps plants take up nutrients.',
-                perliteEducationNpkTitle: 'N / P / K',
-                perliteEducationNpkBody: 'The main nutrients: nitrogen for growth, phosphorus for roots and flowering, potassium for fruit quality and plant strength.',
                 waitingForSensorData: 'Waiting for sensor data',
                 notAvailableShort: 'N/A',
                 fromDate: 'From',
@@ -2481,10 +2473,6 @@
                 perliteEducationEcRootBody: 'Montre la concentration de sels autour des racines actives. Elle aide à ajuster la fertigation et les rinçages.',
                 perliteEducationEcSubstrateTitle: 'EC Substrat',
                 perliteEducationEcSubstrateBody: 'Indique la salinité générale du substrat. Des valeurs trop basses ou trop élevées peuvent freiner la croissance.',
-                perliteEducationPhTitle: 'pH',
-                perliteEducationPhBody: 'Indique si la solution est acide ou basique. Un bon pH aide la plante à absorber les éléments nutritifs.',
-                perliteEducationNpkTitle: 'N / P / K',
-                perliteEducationNpkBody: 'Ce sont les nutriments principaux : azote pour la croissance, phosphore pour les racines et la floraison, potassium pour la qualité des fruits.',
                 waitingForSensorData: 'En attente des données du capteur',
                 notAvailableShort: 'N/A',
                 fromDate: 'Du',
@@ -2537,10 +2525,6 @@
                 perliteEducationEcRootBody: 'توضح تركيز الأملاح حول الجذور النشطة. تساعد على ضبط التسميد والغسل.',
                 perliteEducationEcSubstrateTitle: 'EC الركيزة',
                 perliteEducationEcSubstrateBody: 'توضح الملوحة العامة للركيزة. القيم المنخفضة أو المرتفعة جدا قد تقلل النمو والإنتاج.',
-                perliteEducationPhTitle: 'pH',
-                perliteEducationPhBody: 'يوضح هل المحلول حمضي أو قلوي. pH مناسب يساعد النبات على امتصاص العناصر الغذائية.',
-                perliteEducationNpkTitle: 'N / P / K',
-                perliteEducationNpkBody: 'هي العناصر الرئيسية: الآزوت للنمو، الفوسفور للجذور والإزهار، والبوتاسيوم لجودة الثمار وقوة النبات.',
                 waitingForSensorData: 'في انتظار بيانات المستشعر',
                 notAvailableShort: 'N/A',
                 fromDate: 'من',
@@ -2593,10 +2577,6 @@
                 perliteEducationEcRootBody: 'Montre la concentration de sels autour des racines actives. Elle aide a ajuster fertigation et rincage.',
                 perliteEducationEcSubstrateTitle: 'EC Substrat',
                 perliteEducationEcSubstrateBody: 'Indique la salinite generale du substrat. Trop bas ou trop haut peut freiner la croissance.',
-                perliteEducationPhTitle: 'pH',
-                perliteEducationPhBody: 'Indique si la solution est acide ou basique. Un bon pH aide la plante a absorber les nutriments.',
-                perliteEducationNpkTitle: 'N / P / K',
-                perliteEducationNpkBody: 'Nutriments principaux: azote pour croissance, phosphore pour racines et floraison, potassium pour qualite des fruits.',
                 waitingForSensorData: 'Attente data capteur',
                 notAvailableShort: 'N/A',
                 fromDate: 'De',
@@ -7385,9 +7365,7 @@
                 ['🌡️', 'perliteEducationTemperatureTitle', 'perliteEducationTemperatureBody'],
                 ['💧', 'perliteEducationMoistureTitle', 'perliteEducationMoistureBody'],
                 ['⚡', 'perliteEducationEcRootTitle', 'perliteEducationEcRootBody'],
-                ['⚡', 'perliteEducationEcSubstrateTitle', 'perliteEducationEcSubstrateBody'],
-                ['🧪', 'perliteEducationPhTitle', 'perliteEducationPhBody'],
-                ['🌿', 'perliteEducationNpkTitle', 'perliteEducationNpkBody']
+                ['⚡', 'perliteEducationEcSubstrateTitle', 'perliteEducationEcSubstrateBody']
             ];
             const perliteMetricDefinitions = [
                 {
@@ -7525,7 +7503,7 @@
                     : {
                         level: isPerliteOffline ? 'offline' : 'loading',
                         cssModifier: 'rayat-metric-card--inactive',
-                        label: isPerliteOffline ? t('homeStatusOffline') : t('waitingForSensorData')
+                        label: isPerliteOffline ? t('homeStatusOffline') : t('notAvailableShort')
                     };
                 const gauge = metric.range ? getGaugeMeta('soil', metric.key, metric.range, metric.alarm) : null;
                 const gaugeMarkerPercent = hasLiveValue && gauge
