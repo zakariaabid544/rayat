@@ -8,6 +8,7 @@
     "dev": "node --watch server.js",
     "seed:admin": "node seed-admin.js",
     "seed:barakah-perlite": "node scripts/seed-barakah-perlite-client.js",
+    "seed:device-catalog": "node scripts/seed-device-catalog.js",
     "router:publisher": "node scripts/mqtt-router-publisher.js",
     "sync:live-mail-config": "node scripts/save-live-mail-config.js",
     "smoke:routes": "node scripts/smoke-test-mock.js",

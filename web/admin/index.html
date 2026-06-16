@@ -467,6 +467,8 @@
             #tab-clients > .flex,
             #tab-registrations > .flex,
             #tab-devices > .flex,
+            #tab-sensor-models > .flex,
+            #tab-crop-profiles > .flex,
             #tab-sensors > .flex,
             #tab-analytics > .flex,
             #tab-users > .flex {
@@ -475,6 +477,8 @@
             #tab-clients > .flex .btn,
             #tab-registrations > .flex .btn,
             #tab-devices > .flex .btn,
+            #tab-sensor-models > .flex .btn,
+            #tab-crop-profiles > .flex .btn,
             #tab-sensors > .flex .btn,
             #tab-analytics > .flex .btn,
             #tab-users > .flex .btn {
@@ -619,6 +623,12 @@
             </a>
             <a class="nav-item super-admin-only hidden" data-tab="device-manager" onclick="showTab('device-manager')">
                 <span class="nav-icon">🧭</span> <span id="nav-device-manager-label">Device Manager</span>
+            </a>
+            <a class="nav-item phase2-catalog-only hidden" data-tab="sensor-models" onclick="showTab('sensor-models')">
+                <span class="nav-icon">▦</span> <span id="nav-sensor-models-label">Catalogo Sensori</span>
+            </a>
+            <a class="nav-item phase2-catalog-only hidden" data-tab="crop-profiles" onclick="showTab('crop-profiles')">
+                <span class="nav-icon">◌</span> <span id="nav-crop-profiles-label">Catalogo Colture</span>
             </a>
             <a class="nav-item super-admin-only hidden" data-tab="analytics" onclick="showTab('analytics')">
                 <span class="nav-icon">📈</span> <span id="nav-analytics-label">Analytics</span>
@@ -899,6 +909,88 @@
 
                     <div class="section-card device-manager-detail" id="device-manager-detail">
                         <div class="device-manager-empty" id="device-manager-detail-empty">Seleziona un gateway per vedere il dettaglio reale.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── SENSOR MODELS CATALOG (Phase 2C) ───────────────────── -->
+            <div id="tab-sensor-models" class="hidden fade-in phase2-catalog-only">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                    <div>
+                        <div class="page-title mb-0" id="sensor-models-page-title">Catalogo Sensori</div>
+                        <p class="text-sm text-gray-400" id="sensor-models-page-subtitle">Modelli sensore disponibili per il Device Manager</p>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap justify-end">
+                        <button onclick="loadSensorModelsCatalog()" class="btn btn-outline" id="sensor-models-refresh-btn">↻ Aggiorna</button>
+                        <button onclick="openSensorModelModal()" class="btn btn-primary phase2-write-only hidden" id="sensor-models-new-btn">+ Nuovo modello</button>
+                    </div>
+                </div>
+
+                <div id="sensor-models-error" class="alert-box alert-error hidden"></div>
+
+                <div class="section-card overflow-x-auto">
+                    <table class="data-table" id="sensor-models-table">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Tipo</th>
+                                <th>Parametri</th>
+                                <th>Stato</th>
+                                <th>Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sensor-models-body">
+                            <tr><td colspan="5" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex items-center justify-between gap-3 mt-4 flex-wrap">
+                    <div class="text-xs text-gray-400" id="sensor-models-summary">—</div>
+                    <div class="flex items-center gap-2">
+                        <button id="sensor-models-prev" onclick="changeSensorModelsPage(-1)" class="btn btn-outline btn-sm">← Precedente</button>
+                        <span class="text-xs text-gray-500 font-semibold" id="sensor-models-page-info">Pagina 1 / 1</span>
+                        <button id="sensor-models-next" onclick="changeSensorModelsPage(1)" class="btn btn-outline btn-sm">Successiva →</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── CROP PROFILES CATALOG (Phase 2C) ───────────────────── -->
+            <div id="tab-crop-profiles" class="hidden fade-in phase2-catalog-only">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                    <div>
+                        <div class="page-title mb-0" id="crop-profiles-page-title">Catalogo Colture</div>
+                        <p class="text-sm text-gray-400" id="crop-profiles-page-subtitle">Profili coltura e range iniziali per i sensori</p>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap justify-end">
+                        <button onclick="loadCropProfilesCatalog()" class="btn btn-outline" id="crop-profiles-refresh-btn">↻ Aggiorna</button>
+                        <button onclick="openCropProfileModal()" class="btn btn-primary phase2-write-only hidden" id="crop-profiles-new-btn">+ Nuova coltura</button>
+                    </div>
+                </div>
+
+                <div id="crop-profiles-error" class="alert-box alert-error hidden"></div>
+
+                <div class="section-card overflow-x-auto">
+                    <table class="data-table" id="crop-profiles-table">
+                        <thead>
+                            <tr>
+                                <th>Label</th>
+                                <th>Crop key</th>
+                                <th>Medium</th>
+                                <th>Stato</th>
+                                <th>Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="crop-profiles-body">
+                            <tr><td colspan="5" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex items-center justify-between gap-3 mt-4 flex-wrap">
+                    <div class="text-xs text-gray-400" id="crop-profiles-summary">—</div>
+                    <div class="flex items-center gap-2">
+                        <button id="crop-profiles-prev" onclick="changeCropProfilesPage(-1)" class="btn btn-outline btn-sm">← Precedente</button>
+                        <span class="text-xs text-gray-500 font-semibold" id="crop-profiles-page-info">Pagina 1 / 1</span>
+                        <button id="crop-profiles-next" onclick="changeCropProfilesPage(1)" class="btn btn-outline btn-sm">Successiva →</button>
                     </div>
                 </div>
             </div>
@@ -1402,6 +1494,262 @@
     </div>
 </div>
 
+<!-- Sensor Model Catalog Modal -->
+<div class="modal-overlay" id="sensor-model-modal">
+    <div class="modal-box" style="max-width:980px;width:96%">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h3 class="font-black text-gray-800 text-lg" id="sensor-model-modal-title">Nuovo modello sensore</h3>
+                <p class="text-xs text-gray-400 mt-0.5">Catalogo interno Fase 2, nessuna modifica alla pipeline live.</p>
+            </div>
+            <button onclick="closeModal('sensor-model-modal')" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div id="sensor-model-modal-error" class="alert-box alert-error hidden"></div>
+        <form id="sensor-model-form" onsubmit="saveSensorModelCatalog(event)">
+            <input type="hidden" id="sm-id">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="form-field">
+                    <label class="form-label">Name *</label>
+                    <input id="sm-name" type="text" class="form-input" required>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Slug *</label>
+                    <input id="sm-slug" type="text" class="form-input" required>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Version *</label>
+                    <input id="sm-version" type="text" class="form-input" value="1" required>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Manufacturer</label>
+                    <input id="sm-manufacturer" type="text" class="form-input">
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Primary type *</label>
+                    <select id="sm-primary-type" class="form-input" required>
+                        <option value="energia">energia</option>
+                        <option value="acqua">acqua</option>
+                        <option value="terreno">terreno</option>
+                        <option value="clima">clima</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Stato</label>
+                    <select id="sm-active" class="form-input">
+                        <option value="true">Attivo</option>
+                        <option value="false">Disattivato</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div class="form-field"><label class="form-label">Label IT</label><input id="sm-label-it" class="form-input" type="text"></div>
+                <div class="form-field"><label class="form-label">Label FR</label><input id="sm-label-fr" class="form-input" type="text"></div>
+                <div class="form-field"><label class="form-label">Label EN</label><input id="sm-label-en" class="form-input" type="text"></div>
+                <div class="form-field"><label class="form-label">Label AR</label><input id="sm-label-ar" class="form-input" type="text"></div>
+            </div>
+
+            <div class="form-field">
+                <label class="form-label">Notes</label>
+                <textarea id="sm-notes" class="form-input" rows="2" style="min-height:88px"></textarea>
+            </div>
+
+            <div class="flex items-center justify-between mb-2">
+                <label class="form-label" style="margin:0">Parametri</label>
+                <button type="button" onclick="addSensorModelParameterRow()" class="btn btn-outline btn-sm">+ Aggiungi parametro</button>
+            </div>
+            <div id="sensor-model-param-rows" class="flex flex-col gap-3 mb-4" style="max-height:420px;overflow-y:auto;padding-right:2px"></div>
+
+            <div class="flex justify-end gap-3 mt-4 border-t pt-4">
+                <button type="button" onclick="closeModal('sensor-model-modal')" class="btn btn-outline">Annulla</button>
+                <button type="submit" class="btn btn-primary" id="sensor-model-save-btn">Salva modello</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Crop Profile Catalog Modal -->
+<div class="modal-overlay" id="crop-profile-modal">
+    <div class="modal-box" style="max-width:880px;width:96%">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h3 class="font-black text-gray-800 text-lg" id="crop-profile-modal-title">Nuova coltura</h3>
+                <p class="text-xs text-gray-400 mt-0.5">Profili e range iniziali del catalogo interno.</p>
+            </div>
+            <button onclick="closeModal('crop-profile-modal')" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div id="crop-profile-modal-error" class="alert-box alert-error hidden"></div>
+        <form id="crop-profile-form" onsubmit="saveCropProfileCatalog(event)">
+            <input type="hidden" id="cp-id">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="form-field">
+                    <label class="form-label">Slug *</label>
+                    <input id="cp-slug" type="text" class="form-input" required>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Version *</label>
+                    <input id="cp-version" type="text" class="form-input" value="1" required>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Crop key *</label>
+                    <input id="cp-crop-key" type="text" class="form-input" required>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Medium</label>
+                    <input id="cp-medium" type="text" class="form-input">
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Stato</label>
+                    <select id="cp-active" class="form-input">
+                        <option value="true">Attivo</option>
+                        <option value="false">Disattivato</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div class="form-field"><label class="form-label">Label IT *</label><input id="cp-label-it" class="form-input" type="text" required></div>
+                <div class="form-field"><label class="form-label">Label FR</label><input id="cp-label-fr" class="form-input" type="text"></div>
+                <div class="form-field"><label class="form-label">Label EN</label><input id="cp-label-en" class="form-input" type="text"></div>
+                <div class="form-field"><label class="form-label">Label AR</label><input id="cp-label-ar" class="form-input" type="text"></div>
+            </div>
+
+            <div class="form-field">
+                <label class="form-label">Description</label>
+                <textarea id="cp-description" class="form-input" rows="2" style="min-height:88px"></textarea>
+            </div>
+
+            <div class="flex items-center justify-between mb-2">
+                <label class="form-label" style="margin:0">Ranges</label>
+                <button type="button" onclick="addCropProfileRangeRow()" class="btn btn-outline btn-sm">+ Aggiungi range</button>
+            </div>
+            <div id="crop-profile-range-rows" class="flex flex-col gap-2 mb-4" style="max-height:360px;overflow-y:auto;padding-right:2px"></div>
+
+            <div class="flex justify-end gap-3 mt-4 border-t pt-4">
+                <button type="button" onclick="closeModal('crop-profile-modal')" class="btn btn-outline">Annulla</button>
+                <button type="submit" class="btn btn-primary" id="crop-profile-save-btn">Salva coltura</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Device Assignment Wizard Modal -->
+<div class="modal-overlay" id="device-assign-modal">
+    <div class="modal-box" style="max-width:1040px;width:96%">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h3 class="font-black text-gray-800 text-lg" id="device-assign-modal-title">Assegna dispositivo</h3>
+                <p class="text-xs text-gray-400 mt-0.5" id="device-assign-subtitle">Device Manager Fase 2</p>
+            </div>
+            <button onclick="closeDeviceAssignModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div id="device-assign-modal-error" class="alert-box alert-error hidden"></div>
+        <div id="device-assign-result" class="alert-box alert-success hidden"></div>
+
+        <form id="device-assign-form" onsubmit="confirmDeviceAssignment(event)">
+            <input type="hidden" id="da-device-id">
+
+            <div class="grid grid-cols-2 md:grid-cols-7 gap-2 mb-4" id="device-assign-steps"></div>
+
+            <div data-assign-step="1" class="device-assign-step">
+                <div class="grid grid-cols-1 md:grid-cols-[2fr_auto] gap-3 items-end">
+                    <div class="form-field">
+                        <label class="form-label">Cliente *</label>
+                        <select id="da-client-id" class="form-input" required></select>
+                    </div>
+                    <button type="button" onclick="loadDeviceAssignClients()" class="btn btn-outline">Aggiorna</button>
+                </div>
+            </div>
+
+            <div data-assign-step="2" class="device-assign-step hidden">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="form-field">
+                        <label class="form-label">Site *</label>
+                        <input id="da-site" class="form-input" type="text" required>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Farm *</label>
+                        <input id="da-farm" class="form-input" type="text" required>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Zona *</label>
+                        <input id="da-zona" class="form-input" type="text" required>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="form-field">
+                        <label class="form-label">Visibility</label>
+                        <select id="da-visibility" class="form-input" onchange="renderDeviceAssignPreview()">
+                            <option value="private">private</option>
+                            <option value="public">public</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Nota interna</label>
+                        <input id="da-internal-note" class="form-input" type="text">
+                    </div>
+                </div>
+            </div>
+
+            <div data-assign-step="3" class="device-assign-step hidden">
+                <div class="form-field">
+                    <label class="form-label">Modello sensore *</label>
+                    <select id="da-sensor-model-id" class="form-input" required onchange="handleDeviceAssignModelChange()"></select>
+                </div>
+                <div id="da-model-summary" class="detail-card text-sm text-gray-500">—</div>
+            </div>
+
+            <div data-assign-step="4" class="device-assign-step hidden">
+                <div class="form-field">
+                    <label class="form-label">Coltura</label>
+                    <select id="da-crop-profile-id" class="form-input" onchange="handleDeviceAssignCropChange()"></select>
+                </div>
+                <div id="da-crop-summary" class="detail-card text-sm text-gray-500">—</div>
+            </div>
+
+            <div data-assign-step="5" class="device-assign-step hidden">
+                <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                    <div class="form-field">
+                        <label class="form-label">Latitude</label>
+                        <input id="da-lat" class="form-input" type="number" step="0.000001" oninput="syncDeviceAssignManualPosition()">
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Longitude</label>
+                        <input id="da-lon" class="form-input" type="number" step="0.000001" oninput="syncDeviceAssignManualPosition()">
+                    </div>
+                    <button type="button" onclick="locateDeviceAssignPosition()" class="btn btn-outline">Localizzami</button>
+                </div>
+                <input id="da-address" type="hidden">
+                <input id="da-location-name" type="hidden">
+                <div id="device-assign-location-map" style="height:260px;border-radius:1rem;overflow:hidden;border:1px solid #e5e7eb;margin-top:0.75rem"></div>
+                <div class="text-xs text-gray-400 mt-2" id="device-assign-map-status">Nessuna posizione selezionata</div>
+                <div class="text-xs text-gray-400 mt-1" id="device-assign-map-address">—</div>
+            </div>
+
+            <div data-assign-step="6" class="device-assign-step hidden">
+                <div id="device-assign-preview" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+            </div>
+
+            <div data-assign-step="7" class="device-assign-step hidden">
+                <div id="device-assign-confirm-summary" class="detail-card text-sm text-gray-600 mb-3"></div>
+                <label id="device-assign-public-confirm-wrap" class="hidden flex items-start gap-2 text-sm font-semibold text-gray-600">
+                    <input id="device-assign-public-confirm" type="checkbox" class="mt-1">
+                    <span>Confermo che la visibility pubblica è intenzionale. Nessun collegamento public_sensor_* verrà creato in questa fase.</span>
+                </label>
+            </div>
+
+            <div class="flex justify-between gap-3 mt-5 border-t pt-4">
+                <button type="button" onclick="closeDeviceAssignModal()" class="btn btn-outline">Annulla</button>
+                <div class="flex gap-2">
+                    <button type="button" onclick="moveDeviceAssignStep(-1)" class="btn btn-outline" id="device-assign-prev-btn">Indietro</button>
+                    <button type="button" onclick="moveDeviceAssignStep(1)" class="btn btn-primary" id="device-assign-next-btn">Avanti</button>
+                    <button type="submit" class="btn btn-primary hidden" id="device-assign-submit-btn">Conferma assegnazione</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Add Admin User Modal -->
 <div class="modal-overlay" id="user-modal">
     <div class="modal-box">
@@ -1520,6 +1868,21 @@
     const deviceRegistryState = { page: 1, pageSize: 25, total: 0, totalPages: 1, status: '' };
     let deviceManagerGateways = [];
     let selectedDeviceManagerGatewayId = null;
+    const sensorModelsState = { page: 1, pageSize: 25, total: 0, totalPages: 1 };
+    const cropProfilesState = { page: 1, pageSize: 25, total: 0, totalPages: 1 };
+    const adminFeatures = { deviceManagerPhase2: false };
+    let sensorModelsCatalog = [];
+    let cropProfilesCatalog = [];
+    let deviceAssignState = {
+        step: 1,
+        device: null,
+        clients: [],
+        sensorModels: [],
+        cropProfiles: [],
+        selectedModel: null,
+        selectedCrop: null,
+        submitting: false
+    };
     const locationPickers = {
         client: {
             map: null,
@@ -1544,6 +1907,18 @@
             statusId: 'registration-map-status',
             addressTextId: 'registration-map-address',
             buttonId: 'rf-gps-btn'
+        },
+        assign: {
+            map: null,
+            marker: null,
+            mapId: 'device-assign-location-map',
+            latId: 'da-lat',
+            lonId: 'da-lon',
+            addressId: 'da-address',
+            locationInputId: 'da-location-name',
+            statusId: 'device-assign-map-status',
+            addressTextId: 'device-assign-map-address',
+            buttonId: null
         }
     };
     let currentLang = localStorage.getItem('rayat_admin_lang') || 'it';
@@ -1575,6 +1950,8 @@
             navSensors: 'Sensori IoT',
             navDevices: 'Dispositivi',
             navDeviceManager: 'Device Manager',
+            navSensorModels: 'Catalogo Sensori',
+            navCropProfiles: 'Catalogo Colture',
             navAnalytics: 'Analytics',
             navUsers: 'Utenti Admin',
             logout: 'Esci',
@@ -1583,6 +1960,10 @@
             recentRegistrations: 'Registrazioni Recenti',
             sensorsTitleNav: 'Sensori IoT',
             devicesTitleNav: 'Dispositivi',
+            sensorModelsTitleNav: 'Catalogo Sensori',
+            cropProfilesTitleNav: 'Catalogo Colture',
+            sensorModelsSubtitle: 'Modelli sensore disponibili per il Device Manager',
+            cropProfilesSubtitle: 'Profili coltura e range iniziali per i sensori',
             analytics: 'Analytics',
             adminUsers: 'Utenti Admin',
             dashboardSubtitle: 'Panoramica in tempo reale del sistema Rayat',
@@ -2607,6 +2988,8 @@
         ['#nav-sensors-label', 'navSensors'],
         ['#nav-devices-label', 'navDevices'],
         ['#nav-device-manager-label', 'navDeviceManager'],
+        ['#nav-sensor-models-label', 'navSensorModels'],
+        ['#nav-crop-profiles-label', 'navCropProfiles'],
         ['#nav-analytics-label', 'navAnalytics'],
         ['#nav-users-label', 'navUsers'],
         ['#logout-label', 'logout'],
@@ -2676,6 +3059,12 @@
         ['#device-manager-th-params', 'parameters'],
         ['#device-manager-th-dashboard', 'dashboardLink'],
         ['#device-manager-detail-empty', 'selectGateway'],
+        ['#sensor-models-page-title', 'sensorModelsTitleNav'],
+        ['#sensor-models-page-subtitle', 'sensorModelsSubtitle'],
+        ['#sensor-models-refresh-btn', 'refresh'],
+        ['#crop-profiles-page-title', 'cropProfilesTitleNav'],
+        ['#crop-profiles-page-subtitle', 'cropProfilesSubtitle'],
+        ['#crop-profiles-refresh-btn', 'refresh'],
         ['#tab-sensors .page-title', 'sensorsTitle'],
         ['#tab-sensors > div:nth-child(1) p', 'sensorsSubtitle'],
         ['#tab-sensors > div:nth-child(1) .btn-primary', 'addSensor'],
@@ -3098,10 +3487,47 @@
         });
     }
 
+    function setAdminFeatures(features = {}) {
+        adminFeatures.deviceManagerPhase2 = Boolean(features.deviceManagerPhase2);
+    }
+
+    function isSuperAdmin() {
+        return currentAdmin?.role === 'super_admin';
+    }
+
+    function isPhase2CatalogEnabled() {
+        return Boolean(adminFeatures.deviceManagerPhase2);
+    }
+
+    function applyFeatureVisibility() {
+        const phase2Enabled = isPhase2CatalogEnabled();
+        const canWriteCatalogs = phase2Enabled && isSuperAdmin();
+
+        document.querySelectorAll('.phase2-catalog-only').forEach(el => {
+            if (!phase2Enabled) {
+                el.classList.add('hidden');
+            } else if (!String(el.id || '').startsWith('tab-')) {
+                el.classList.remove('hidden');
+            }
+        });
+        document.querySelectorAll('.phase2-write-only').forEach(el => {
+            el.classList.toggle('hidden', !canWriteCatalogs);
+        });
+
+        const activeTab = document.querySelector('.nav-item.active')?.dataset.tab;
+        if (!phase2Enabled && (activeTab === 'sensor-models' || activeTab === 'crop-profiles')) {
+            showTab('dashboard', { skipHistory: true });
+        }
+
+        applyDeviceRegistryPhase2Visibility();
+    }
+
     function resolveTabFromPath() {
         const path = window.location.pathname;
         if (path.includes('/admin/clients')) return 'clients';
         if (path.includes('/admin/recent-clients')) return 'registrations';
+        if (path.includes('/admin/sensor-models')) return 'sensor-models';
+        if (path.includes('/admin/crop-profiles')) return 'crop-profiles';
         if (path.includes('/admin/sensors')) return 'sensors';
         if (path.includes('/admin/device-manager')) return 'device-manager';
         if (path.includes('/admin/devices')) return 'devices';
@@ -3117,6 +3543,8 @@
             sensors: '/admin/sensors',
             devices: '/admin/devices',
             'device-manager': '/admin/device-manager',
+            'sensor-models': '/admin/sensor-models',
+            'crop-profiles': '/admin/crop-profiles',
             analytics: '/admin/analytics',
             users: '/admin/'
         };
@@ -3320,6 +3748,7 @@
         const data = await res.json();
         adminToken = data.token;
         currentAdmin = data.user;
+        setAdminFeatures(data.features || {});
         sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, adminToken);
         sessionStorage.setItem(ADMIN_USER_STORAGE_KEY, JSON.stringify(currentAdmin));
         return {
@@ -3418,6 +3847,7 @@
 
             adminToken = data.token;
             currentAdmin = data.user;
+            setAdminFeatures(data.features || {});
             sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, adminToken);
             sessionStorage.setItem(ADMIN_USER_STORAGE_KEY, JSON.stringify(currentAdmin));
 
@@ -3471,6 +3901,7 @@
         document.querySelectorAll('.super-admin-only').forEach(el => {
             el.classList.toggle('hidden', currentAdmin.role !== 'super_admin');
         });
+        applyFeatureVisibility();
 
         // Clock
         updateClock();
@@ -3499,8 +3930,12 @@
             tab = 'dashboard';
             window.history.replaceState({ tab }, '', pathForTab('dashboard'));
         }
+        if ((tab === 'sensor-models' || tab === 'crop-profiles') && !isPhase2CatalogEnabled()) {
+            tab = 'dashboard';
+            window.history.replaceState({ tab }, '', pathForTab('dashboard'));
+        }
 
-        ['dashboard', 'clients', 'registrations', 'devices', 'device-manager', 'sensors', 'analytics', 'users'].forEach(t => {
+        ['dashboard', 'clients', 'registrations', 'devices', 'device-manager', 'sensor-models', 'crop-profiles', 'sensors', 'analytics', 'users'].forEach(t => {
             document.getElementById('tab-' + t).classList.add('hidden');
         });
         document.querySelectorAll('.nav-item').forEach(el => {
@@ -3524,6 +3959,8 @@
             registrations: t('recentRegistrations'),
             devices: t('devicesTitleNav'),
             'device-manager': t('deviceManager'),
+            'sensor-models': t('sensorModelsTitleNav'),
+            'crop-profiles': t('cropProfilesTitleNav'),
             sensors: t('sensorsTitleNav'),
             analytics: t('analytics'),
             users: t('adminUsers')
@@ -3535,6 +3972,8 @@
         else if (tab === 'registrations') loadRegistrations();
         else if (tab === 'devices') loadDeviceRegistry();
         else if (tab === 'device-manager') loadDeviceManager();
+        else if (tab === 'sensor-models') loadSensorModelsCatalog();
+        else if (tab === 'crop-profiles') loadCropProfilesCatalog();
         else if (tab === 'sensors') loadAllDevices();
         else if (tab === 'analytics') loadAnalytics();
         else if (tab === 'users') loadAdminUsers();
@@ -4115,6 +4554,7 @@
 
     // RAYAT FIX - registration/admin
     async function loadDeviceRegistry(page = deviceRegistryState.page) {
+        applyDeviceRegistryTableHeaders();
         document.getElementById('devices-body').innerHTML = `<tr><td colspan="7" class="text-center text-gray-400 py-8">${t('loading')}</td></tr>`;
         try {
             const params = new URLSearchParams({
@@ -4163,9 +4603,52 @@
         });
     }
 
+    function isUnassignedDeviceInboxMode() {
+        return isPhase2CatalogEnabled() && isSuperAdmin() && deviceRegistryState.status === 'unassigned';
+    }
+
+    function applyDeviceRegistryPhase2Visibility() {
+        const unassignedButton = document.getElementById('devices-filter-unassigned-btn');
+        if (!unassignedButton) return;
+
+        if (isPhase2CatalogEnabled()) {
+            unassignedButton.classList.toggle('hidden', !isSuperAdmin());
+            if (!isSuperAdmin() && deviceRegistryState.status === 'unassigned') {
+                deviceRegistryState.status = '';
+                updateDeviceRegistryFilterButtons();
+                applyDeviceRegistryTableHeaders();
+            }
+            return;
+        }
+
+        unassignedButton.classList.remove('hidden');
+    }
+
+    function applyDeviceRegistryTableHeaders() {
+        const inboxMode = isUnassignedDeviceInboxMode();
+        const headers = {
+            'devices-th-serial': inboxMode ? 'Device / seriale' : 'N° Seriale',
+            'devices-th-client': inboxMode ? 'Primo avvistamento' : 'Cliente',
+            'devices-th-type': inboxMode ? 'IP visto' : 'Tipo',
+            'devices-th-sensors': inboxMode ? 'Sensori' : 'Sensori',
+            'devices-th-last-seen': inboxMode ? 'Ultima attività' : 'Ultima attività',
+            'devices-th-created': inboxMode ? 'Online' : 'Creato il',
+            'devices-th-actions': 'Azioni'
+        };
+
+        Object.entries(headers).forEach(([id, label]) => {
+            const element = document.getElementById(id);
+            if (element) element.textContent = label;
+        });
+    }
+
     function setDeviceRegistryStatus(status = '') {
+        if (status === 'unassigned' && isPhase2CatalogEnabled() && !isSuperAdmin()) {
+            return;
+        }
         deviceRegistryState.status = status || '';
         deviceRegistryState.page = 1;
+        applyDeviceRegistryTableHeaders();
         updateDeviceRegistryFilterButtons();
         loadDeviceRegistry(1);
     }
@@ -4186,7 +4669,400 @@
         });
     }
 
+    function resetDeviceAssignState(device) {
+        deviceAssignState = {
+            step: 1,
+            device,
+            clients: [],
+            sensorModels: [],
+            cropProfiles: [],
+            selectedModel: null,
+            selectedCrop: null,
+            submitting: false
+        };
+        document.getElementById('device-assign-form').reset();
+        document.getElementById('da-device-id').value = device.id;
+        document.getElementById('device-assign-modal-title').textContent = `Assegna ${device.device_id || device.serial_number || 'dispositivo'}`;
+        document.getElementById('device-assign-subtitle').textContent = `ID ${device.id} · ${device.online_status || device.status || 'unassigned'}`;
+        document.getElementById('device-assign-result').classList.add('hidden');
+        setCatalogError('device-assign-modal-error');
+        updateLocationFields('assign', { lat: null, lon: null, locationName: '', locationAddress: '' });
+    }
+
+    function renderDeviceAssignStepper() {
+        const labels = ['Cliente', 'Site', 'Modello', 'Coltura', 'Posizione', 'Anteprima', 'Conferma'];
+        document.getElementById('device-assign-steps').innerHTML = labels.map((label, index) => {
+            const step = index + 1;
+            const active = step === deviceAssignState.step;
+            const completed = step < deviceAssignState.step;
+            return `<div class="rounded-lg px-2 py-2 text-center text-[11px] font-black uppercase tracking-widest ${active ? 'bg-green-700 text-white' : completed ? 'bg-green-50 text-green-800' : 'bg-gray-100 text-gray-400'}">${step}. ${label}</div>`;
+        }).join('');
+    }
+
+    function renderDeviceAssignStep() {
+        document.querySelectorAll('.device-assign-step').forEach((el) => {
+            el.classList.toggle('hidden', Number(el.dataset.assignStep) !== deviceAssignState.step);
+        });
+        renderDeviceAssignStepper();
+
+        document.getElementById('device-assign-prev-btn').disabled = deviceAssignState.step <= 1 || deviceAssignState.submitting;
+        document.getElementById('device-assign-next-btn').classList.toggle('hidden', deviceAssignState.step >= 7);
+        document.getElementById('device-assign-submit-btn').classList.toggle('hidden', deviceAssignState.step < 7);
+        document.getElementById('device-assign-submit-btn').disabled = deviceAssignState.submitting;
+
+        if (deviceAssignState.step === 5) {
+            setTimeout(() => initLocationPicker('assign'), 40);
+        }
+        if (deviceAssignState.step === 6 || deviceAssignState.step === 7) {
+            renderDeviceAssignPreview();
+        }
+    }
+
+    async function openDeviceAssignWizard(id) {
+        if (!isPhase2CatalogEnabled() || !isSuperAdmin()) return;
+        const device = findManagedDeviceById(id);
+        if (!device) return;
+
+        resetDeviceAssignState(device);
+        document.getElementById('da-client-id').innerHTML = '<option value="">Caricamento…</option>';
+        document.getElementById('da-sensor-model-id').innerHTML = '<option value="">Caricamento…</option>';
+        document.getElementById('da-crop-profile-id').innerHTML = '<option value="">Caricamento…</option>';
+        openModal('device-assign-modal');
+        renderDeviceAssignStep();
+
+        try {
+            await Promise.all([
+                loadDeviceAssignClients(),
+                loadDeviceAssignSensorModels(),
+                loadDeviceAssignCropProfiles()
+            ]);
+        } catch (err) {
+            setCatalogError('device-assign-modal-error', err.message);
+        }
+    }
+
+    function closeDeviceAssignModal() {
+        closeModal('device-assign-modal');
+    }
+
+    async function loadDeviceAssignClients() {
+        const select = document.getElementById('da-client-id');
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">Caricamento…</option>';
+        const params = new URLSearchParams({ page: '1', pageSize: '100' });
+        const data = await api('/clients?' + params.toString());
+        deviceAssignState.clients = data?.data || [];
+        select.innerHTML = '<option value="">Seleziona cliente</option>' + deviceAssignState.clients.map((client) => {
+            const label = `#${client.client_code || '----'} — ${getClientNameParts(client).fullName}`;
+            return `<option value="${client.id}">${esc(label)}</option>`;
+        }).join('');
+        if (currentValue && Array.from(select.options).some((option) => option.value === currentValue)) {
+            select.value = currentValue;
+        }
+    }
+
+    async function loadDeviceAssignSensorModels() {
+        const select = document.getElementById('da-sensor-model-id');
+        select.innerHTML = '<option value="">Caricamento…</option>';
+        const params = new URLSearchParams({ page: '1', pageSize: '100', active: 'true' });
+        const data = await api('/sensor-models?' + params.toString());
+        deviceAssignState.sensorModels = data?.data || [];
+        select.innerHTML = '<option value="">Seleziona modello</option>' + deviceAssignState.sensorModels.map((model) => (
+            `<option value="${model.id}">${esc(model.name || model.slug || 'Modello')} · ${esc(model.primary_type || '—')} · ${Number(model.parameters_count || 0)} parametri</option>`
+        )).join('');
+        renderDeviceAssignModelSummary();
+    }
+
+    async function loadDeviceAssignCropProfiles() {
+        const select = document.getElementById('da-crop-profile-id');
+        select.innerHTML = '<option value="">Caricamento…</option>';
+        const params = new URLSearchParams({ page: '1', pageSize: '100', active: 'true' });
+        const data = await api('/crop-profiles?' + params.toString());
+        deviceAssignState.cropProfiles = data?.data || [];
+        select.innerHTML = '<option value="">Nessuna coltura</option>' + deviceAssignState.cropProfiles.map((profile) => (
+            `<option value="${profile.id}">${esc(labelFrom(profile.labels, profile.crop_key || profile.slug))} · ${esc(profile.medium || '—')}</option>`
+        )).join('');
+        renderDeviceAssignCropSummary();
+    }
+
+    async function getDeviceAssignModelDetail(id) {
+        const modelId = Number(id);
+        if (!modelId) return null;
+        const cached = deviceAssignState.sensorModels.find((model) => Number(model.id) === modelId && Array.isArray(model.parameters));
+        if (cached) return cached;
+
+        const data = await api('/sensor-models/' + modelId);
+        const detail = data?.data || null;
+        if (detail) {
+            deviceAssignState.sensorModels = deviceAssignState.sensorModels.map((model) =>
+                Number(model.id) === modelId ? { ...model, ...detail } : model
+            );
+        }
+        return detail;
+    }
+
+    async function handleDeviceAssignModelChange() {
+        setCatalogError('device-assign-modal-error');
+        try {
+            const id = document.getElementById('da-sensor-model-id').value;
+            deviceAssignState.selectedModel = await getDeviceAssignModelDetail(id);
+            renderDeviceAssignModelSummary();
+            renderDeviceAssignPreview();
+        } catch (err) {
+            setCatalogError('device-assign-modal-error', err.message);
+        }
+    }
+
+    function handleDeviceAssignCropChange() {
+        const id = Number(document.getElementById('da-crop-profile-id').value);
+        deviceAssignState.selectedCrop = deviceAssignState.cropProfiles.find((profile) => Number(profile.id) === id) || null;
+        renderDeviceAssignCropSummary();
+        renderDeviceAssignPreview();
+    }
+
+    function renderDeviceAssignModelSummary() {
+        const target = document.getElementById('da-model-summary');
+        const model = deviceAssignState.selectedModel;
+        if (!model) {
+            target.textContent = 'Seleziona un modello attivo dal catalogo.';
+            return;
+        }
+        const parameters = Array.isArray(model.parameters) ? model.parameters : [];
+        target.innerHTML = `<div class="font-bold text-gray-800">${esc(model.name || model.slug || 'Modello')}</div><div class="text-xs text-gray-400">${esc(model.slug || '')}@${esc(model.version || '1')} · ${esc(model.primary_type || '—')} · ${parameters.length} parametri</div>`;
+    }
+
+    function renderDeviceAssignCropSummary() {
+        const target = document.getElementById('da-crop-summary');
+        const crop = deviceAssignState.selectedCrop;
+        if (!crop) {
+            target.textContent = 'Nessuna coltura selezionata.';
+            return;
+        }
+        target.innerHTML = `<div class="font-bold text-gray-800">${esc(labelFrom(crop.labels, crop.crop_key || crop.slug))}</div><div class="text-xs text-gray-400">${esc(crop.crop_key || '—')} · ${esc(crop.medium || '—')} · ${Object.keys(crop.ranges || {}).length} range</div>`;
+    }
+
+    function getDeviceAssignSortedParameters() {
+        const parameters = Array.isArray(deviceAssignState.selectedModel?.parameters)
+            ? deviceAssignState.selectedModel.parameters
+            : [];
+        return parameters.slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+    }
+
+    function renderDeviceAssignPreview() {
+        const parameters = getDeviceAssignSortedParameters();
+        const ranges = deviceAssignState.selectedCrop?.ranges || {};
+        const preview = document.getElementById('device-assign-preview');
+        if (preview) {
+            preview.innerHTML = parameters.length ? parameters.map((parameter) => {
+                const range = ranges[parameter.subtype] || null;
+                const label = labelFrom(parameter.label || {}, parameter.subtype || parameter.key || 'Parametro');
+                return `
+                    <div class="detail-card">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <div class="font-bold text-gray-800">${esc(label)}</div>
+                                <div class="text-xs text-gray-400">${esc(parameter.subtype || parameter.key || '—')}</div>
+                            </div>
+                            <span class="badge badge-blue">${esc(parameter.unit || '—')}</span>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-3">${range ? `Range coltura: ${esc(range.min)} - ${esc(range.max)} ${esc(range.unit || parameter.unit || '')}` : 'Nessun range coltura per questo parametro'}</div>
+                    </div>
+                `;
+            }).join('') : '<div class="text-gray-400 text-sm">Seleziona un modello sensore per generare l’anteprima.</div>';
+        }
+
+        const summary = document.getElementById('device-assign-confirm-summary');
+        if (summary) {
+            const client = deviceAssignState.clients.find((item) => String(item.id) === String(document.getElementById('da-client-id').value));
+            const model = deviceAssignState.selectedModel;
+            const crop = deviceAssignState.selectedCrop;
+            summary.innerHTML = `
+                <div class="font-bold text-gray-800 mb-2">Riepilogo assegnazione</div>
+                <div>Device: <strong>${esc(deviceAssignState.device?.device_id || deviceAssignState.device?.serial_number || '—')}</strong></div>
+                <div>Cliente: <strong>${esc(client ? getClientNameParts(client).fullName : '—')}</strong></div>
+                <div>Site/Farm/Zona: <strong>${esc(document.getElementById('da-site').value || '—')} · ${esc(document.getElementById('da-farm').value || '—')} · ${esc(document.getElementById('da-zona').value || '—')}</strong></div>
+                <div>Modello: <strong>${esc(model?.name || model?.slug || '—')}</strong></div>
+                <div>Coltura: <strong>${esc(crop ? labelFrom(crop.labels, crop.crop_key || crop.slug) : '—')}</strong></div>
+                <div>Visibility: <strong>${esc(document.getElementById('da-visibility').value || 'private')}</strong></div>
+            `;
+        }
+
+        const publicWrap = document.getElementById('device-assign-public-confirm-wrap');
+        if (publicWrap) {
+            publicWrap.classList.toggle('hidden', document.getElementById('da-visibility').value !== 'public');
+        }
+    }
+
+    function validateDeviceAssignStep(step) {
+        setCatalogError('device-assign-modal-error');
+        if (step === 1 && !document.getElementById('da-client-id').value) {
+            setCatalogError('device-assign-modal-error', 'Seleziona un cliente.');
+            return false;
+        }
+        if (step === 2) {
+            const missing = ['da-site', 'da-farm', 'da-zona'].some((id) => !document.getElementById(id).value.trim());
+            if (missing) {
+                setCatalogError('device-assign-modal-error', 'Site, farm e zona sono obbligatori.');
+                return false;
+            }
+        }
+        if (step === 3 && !deviceAssignState.selectedModel) {
+            setCatalogError('device-assign-modal-error', 'Seleziona un modello sensore.');
+            return false;
+        }
+        if (step === 5) {
+            const latRaw = document.getElementById('da-lat').value;
+            const lonRaw = document.getElementById('da-lon').value;
+            const hasLat = latRaw !== '';
+            const hasLon = lonRaw !== '';
+            const lat = Number(latRaw);
+            const lon = Number(lonRaw);
+            if (hasLat !== hasLon || (hasLat && (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lon) || lon < -180 || lon > 180))) {
+                setCatalogError('device-assign-modal-error', 'Coordinate non valide.');
+                return false;
+            }
+        }
+        return true;
+    }
+
+    async function moveDeviceAssignStep(delta) {
+        if (deviceAssignState.submitting) return;
+        if (delta > 0) {
+            if (deviceAssignState.step === 3 && document.getElementById('da-sensor-model-id').value && !deviceAssignState.selectedModel) {
+                await handleDeviceAssignModelChange();
+            }
+            if (!validateDeviceAssignStep(deviceAssignState.step)) return;
+        }
+        deviceAssignState.step = Math.min(7, Math.max(1, deviceAssignState.step + delta));
+        renderDeviceAssignStep();
+    }
+
+    function syncDeviceAssignManualPosition() {
+        const lat = Number(document.getElementById('da-lat').value);
+        const lon = Number(document.getElementById('da-lon').value);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            setPickerPosition('assign', lat, lon, { skipGeocode: true, center: true });
+        }
+    }
+
+    function locateDeviceAssignPosition() {
+        if (!navigator.geolocation) {
+            setCatalogError('device-assign-modal-error', 'Geolocalizzazione non disponibile.');
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                setPickerPosition('assign', position.coords.latitude, position.coords.longitude);
+            },
+            () => setCatalogError('device-assign-modal-error', 'Impossibile rilevare la posizione.'),
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    }
+
+    function buildDeviceAssignPayload() {
+        const latValue = document.getElementById('da-lat').value;
+        const lonValue = document.getElementById('da-lon').value;
+        return {
+            client_id: Number(document.getElementById('da-client-id').value),
+            site: document.getElementById('da-site').value.trim(),
+            farm: document.getElementById('da-farm').value.trim(),
+            zona: document.getElementById('da-zona').value.trim(),
+            sensor_model_id: Number(document.getElementById('da-sensor-model-id').value),
+            crop_profile_id: document.getElementById('da-crop-profile-id').value ? Number(document.getElementById('da-crop-profile-id').value) : null,
+            latitude: latValue === '' ? null : Number(latValue),
+            longitude: lonValue === '' ? null : Number(lonValue),
+            visibility: document.getElementById('da-visibility').value || 'private',
+            internal_note: document.getElementById('da-internal-note').value.trim() || null
+        };
+    }
+
+    async function confirmDeviceAssignment(event) {
+        event.preventDefault();
+        for (let step = 1; step <= 5; step += 1) {
+            if (!validateDeviceAssignStep(step)) {
+                deviceAssignState.step = step;
+                renderDeviceAssignStep();
+                return;
+            }
+        }
+
+        if (document.getElementById('da-visibility').value === 'public' && !document.getElementById('device-assign-public-confirm').checked) {
+            setCatalogError('device-assign-modal-error', 'Conferma esplicitamente la visibility pubblica.');
+            return;
+        }
+
+        const submitBtn = document.getElementById('device-assign-submit-btn');
+        deviceAssignState.submitting = true;
+        submitBtn.disabled = true;
+        setCatalogError('device-assign-modal-error');
+
+        try {
+            const data = await api('/devices/' + deviceAssignState.device.id + '/assign', {
+                method: 'POST',
+                body: JSON.stringify(buildDeviceAssignPayload())
+            });
+            if (!data) return;
+
+            const result = document.getElementById('device-assign-result');
+            const sensorCount = Array.isArray(data.created_sensors) ? data.created_sensors.length : 0;
+            result.textContent = data.already_assigned
+                ? 'Dispositivo già assegnato con gli stessi parametri.'
+                : `Dispositivo assegnato. Sensori creati: ${sensorCount}.`;
+            result.classList.remove('hidden');
+            await loadDeviceRegistry(1);
+        } catch (err) {
+            setCatalogError('device-assign-modal-error', err.message);
+        } finally {
+            deviceAssignState.submitting = false;
+            submitBtn.disabled = false;
+            renderDeviceAssignStep();
+        }
+    }
+
+    function getDeviceMetadata(device = {}) {
+        if (!device.metadata) return {};
+        if (typeof device.metadata === 'object') return device.metadata;
+        try {
+            return JSON.parse(device.metadata);
+        } catch (_error) {
+            return {};
+        }
+    }
+
+    function renderUnassignedDeviceInboxTable(devices) {
+        document.getElementById('devices-body').innerHTML = devices.length ? devices.map((device) => {
+            const metadata = getDeviceMetadata(device);
+            const firstSeen = metadata.first_seen_at || metadata.firstSeenAt || device.first_seen_at || device.created_at;
+            const lastSeen = device.last_seen_at || device.last_seen || device.last_reading || metadata.last_seen_at;
+            const seenIp = metadata.last_seen_ip || metadata.first_seen_ip || device.last_seen_ip || '—';
+            const onlineStatus = device.online_status || device.status || 'unknown';
+
+            return `
+                <tr>
+                    <td>
+                        <div class="font-semibold text-gray-800">${esc(device.device_id || device.serial_number || '—')}</div>
+                        <div class="text-xs text-gray-400 mt-1">${esc(device.serial_number && device.serial_number !== device.device_id ? device.serial_number : 'non assegnato')}</div>
+                    </td>
+                    <td class="text-xs text-gray-500">${fmtDate(firstSeen)}</td>
+                    <td class="text-xs text-gray-500">${seenIp !== '—' ? `IP ${esc(seenIp)}` : '—'}</td>
+                    <td><span class="badge badge-blue">${t('sensorsCount', { count: device.sensor_count || 0 })}</span></td>
+                    <td class="text-xs text-gray-500">${fmtDate(lastSeen)}</td>
+                    <td>${statusBadge(onlineStatus)}</td>
+                    <td>
+                        <button onclick="openDeviceAssignWizard(${device.id})" class="btn btn-primary btn-sm">Assegna</button>
+                    </td>
+                </tr>
+            `;
+        }).join('') : '<tr><td colspan="7" class="text-center text-gray-400 py-8">Nessun dispositivo non assegnato.</td></tr>';
+    }
+
     function renderDeviceRegistryTable(devices) {
+        applyDeviceRegistryTableHeaders();
+        if (isUnassignedDeviceInboxMode()) {
+            renderUnassignedDeviceInboxTable(devices);
+            return;
+        }
+
         document.getElementById('devices-body').innerHTML = devices.length ? devices.map((device) => `
             <tr>
                 <td>
@@ -4749,6 +5625,449 @@
             showError('edit-sensor-error', err.message);
         } finally {
             btn.disabled = false;
+        }
+    }
+
+    // ── Phase 2 Catalogs ─────────────────────────────────────────────────
+    function labelFrom(labels = {}, fallback = '—') {
+        return labels[currentLang] || labels.it || labels.fr || labels.en || labels.ar || fallback;
+    }
+
+    function booleanFromSelect(id) {
+        return document.getElementById(id).value === 'true';
+    }
+
+    function setCatalogError(id, message = '') {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = message;
+        el.classList.toggle('hidden', !message);
+    }
+
+    function typeOptions(selected = 'terreno') {
+        return ['energia', 'acqua', 'terreno', 'clima']
+            .map(type => `<option value="${type}" ${type === selected ? 'selected' : ''}>${type}</option>`)
+            .join('');
+    }
+
+    function parseRegister(registerHex) {
+        const raw = String(registerHex || '').trim();
+        if (!raw) {
+            return { hex: null, int: null, source: 'TODO: confermare' };
+        }
+        const normalized = raw.toLowerCase().startsWith('0x') ? raw.toLowerCase() : `0x${raw.toLowerCase()}`;
+        if (!/^0x[0-9a-f]+$/i.test(normalized)) {
+            throw new Error('Registro hex non valido');
+        }
+        return {
+            hex: normalized,
+            int: Number.parseInt(normalized.slice(2), 16),
+            source: 'confirmed'
+        };
+    }
+
+    function renderCatalogPagination(prefix, state) {
+        const total = state.total;
+        const totalPages = state.totalPages || 1;
+        const start = total ? ((state.page - 1) * state.pageSize) + 1 : 0;
+        const end = Math.min(total, state.page * state.pageSize);
+        document.getElementById(`${prefix}-summary`).textContent = total ? `${start}-${end} / ${total}` : 'Nessun risultato';
+        document.getElementById(`${prefix}-page-info`).textContent = `Pagina ${state.page} / ${totalPages}`;
+        document.getElementById(`${prefix}-prev`).disabled = state.page <= 1;
+        document.getElementById(`${prefix}-next`).disabled = state.page >= totalPages;
+    }
+
+    async function loadSensorModelsCatalog(page = sensorModelsState.page) {
+        if (!isPhase2CatalogEnabled()) return;
+        const body = document.getElementById('sensor-models-body');
+        body.innerHTML = '<tr><td colspan="5" class="text-center text-gray-400 py-8">Caricamento…</td></tr>';
+        setCatalogError('sensor-models-error');
+
+        try {
+            const params = new URLSearchParams({ page: String(page), pageSize: String(sensorModelsState.pageSize) });
+            const data = await api('/sensor-models?' + params.toString());
+            if (!data) return;
+
+            sensorModelsCatalog = data.data || [];
+            const pagination = data.pagination || {};
+            sensorModelsState.page = pagination.page || page;
+            sensorModelsState.total = pagination.total || sensorModelsCatalog.length;
+            sensorModelsState.totalPages = pagination.totalPages || 1;
+
+            body.innerHTML = sensorModelsCatalog.length ? sensorModelsCatalog.map(model => `
+                <tr>
+                    <td>
+                        <div class="font-bold text-gray-800">${esc(model.name || '—')}</div>
+                        <div class="text-xs text-gray-400">${esc(model.slug || '')}@${esc(model.version || '1')}${model.manufacturer ? ' · ' + esc(model.manufacturer) : ''}</div>
+                    </td>
+                    <td><span class="badge badge-silver">${esc(model.primary_type || '—')}</span></td>
+                    <td><span class="badge badge-blue">${Number(model.parameters_count || 0)}</span></td>
+                    <td>${model.active ? '<span class="badge badge-green">Attivo</span>' : '<span class="badge badge-gray">Disattivato</span>'}</td>
+                    <td>
+                        <div class="admin-action-row">
+                            ${isSuperAdmin() ? `
+                                <button onclick="openSensorModelModal(${model.id})" class="btn btn-outline btn-sm">Modifica</button>
+                                ${model.active ? `<button onclick="disableSensorModel(${model.id})" class="btn btn-danger btn-sm">Disattiva</button>` : ''}
+                            ` : '<span class="text-xs text-gray-300">Sola lettura</span>'}
+                        </div>
+                    </td>
+                </tr>
+            `).join('') : '<tr><td colspan="5" class="text-center text-gray-400 py-8">Nessun modello sensore.</td></tr>';
+            renderCatalogPagination('sensor-models', sensorModelsState);
+            applyFeatureVisibility();
+        } catch (err) {
+            body.innerHTML = `<tr><td colspan="5" class="text-center text-red-400 py-8">${esc(err.message)}</td></tr>`;
+        }
+    }
+
+    function changeSensorModelsPage(delta) {
+        const nextPage = sensorModelsState.page + delta;
+        if (nextPage < 1 || nextPage > sensorModelsState.totalPages) return;
+        loadSensorModelsCatalog(nextPage);
+    }
+
+    function sensorModelParameterRow(parameter = {}, index = 0) {
+        const labels = parameter.label || {};
+        const registerHex = parameter.register?.hex || '';
+        return `
+            <div class="section-card p-3 sensor-param-row">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Parametro</span>
+                    <button type="button" onclick="this.closest('.sensor-param-row').remove()" class="btn btn-danger btn-sm">Rimuovi</button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <input data-field="key" class="form-input" placeholder="key" value="${esc(parameter.key || '')}">
+                    <input data-field="register" class="form-input" placeholder="0x0000" value="${esc(registerHex)}">
+                    <select data-field="type" class="form-input">${typeOptions(parameter.type || document.getElementById('sm-primary-type')?.value || 'terreno')}</select>
+                    <input data-field="subtype" class="form-input" placeholder="subtype" value="${esc(parameter.subtype || '')}">
+                    <input data-field="label-it" class="form-input" placeholder="Label IT" value="${esc(labels.it || '')}">
+                    <input data-field="label-fr" class="form-input" placeholder="Label FR" value="${esc(labels.fr || '')}">
+                    <input data-field="label-en" class="form-input" placeholder="Label EN" value="${esc(labels.en || '')}">
+                    <input data-field="label-ar" class="form-input" placeholder="Label AR" value="${esc(labels.ar || '')}">
+                    <input data-field="unit" class="form-input" placeholder="unit" value="${esc(parameter.unit || '')}">
+                    <input data-field="scale" class="form-input" type="number" step="0.001" placeholder="scale" value="${parameter.scale ?? ''}">
+                    <input data-field="order" class="form-input" type="number" step="1" placeholder="order" value="${parameter.order ?? index + 1}">
+                    <div class="flex items-center gap-4 px-2">
+                        <label class="text-xs font-bold text-gray-600"><input data-field="signed" type="checkbox" ${parameter.signed ? 'checked' : ''}> signed</label>
+                        <label class="text-xs font-bold text-gray-600"><input data-field="enabled" type="checkbox" ${parameter.enabled === false ? '' : 'checked'}> enabled</label>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    function addSensorModelParameterRow(parameter = null) {
+        const container = document.getElementById('sensor-model-param-rows');
+        const index = container.querySelectorAll('.sensor-param-row').length;
+        container.insertAdjacentHTML('beforeend', sensorModelParameterRow(parameter || {}, index));
+    }
+
+    async function openSensorModelModal(id = null) {
+        if (!isSuperAdmin()) return;
+        setCatalogError('sensor-model-modal-error');
+        document.getElementById('sensor-model-form').reset();
+        document.getElementById('sensor-model-param-rows').innerHTML = '';
+        document.getElementById('sm-id').value = '';
+        document.getElementById('sm-version').value = '1';
+        document.getElementById('sm-primary-type').value = 'terreno';
+        document.getElementById('sm-active').value = 'true';
+
+        if (!id) {
+            document.getElementById('sensor-model-modal-title').textContent = 'Nuovo modello sensore';
+            addSensorModelParameterRow();
+            openModal('sensor-model-modal');
+            return;
+        }
+
+        try {
+            const data = await api('/sensor-models/' + id);
+            if (!data) return;
+            const model = data.data;
+            const labels = model.labels || {};
+            document.getElementById('sensor-model-modal-title').textContent = 'Modifica modello sensore';
+            document.getElementById('sm-id').value = model.id;
+            document.getElementById('sm-name').value = model.name || '';
+            document.getElementById('sm-slug').value = model.slug || '';
+            document.getElementById('sm-version').value = model.version || '1';
+            document.getElementById('sm-manufacturer').value = model.manufacturer || '';
+            document.getElementById('sm-primary-type').value = model.primary_type || 'terreno';
+            document.getElementById('sm-active').value = model.active ? 'true' : 'false';
+            document.getElementById('sm-label-it').value = labels.it || '';
+            document.getElementById('sm-label-fr').value = labels.fr || '';
+            document.getElementById('sm-label-en').value = labels.en || '';
+            document.getElementById('sm-label-ar').value = labels.ar || '';
+            document.getElementById('sm-notes').value = model.notes || '';
+            (model.parameters || []).forEach((parameter, index) => addSensorModelParameterRow(parameter, index));
+            if (!model.parameters?.length) addSensorModelParameterRow();
+            openModal('sensor-model-modal');
+        } catch (err) {
+            setCatalogError('sensor-models-error', err.message);
+        }
+    }
+
+    function buildSensorModelPayload(activeOverride = null) {
+        const rows = Array.from(document.querySelectorAll('#sensor-model-param-rows .sensor-param-row'));
+        if (!rows.length) throw new Error('Aggiungi almeno un parametro.');
+
+        const seenSubtypes = new Set();
+        const parameters = rows.map((row, index) => {
+            const field = (name) => row.querySelector(`[data-field="${name}"]`);
+            const key = field('key').value.trim();
+            const type = field('type').value;
+            const subtype = field('subtype').value.trim();
+            const unit = field('unit').value.trim();
+            const scale = Number(field('scale').value);
+            const order = Number.parseInt(field('order').value, 10) || index + 1;
+
+            if (!key || !subtype || !unit) throw new Error('Key, subtype e unit sono obbligatori per ogni parametro.');
+            if (seenSubtypes.has(subtype)) throw new Error(`Subtype duplicato nello stesso modello: ${subtype}`);
+            if (!Number.isFinite(scale) || scale <= 0) throw new Error(`Scale non valida per ${key}.`);
+            seenSubtypes.add(subtype);
+
+            return {
+                key,
+                register: parseRegister(field('register').value),
+                type,
+                subtype,
+                label: {
+                    it: field('label-it').value.trim(),
+                    fr: field('label-fr').value.trim(),
+                    en: field('label-en').value.trim(),
+                    ar: field('label-ar').value.trim()
+                },
+                unit,
+                scale,
+                signed: field('signed').checked,
+                enabled: field('enabled').checked,
+                order
+            };
+        });
+
+        return {
+            name: document.getElementById('sm-name').value.trim(),
+            slug: document.getElementById('sm-slug').value.trim(),
+            version: document.getElementById('sm-version').value.trim() || '1',
+            manufacturer: document.getElementById('sm-manufacturer').value.trim() || null,
+            primary_type: document.getElementById('sm-primary-type').value,
+            labels: {
+                it: document.getElementById('sm-label-it').value.trim(),
+                fr: document.getElementById('sm-label-fr').value.trim(),
+                en: document.getElementById('sm-label-en').value.trim(),
+                ar: document.getElementById('sm-label-ar').value.trim()
+            },
+            notes: document.getElementById('sm-notes').value.trim() || null,
+            parameters,
+            active: activeOverride === null ? booleanFromSelect('sm-active') : activeOverride
+        };
+    }
+
+    async function saveSensorModelCatalog(event) {
+        event.preventDefault();
+        setCatalogError('sensor-model-modal-error');
+        const id = document.getElementById('sm-id').value;
+        const btn = document.getElementById('sensor-model-save-btn');
+        btn.disabled = true;
+
+        try {
+            const payload = buildSensorModelPayload();
+            await api(id ? '/sensor-models/' + id : '/sensor-models', {
+                method: id ? 'PUT' : 'POST',
+                body: JSON.stringify(payload)
+            });
+            closeModal('sensor-model-modal');
+            loadSensorModelsCatalog(sensorModelsState.page);
+        } catch (err) {
+            setCatalogError('sensor-model-modal-error', err.message);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function disableSensorModel(id) {
+        if (!isSuperAdmin()) return;
+        try {
+            const data = await api('/sensor-models/' + id);
+            if (!data) return;
+            await api('/sensor-models/' + id, {
+                method: 'PUT',
+                body: JSON.stringify({ ...data.data, active: false })
+            });
+            loadSensorModelsCatalog(sensorModelsState.page);
+        } catch (err) {
+            setCatalogError('sensor-models-error', err.message);
+        }
+    }
+
+    async function loadCropProfilesCatalog(page = cropProfilesState.page) {
+        if (!isPhase2CatalogEnabled()) return;
+        const body = document.getElementById('crop-profiles-body');
+        body.innerHTML = '<tr><td colspan="5" class="text-center text-gray-400 py-8">Caricamento…</td></tr>';
+        setCatalogError('crop-profiles-error');
+
+        try {
+            const params = new URLSearchParams({ page: String(page), pageSize: String(cropProfilesState.pageSize) });
+            const data = await api('/crop-profiles?' + params.toString());
+            if (!data) return;
+
+            cropProfilesCatalog = data.data || [];
+            const pagination = data.pagination || {};
+            cropProfilesState.page = pagination.page || page;
+            cropProfilesState.total = pagination.total || cropProfilesCatalog.length;
+            cropProfilesState.totalPages = pagination.totalPages || 1;
+
+            body.innerHTML = cropProfilesCatalog.length ? cropProfilesCatalog.map(profile => `
+                <tr>
+                    <td>
+                        <div class="font-bold text-gray-800">${esc(labelFrom(profile.labels, profile.slug))}</div>
+                        <div class="text-xs text-gray-400">${esc(profile.slug || '')}@${esc(profile.version || '1')}</div>
+                    </td>
+                    <td><span class="badge badge-silver">${esc(profile.crop_key || '—')}</span></td>
+                    <td>${profile.medium ? esc(profile.medium) : '—'}</td>
+                    <td>${profile.active ? '<span class="badge badge-green">Attivo</span>' : '<span class="badge badge-gray">Disattivato</span>'}</td>
+                    <td>
+                        <div class="admin-action-row">
+                            ${isSuperAdmin() ? `
+                                <button onclick="openCropProfileModal(${profile.id})" class="btn btn-outline btn-sm">Modifica</button>
+                                ${profile.active ? `<button onclick="disableCropProfile(${profile.id})" class="btn btn-danger btn-sm">Disattiva</button>` : ''}
+                            ` : '<span class="text-xs text-gray-300">Sola lettura</span>'}
+                        </div>
+                    </td>
+                </tr>
+            `).join('') : '<tr><td colspan="5" class="text-center text-gray-400 py-8">Nessuna coltura.</td></tr>';
+            renderCatalogPagination('crop-profiles', cropProfilesState);
+            applyFeatureVisibility();
+        } catch (err) {
+            body.innerHTML = `<tr><td colspan="5" class="text-center text-red-400 py-8">${esc(err.message)}</td></tr>`;
+        }
+    }
+
+    function changeCropProfilesPage(delta) {
+        const nextPage = cropProfilesState.page + delta;
+        if (nextPage < 1 || nextPage > cropProfilesState.totalPages) return;
+        loadCropProfilesCatalog(nextPage);
+    }
+
+    function cropProfileRangeRow(subtype = '', range = {}) {
+        return `
+            <div class="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 crop-range-row">
+                <input data-field="subtype" class="form-input" placeholder="subtype" value="${esc(subtype)}">
+                <input data-field="min" class="form-input" type="number" step="0.001" placeholder="min" value="${range.min ?? ''}">
+                <input data-field="max" class="form-input" type="number" step="0.001" placeholder="max" value="${range.max ?? ''}">
+                <input data-field="unit" class="form-input" placeholder="unit" value="${esc(range.unit || '')}">
+                <button type="button" onclick="this.closest('.crop-range-row').remove()" class="btn btn-danger btn-sm">Rimuovi</button>
+            </div>`;
+    }
+
+    function addCropProfileRangeRow(subtype = '', range = {}) {
+        document.getElementById('crop-profile-range-rows').insertAdjacentHTML('beforeend', cropProfileRangeRow(subtype, range));
+    }
+
+    function openCropProfileModal(id = null) {
+        if (!isSuperAdmin()) return;
+        setCatalogError('crop-profile-modal-error');
+        document.getElementById('crop-profile-form').reset();
+        document.getElementById('crop-profile-range-rows').innerHTML = '';
+        document.getElementById('cp-id').value = '';
+        document.getElementById('cp-version').value = '1';
+        document.getElementById('cp-active').value = 'true';
+
+        const profile = id ? cropProfilesCatalog.find((item) => Number(item.id) === Number(id)) : null;
+        if (!profile) {
+            document.getElementById('crop-profile-modal-title').textContent = 'Nuova coltura';
+            addCropProfileRangeRow();
+            openModal('crop-profile-modal');
+            return;
+        }
+
+        const labels = profile.labels || {};
+        const description = profile.description || {};
+        document.getElementById('crop-profile-modal-title').textContent = 'Modifica coltura';
+        document.getElementById('cp-id').value = profile.id;
+        document.getElementById('cp-slug').value = profile.slug || '';
+        document.getElementById('cp-version').value = profile.version || '1';
+        document.getElementById('cp-crop-key').value = profile.crop_key || '';
+        document.getElementById('cp-medium').value = profile.medium || '';
+        document.getElementById('cp-active').value = profile.active ? 'true' : 'false';
+        document.getElementById('cp-label-it').value = labels.it || '';
+        document.getElementById('cp-label-fr').value = labels.fr || '';
+        document.getElementById('cp-label-en').value = labels.en || '';
+        document.getElementById('cp-label-ar').value = labels.ar || '';
+        document.getElementById('cp-description').value = description.it || description.fr || description.en || description.ar || '';
+        Object.entries(profile.ranges || {}).forEach(([subtype, range]) => addCropProfileRangeRow(subtype, range));
+        if (!Object.keys(profile.ranges || {}).length) addCropProfileRangeRow();
+        openModal('crop-profile-modal');
+    }
+
+    function buildCropProfilePayload(activeOverride = null) {
+        const ranges = {};
+        const seenSubtypes = new Set();
+        Array.from(document.querySelectorAll('#crop-profile-range-rows .crop-range-row')).forEach(row => {
+            const field = (name) => row.querySelector(`[data-field="${name}"]`);
+            const subtype = field('subtype').value.trim();
+            if (!subtype) return;
+            const min = Number(field('min').value);
+            const max = Number(field('max').value);
+            const unit = field('unit').value.trim();
+            if (seenSubtypes.has(subtype)) throw new Error(`Range duplicato: ${subtype}`);
+            if (!Number.isFinite(min) || !Number.isFinite(max)) throw new Error(`Min/max non validi per ${subtype}.`);
+            if (min >= max) throw new Error(`Per ${subtype}, min deve essere minore di max.`);
+            if (!unit) throw new Error(`Unit obbligatoria per ${subtype}.`);
+            seenSubtypes.add(subtype);
+            ranges[subtype] = { min, max, unit };
+        });
+
+        return {
+            slug: document.getElementById('cp-slug').value.trim(),
+            version: document.getElementById('cp-version').value.trim() || '1',
+            crop_key: document.getElementById('cp-crop-key').value.trim(),
+            medium: document.getElementById('cp-medium').value.trim() || null,
+            labels: {
+                it: document.getElementById('cp-label-it').value.trim(),
+                fr: document.getElementById('cp-label-fr').value.trim(),
+                en: document.getElementById('cp-label-en').value.trim(),
+                ar: document.getElementById('cp-label-ar').value.trim()
+            },
+            description: {
+                it: document.getElementById('cp-description').value.trim()
+            },
+            ranges,
+            active: activeOverride === null ? booleanFromSelect('cp-active') : activeOverride
+        };
+    }
+
+    async function saveCropProfileCatalog(event) {
+        event.preventDefault();
+        setCatalogError('crop-profile-modal-error');
+        const id = document.getElementById('cp-id').value;
+        const btn = document.getElementById('crop-profile-save-btn');
+        btn.disabled = true;
+
+        try {
+            const payload = buildCropProfilePayload();
+            await api(id ? '/crop-profiles/' + id : '/crop-profiles', {
+                method: id ? 'PUT' : 'POST',
+                body: JSON.stringify(payload)
+            });
+            closeModal('crop-profile-modal');
+            loadCropProfilesCatalog(cropProfilesState.page);
+        } catch (err) {
+            setCatalogError('crop-profile-modal-error', err.message);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function disableCropProfile(id) {
+        if (!isSuperAdmin()) return;
+        const profile = cropProfilesCatalog.find((item) => Number(item.id) === Number(id));
+        if (!profile) return;
+        try {
+            await api('/crop-profiles/' + id, {
+                method: 'PUT',
+                body: JSON.stringify({ ...profile, active: false })
+            });
+            loadCropProfilesCatalog(cropProfilesState.page);
+        } catch (err) {
+            setCatalogError('crop-profiles-error', err.message);
         }
     }
 

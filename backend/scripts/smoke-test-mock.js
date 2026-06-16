@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'rayat-test-secret';
 process.env.MQTT_INGEST_TOKEN = process.env.MQTT_INGEST_TOKEN || 'rayat-test-ingest-token'; // RAYAT-FIX
 process.env.SENSOR_AGGREGATION_WINDOW_SECONDS = '0.05'; // RAYAT-FIX
+process.env.DEVICE_MANAGER_PHASE2_ENABLED = 'false';
 
 const state = {
   users: [
@@ -54,12 +55,16 @@ const state = {
   sensorReadings: [],
   sensorLatest: [],
   publicLatest: [],
-  publicSensorReadings: []
+  publicSensorReadings: [],
+  sensorModels: [],
+  cropProfiles: []
 };
 
 let nextDeviceId = 1;
 let nextSensorId = 1;
 let nextReadingId = 1;
+let nextSensorModelId = 1;
+let nextCropProfileId = 1;
 
 function normalizeSql(sql) {
   return sql.replace(/\s+/g, ' ').trim();
@@ -226,6 +231,59 @@ function listSensors(offset = 0, limit = 50) {
     .slice(offset, offset + limit);
 }
 
+function catalogIncludes(value, query) {
+  return String(value || '').toLowerCase().includes(String(query || '').toLowerCase());
+}
+
+function filterSensorModelsFromSql(text, params = []) {
+  let paramIndex = 0;
+  let rows = state.sensorModels.slice();
+
+  if (text.includes('active = ?')) {
+    const active = params[paramIndex++];
+    rows = rows.filter((model) => Boolean(model.active) === Boolean(active));
+  }
+
+  if (text.includes('primary_type = ?')) {
+    const primaryType = params[paramIndex++];
+    rows = rows.filter((model) => model.primary_type === primaryType);
+  }
+
+  if (text.includes('slug LIKE ?')) {
+    const query = String(params[paramIndex++] || '').replace(/%/g, '');
+    rows = rows.filter((model) =>
+      catalogIncludes(model.slug, query)
+      || catalogIncludes(model.name, query)
+      || catalogIncludes(model.manufacturer, query)
+      || catalogIncludes(JSON.stringify(model.labels), query)
+    );
+  }
+
+  return rows;
+}
+
+function filterCropProfilesFromSql(text, params = []) {
+  let paramIndex = 0;
+  let rows = state.cropProfiles.slice();
+
+  if (text.includes('active = ?')) {
+    const active = params[paramIndex++];
+    rows = rows.filter((profile) => Boolean(profile.active) === Boolean(active));
+  }
+
+  if (text.includes('slug LIKE ?')) {
+    const query = String(params[paramIndex++] || '').replace(/%/g, '');
+    rows = rows.filter((profile) =>
+      catalogIncludes(profile.slug, query)
+      || catalogIncludes(profile.crop_key, query)
+      || catalogIncludes(profile.medium, query)
+      || catalogIncludes(JSON.stringify(profile.labels), query)
+    );
+  }
+
+  return rows;
+}
+
 async function fakeQuery(sql, params = []) {
   const text = normalizeSql(sql);
 
@@ -296,7 +354,8 @@ async function fakeQuery(sql, params = []) {
   }
 
   if (text.startsWith('SELECT COUNT(*) AS total FROM devices d')) {
-    const onlyUnassigned = text.includes("(d.user_id IS NULL OR d.status = 'unassigned')");
+    const onlyUnassigned = text.includes("AND d.user_id IS NULL")
+      || text.includes("(d.user_id IS NULL OR d.status = 'unassigned')");
     return [{
       total: state.devices.filter((device) => (
         !onlyUnassigned || device.user_id === null || device.status === 'unassigned'
@@ -312,7 +371,8 @@ async function fakeQuery(sql, params = []) {
     const offset = Number.isFinite(Number(params[params.length - 1]))
       ? Number(params[params.length - 1])
       : inlineLimit.offset;
-    const onlyUnassigned = text.includes("(d.user_id IS NULL OR d.status = 'unassigned')");
+    const onlyUnassigned = text.includes("AND d.user_id IS NULL")
+      || text.includes("(d.user_id IS NULL OR d.status = 'unassigned')");
     const devices = listDevices(0, Number.MAX_SAFE_INTEGER)
       .filter((device) => !onlyUnassigned || device.client_id === null || device.status === 'unassigned');
     return devices.slice(offset, offset + limit);
@@ -374,6 +434,204 @@ async function fakeQuery(sql, params = []) {
     };
     state.sensors.push(row);
     return { insertId: row.id };
+  }
+
+  if (text.startsWith('SELECT COUNT(*) AS total FROM sensor_models')) {
+    return [{ total: filterSensorModelsFromSql(text, params).length }];
+  }
+
+  if (text.startsWith('SELECT id, slug, version, name, manufacturer, primary_type, labels,')) {
+    const inlineLimit = parseInlineLimit(text, 25, 0);
+    const rows = filterSensorModelsFromSql(text, params)
+      .sort((left, right) => Number(right.active) - Number(left.active) || String(left.name).localeCompare(String(right.name)) || left.id - right.id)
+      .slice(inlineLimit.offset, inlineLimit.offset + inlineLimit.limit);
+    return rows.map((model) => ({
+      ...model,
+      parameters_count: Array.isArray(model.parameters) ? model.parameters.length : 0
+    }));
+  }
+
+  if (text === 'SELECT id, slug, version, name, manufacturer, primary_type, labels, parameters, notes, active, created_by, created_at, updated_at FROM sensor_models WHERE id = ? LIMIT 1') {
+    return state.sensorModels
+      .filter((model) => model.id === Number(params[0]))
+      .slice(0, 1);
+  }
+
+  if (text === 'SELECT id, parameters FROM sensor_models WHERE id = ? LIMIT 1') {
+    return state.sensorModels
+      .filter((model) => model.id === Number(params[0]))
+      .map((model) => ({ id: model.id, parameters: model.parameters }));
+  }
+
+  if (text.startsWith('INSERT INTO sensor_models')) {
+    const existing = state.sensorModels.find((model) =>
+      model.slug === params[0] && model.version === params[1]
+    );
+    if (existing) {
+      const error = new Error('duplicate sensor model');
+      error.code = '23505';
+      throw error;
+    }
+    const row = {
+      id: nextSensorModelId++,
+      slug: params[0],
+      version: params[1],
+      name: params[2],
+      manufacturer: params[3],
+      primary_type: params[4],
+      labels: parseJsonObject(params[5]),
+      parameters: JSON.parse(params[6]),
+      notes: params[7],
+      active: params[8],
+      created_by: params[9],
+      created_at: '2026-03-22 12:00:00',
+      updated_at: '2026-03-22 12:00:00'
+    };
+    state.sensorModels.push(row);
+    return { insertId: row.id };
+  }
+
+  if (text === "SELECT id FROM devices WHERE metadata->>'sensor_model_id' = ? OR metadata->'assignment'->>'sensor_model_id' = ? LIMIT 1") {
+    return state.devices
+      .filter((device) => {
+        const metadata = parseJsonObject(device.metadata);
+        return String(metadata.sensor_model_id || metadata.assignment?.sensor_model_id || '') === String(params[0]);
+      })
+      .slice(0, 1)
+      .map((device) => ({ id: device.id }));
+  }
+
+  if (text.startsWith('UPDATE sensor_models SET slug = ?')) {
+    const model = state.sensorModels.find((row) => row.id === Number(params[9]));
+    if (!model) {
+      return { affectedRows: 0 };
+    }
+    model.slug = params[0];
+    model.version = params[1];
+    model.name = params[2];
+    model.manufacturer = params[3];
+    model.primary_type = params[4];
+    model.labels = parseJsonObject(params[5]);
+    model.parameters = JSON.parse(params[6]);
+    model.notes = params[7];
+    model.active = params[8];
+    model.updated_at = '2026-03-22 12:05:00';
+    return { affectedRows: 1 };
+  }
+
+  if (text.startsWith('SELECT COUNT(*) AS total FROM crop_profiles')) {
+    return [{ total: filterCropProfilesFromSql(text, params).length }];
+  }
+
+  if (text.startsWith('SELECT id, slug, version, crop_key, medium, labels, description, ranges, active, created_by, created_at, updated_at FROM crop_profiles')) {
+    const inlineLimit = parseInlineLimit(text, 25, 0);
+    return filterCropProfilesFromSql(text, params)
+      .sort((left, right) => Number(right.active) - Number(left.active) || String(left.crop_key).localeCompare(String(right.crop_key)) || left.id - right.id)
+      .slice(inlineLimit.offset, inlineLimit.offset + inlineLimit.limit);
+  }
+
+  if (text.startsWith('INSERT INTO crop_profiles')) {
+    const existing = state.cropProfiles.find((profile) =>
+      profile.slug === params[0] && profile.version === params[1]
+    );
+    if (existing) {
+      const error = new Error('duplicate crop profile');
+      error.code = '23505';
+      throw error;
+    }
+    const row = {
+      id: nextCropProfileId++,
+      slug: params[0],
+      version: params[1],
+      crop_key: params[2],
+      medium: params[3],
+      labels: parseJsonObject(params[4]),
+      description: parseJsonObject(params[5]),
+      ranges: parseJsonObject(params[6]),
+      active: params[7],
+      created_by: params[8],
+      created_at: '2026-03-22 12:00:00',
+      updated_at: '2026-03-22 12:00:00'
+    };
+    state.cropProfiles.push(row);
+    return { insertId: row.id };
+  }
+
+  if (text === 'SELECT id FROM crop_profiles WHERE id = ? LIMIT 1') {
+    return state.cropProfiles
+      .filter((profile) => profile.id === Number(params[0]))
+      .map((profile) => ({ id: profile.id }));
+  }
+
+  if (text === 'SELECT id, active FROM crop_profiles WHERE id = ? LIMIT 1') {
+    return state.cropProfiles
+      .filter((profile) => profile.id === Number(params[0]))
+      .map((profile) => ({ id: profile.id, active: profile.active }));
+  }
+
+  if (text.startsWith('UPDATE crop_profiles SET slug = ?')) {
+    const profile = state.cropProfiles.find((row) => row.id === Number(params[8]));
+    if (!profile) {
+      return { affectedRows: 0 };
+    }
+    profile.slug = params[0];
+    profile.version = params[1];
+    profile.crop_key = params[2];
+    profile.medium = params[3];
+    profile.labels = parseJsonObject(params[4]);
+    profile.description = parseJsonObject(params[5]);
+    profile.ranges = parseJsonObject(params[6]);
+    profile.active = params[7];
+    profile.updated_at = '2026-03-22 12:05:00';
+    return { affectedRows: 1 };
+  }
+
+  if (text === 'SELECT id, device_id, user_id, status, metadata, updated_at FROM devices WHERE id = ? FOR UPDATE'
+      || text === 'SELECT id, device_id, user_id, status, metadata, updated_at FROM devices WHERE id = ? LIMIT 1') {
+    return state.devices
+      .filter((device) => device.id === Number(params[0]))
+      .slice(0, 1)
+      .map((device) => ({ ...device, metadata: parseJsonObject(device.metadata) }));
+  }
+
+  if (text === 'SELECT id, slug, version, name, primary_type, labels, parameters, active FROM sensor_models WHERE id = ? LIMIT 1') {
+    return state.sensorModels
+      .filter((model) => model.id === Number(params[0]))
+      .map((model) => ({
+        id: model.id,
+        slug: model.slug,
+        version: model.version,
+        name: model.name,
+        primary_type: model.primary_type,
+        labels: model.labels,
+        parameters: model.parameters,
+        active: model.active
+      }));
+  }
+
+  if (text === "UPDATE devices SET user_id = ?, status = 'active', metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb, updated_at = NOW() WHERE id = ?") {
+    const device = state.devices.find((row) => row.id === Number(params[2]));
+    if (device) {
+      device.user_id = Number(params[0]);
+      device.status = 'active';
+      device.metadata = {
+        ...parseJsonObject(device.metadata),
+        ...parseJsonObject(params[1])
+      };
+      device.updated_at = '2026-03-22 12:10:00';
+    }
+    return { affectedRows: device ? 1 : 0 };
+  }
+
+  if (text === 'SELECT id FROM sensors WHERE device_id = ? AND type = ? AND subtype = ? LIMIT 1') {
+    return state.sensors
+      .filter((sensor) =>
+        sensor.device_id === Number(params[0])
+        && sensor.type === params[1]
+        && sensor.subtype === params[2]
+      )
+      .slice(0, 1)
+      .map((sensor) => ({ id: sensor.id }));
   }
 
   if (text.startsWith('SELECT COUNT(*) AS total FROM sensors s')) {
@@ -974,6 +1232,104 @@ async function run() {
         const adminHealthJson = await adminHealthRes.json(); // RAYAT-FIX
         assert.equal(adminHealthJson.db, 'ok'); // RAYAT-FIX
         assert.ok(adminHealthJson.mqttDirect); // RAYAT-FIX
+        assert.equal(adminHealthJson.features.deviceManagerPhase2, false);
+
+        const phase2DisabledRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensor-models`, {
+          headers: { Authorization: `Bearer ${reloginJson.token}` }
+        });
+        assert.equal(phase2DisabledRes.status, 404);
+
+        process.env.DEVICE_MANAGER_PHASE2_ENABLED = 'true';
+        const adminHealthPhase2Res = await fetch(`http://127.0.0.1:${port}/api/admin/health`, {
+          headers: { Authorization: `Bearer ${reloginJson.token}` }
+        });
+        assert.equal(adminHealthPhase2Res.status, 200);
+        const adminHealthPhase2Json = await adminHealthPhase2Res.json();
+        assert.equal(adminHealthPhase2Json.features.deviceManagerPhase2, true);
+
+        const createSensorModelRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensor-models`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify({
+            name: 'Mock Climate Model',
+            slug: 'mock-climate-model',
+            version: '1',
+            manufacturer: 'Rayat Test',
+            primary_type: 'clima',
+            labels: { it: 'Clima Mock', fr: 'Climat Mock', en: 'Mock Climate', ar: 'مناخ تجريبي' },
+            notes: 'Smoke test model',
+            parameters: [
+              {
+                key: 'temperature',
+                register: '0x0001',
+                type: 'clima',
+                subtype: 'clima_temperature',
+                label: { it: 'Temperatura', fr: 'Température', en: 'Temperature', ar: 'الحرارة' },
+                unit: '°C',
+                scale: 1,
+                signed: true,
+                enabled: true,
+                order: 1
+              },
+              {
+                key: 'co2',
+                register: '0x0002',
+                type: 'clima',
+                subtype: 'clima_co2',
+                label: { it: 'CO2', fr: 'CO2', en: 'CO2', ar: 'ثاني أكسيد الكربون' },
+                unit: 'ppm',
+                scale: 1,
+                signed: false,
+                enabled: true,
+                order: 2
+              }
+            ]
+          })
+        });
+        assert.equal(createSensorModelRes.status, 201);
+        const createSensorModelJson = await createSensorModelRes.json();
+        assert.ok(createSensorModelJson.id);
+
+        const listSensorModelsRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensor-models?active=true&type=clima`, {
+          headers: { Authorization: `Bearer ${reloginJson.token}` }
+        });
+        assert.equal(listSensorModelsRes.status, 200);
+        const listSensorModelsJson = await listSensorModelsRes.json();
+        assert.equal(listSensorModelsJson.data.length, 1);
+        assert.equal(listSensorModelsJson.data[0].parameters_count, 2);
+
+        const createCropProfileRes = await fetch(`http://127.0.0.1:${port}/api/admin/crop-profiles`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify({
+            slug: 'mock-tomato-perlite',
+            version: '1',
+            crop_key: 'tomato',
+            medium: 'perlite',
+            labels: { it: 'Pomodoro perlite', fr: 'Tomate perlite', en: 'Tomato perlite', ar: 'طماطم بيرلايت' },
+            description: { it: 'Profilo mock' },
+            ranges: {
+              clima_temperature: { min: 18, max: 30, unit: '°C' },
+              clima_co2: { min: 350, max: 1200, unit: 'ppm' }
+            }
+          })
+        });
+        assert.equal(createCropProfileRes.status, 201);
+        const createCropProfileJson = await createCropProfileRes.json();
+        assert.ok(createCropProfileJson.id);
+
+        const listCropProfilesRes = await fetch(`http://127.0.0.1:${port}/api/admin/crop-profiles?active=true`, {
+          headers: { Authorization: `Bearer ${reloginJson.token}` }
+        });
+        assert.equal(listCropProfilesRes.status, 200);
+        const listCropProfilesJson = await listCropProfilesRes.json();
+        assert.equal(listCropProfilesJson.data.length, 1);
 
         const clientsRes = await fetch(`http://127.0.0.1:${port}/api/admin/clients?page=1&pageSize=25`, {
           headers: { Authorization: `Bearer ${reloginJson.token}` }
@@ -1261,17 +1617,68 @@ async function run() {
           1
         );
 
-        const assignAutoDeviceRes = await fetch(`http://127.0.0.1:${port}/api/admin/devices`, {
+        const sensorLatestBeforeAssign = state.sensorLatest.length;
+        const assignAutoDeviceRes = await fetch(`http://127.0.0.1:${port}/api/admin/devices/${autoRegisteredDevice.id}/assign`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${reloginJson.token}`
           },
-          body: JSON.stringify({ type: 'clima', serial_number: 'AUTO-GW-002', client_id: 2 })
+          body: JSON.stringify({
+            client_id: 2,
+            site: 'Smoke Site',
+            farm: 'Smoke Farm',
+            zona: 'A1',
+            sensor_model_id: createSensorModelJson.id,
+            crop_profile_id: createCropProfileJson.id,
+            visibility: 'private',
+            latitude: 30.4,
+            longitude: -9.6,
+            internal_note: 'smoke assignment'
+          })
         });
-        assert.equal(assignAutoDeviceRes.status, 201);
+        assert.equal(assignAutoDeviceRes.status, 200);
         const assignAutoDeviceJson = await assignAutoDeviceRes.json();
-        assert.equal(assignAutoDeviceJson.id, autoRegisteredDevice.id);
+        assert.equal(assignAutoDeviceJson.success, true);
+        assert.equal(assignAutoDeviceJson.already_assigned, false);
+        assert.ok(assignAutoDeviceJson.created_sensors.some((sensor) => sensor.subtype === 'clima_co2'));
+        assert.equal(state.sensorLatest.length, sensorLatestBeforeAssign);
+
+        const assignAutoDeviceAgainRes = await fetch(`http://127.0.0.1:${port}/api/admin/devices/${autoRegisteredDevice.id}/assign`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify({
+            client_id: 2,
+            site: 'Smoke Site',
+            farm: 'Smoke Farm',
+            zona: 'A1',
+            sensor_model_id: createSensorModelJson.id,
+            crop_profile_id: createCropProfileJson.id,
+            visibility: 'private',
+            latitude: 30.4,
+            longitude: -9.6
+          })
+        });
+        assert.equal(assignAutoDeviceAgainRes.status, 200);
+        const assignAutoDeviceAgainJson = await assignAutoDeviceAgainRes.json();
+        assert.equal(assignAutoDeviceAgainJson.already_assigned, true);
+
+        const assignActiveDeviceRes = await fetch(`http://127.0.0.1:${port}/api/admin/devices/${createdDevice.id}/assign`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify({
+            client_id: 2,
+            sensor_model_id: createSensorModelJson.id,
+            crop_profile_id: createCropProfileJson.id
+          })
+        });
+        assert.equal(assignActiveDeviceRes.status, 409);
 
         const devicesAfterAssignRes = await fetch(`http://127.0.0.1:${port}/api/admin/devices?page=1&pageSize=25`, {
           headers: { Authorization: `Bearer ${reloginJson.token}` }

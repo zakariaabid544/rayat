@@ -67,6 +67,7 @@ const DEFAULT_SENSOR_PROFILES = {
         unit: '°C'
     }
 };
+const DEVICE_ASSIGNMENT_SOURCE = 'phase2_device_manager';
 
 function createHttpError(statusCode, message, errorCode = null) {
     const error = new Error(message);
@@ -237,6 +238,370 @@ function createExecutor(connection) {
     return async (sql, params) => {
         const [result] = await connection.execute(sql, params);
         return result;
+    };
+}
+
+function isPlainCatalogObject(value) {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cleanCatalogText(value) {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeCatalogVersion(value, fallback = '1') {
+    return cleanCatalogText(value || fallback) || fallback;
+}
+
+function parseJsonColumn(value, fallback) {
+    if (value === null || value === undefined) {
+        return fallback;
+    }
+    if (typeof value === 'object') {
+        return value;
+    }
+    try {
+        return JSON.parse(value);
+    } catch (_error) {
+        return fallback;
+    }
+}
+
+function stableStringify(value) {
+    if (Array.isArray(value)) {
+        return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+    }
+    if (isPlainCatalogObject(value)) {
+        return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(value);
+}
+
+function parseCatalogBoolean(value, fallback = true) {
+    if (value === undefined || value === null || value === '') {
+        return fallback;
+    }
+    if (typeof value === 'boolean') {
+        return value;
+    }
+    if (typeof value === 'number') {
+        return value === 1;
+    }
+    const normalized = cleanCatalogText(value).toLowerCase();
+    if (['true', '1', 'yes'].includes(normalized)) {
+        return true;
+    }
+    if (['false', '0', 'no'].includes(normalized)) {
+        return false;
+    }
+    throw createHttpError(400, 'Valore booleano non valido');
+}
+
+function parseActiveFilter(value) {
+    if (value === undefined || value === null || value === '') {
+        return null;
+    }
+    return parseCatalogBoolean(value);
+}
+
+function isDeviceManagerPhase2Enabled() {
+    return cleanCatalogText(process.env.DEVICE_MANAGER_PHASE2_ENABLED).toLowerCase() === 'true';
+}
+
+function requireDeviceManagerPhase2(_req, res, next) {
+    if (!isDeviceManagerPhase2Enabled()) {
+        return res.status(404).json({ error: 'feature_disabled' });
+    }
+    return next();
+}
+
+function assertCatalogLabels(labels, fieldName) {
+    if (!isPlainCatalogObject(labels) || Object.keys(labels).length === 0) {
+        throw createHttpError(400, `${fieldName} deve essere un oggetto non vuoto`);
+    }
+}
+
+function validateSensorModelParameters(parameters) {
+    if (!Array.isArray(parameters) || !parameters.length) {
+        throw createHttpError(400, 'parameters deve essere un array non vuoto');
+    }
+
+    const seenSubtypes = new Set();
+    parameters.forEach((parameter, index) => {
+        if (!isPlainCatalogObject(parameter)) {
+            throw createHttpError(400, `Parametro ${index + 1} non valido`);
+        }
+        const key = cleanCatalogText(parameter.key);
+        const type = cleanCatalogText(parameter.type);
+        const subtype = cleanCatalogText(parameter.subtype);
+        const unit = cleanCatalogText(parameter.unit);
+
+        if (!key || !type || !subtype || !unit) {
+            throw createHttpError(400, `Parametro ${index + 1}: key, type, subtype e unit sono obbligatori`);
+        }
+        if (seenSubtypes.has(subtype)) {
+            throw createHttpError(400, `Subtype duplicato: ${subtype}`);
+        }
+        seenSubtypes.add(subtype);
+        if (!VALID_SENSOR_TYPES.has(type)) {
+            throw createHttpError(400, `Tipo sensore non valido nel parametro ${key}`);
+        }
+        assertCatalogLabels(parameter.label, `Parametro ${key}.label`);
+        if (!Number.isFinite(Number(parameter.scale)) || Number(parameter.scale) <= 0) {
+            throw createHttpError(400, `Parametro ${key}: scale deve essere un numero positivo`);
+        }
+        if (typeof parameter.signed !== 'boolean') {
+            throw createHttpError(400, `Parametro ${key}: signed deve essere booleano`);
+        }
+        if (typeof parameter.enabled !== 'boolean') {
+            throw createHttpError(400, `Parametro ${key}: enabled deve essere booleano`);
+        }
+    });
+}
+
+function validateSensorModelPayload(body) {
+    const slug = cleanCatalogText(body.slug);
+    const version = normalizeCatalogVersion(body.version);
+    const name = cleanCatalogText(body.name);
+    const manufacturer = cleanCatalogText(body.manufacturer) || null;
+    const primaryType = cleanCatalogText(body.primary_type);
+    const labels = isPlainCatalogObject(body.labels) ? body.labels : {};
+    const parameters = body.parameters;
+    const notes = cleanCatalogText(body.notes) || null;
+    const active = parseCatalogBoolean(body.active, true);
+
+    if (!slug || !name || !primaryType) {
+        throw createHttpError(400, 'slug, name e primary_type sono obbligatori');
+    }
+    if (!VALID_SENSOR_TYPES.has(primaryType)) {
+        throw createHttpError(400, 'primary_type non valido');
+    }
+    validateSensorModelParameters(parameters);
+
+    return { slug, version, name, manufacturer, primaryType, labels, parameters, notes, active };
+}
+
+function validateCropProfileRanges(ranges) {
+    if (!isPlainCatalogObject(ranges)) {
+        throw createHttpError(400, 'ranges deve essere un oggetto');
+    }
+
+    Object.entries(ranges).forEach(([key, range]) => {
+        if (!isPlainCatalogObject(range)) {
+            throw createHttpError(400, `Range ${key} non valido`);
+        }
+        if (!Number.isFinite(Number(range.min)) || !Number.isFinite(Number(range.max))) {
+            throw createHttpError(400, `Range ${key}: min e max devono essere numerici`);
+        }
+        if (Number(range.min) >= Number(range.max)) {
+            throw createHttpError(400, `Range ${key}: min deve essere minore di max`);
+        }
+        if (!cleanCatalogText(range.unit)) {
+            throw createHttpError(400, `Range ${key}: unit obbligatoria`);
+        }
+    });
+}
+
+function validateCropProfilePayload(body) {
+    const slug = cleanCatalogText(body.slug);
+    const version = normalizeCatalogVersion(body.version);
+    const cropKey = cleanCatalogText(body.crop_key);
+    const medium = cleanCatalogText(body.medium) || null;
+    const labels = body.labels;
+    const description = isPlainCatalogObject(body.description) ? body.description : {};
+    const ranges = body.ranges;
+    const active = parseCatalogBoolean(body.active, true);
+
+    if (!slug || !version || !cropKey) {
+        throw createHttpError(400, 'slug, version e crop_key sono obbligatori');
+    }
+    assertCatalogLabels(labels, 'labels');
+    validateCropProfileRanges(ranges);
+
+    return { slug, version, cropKey, medium, labels, description, ranges, active };
+}
+
+function serializeSensorModel(row, options = {}) {
+    const parameters = parseJsonColumn(row.parameters, []);
+    const result = {
+        id: row.id,
+        slug: row.slug,
+        version: row.version,
+        name: row.name,
+        manufacturer: row.manufacturer || null,
+        primary_type: row.primary_type,
+        labels: parseJsonColumn(row.labels, {}),
+        parameters_count: Number(row.parameters_count ?? parameters.length ?? 0),
+        notes: row.notes || null,
+        active: row.active === true || row.active === 1,
+        created_by: row.created_by || null,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+    };
+
+    if (options.includeParameters) {
+        result.parameters = parameters;
+    }
+
+    return result;
+}
+
+function serializeCropProfile(row) {
+    return {
+        id: row.id,
+        slug: row.slug,
+        version: row.version,
+        crop_key: row.crop_key,
+        medium: row.medium || null,
+        labels: parseJsonColumn(row.labels, {}),
+        description: parseJsonColumn(row.description, {}),
+        ranges: parseJsonColumn(row.ranges, {}),
+        active: row.active === true || row.active === 1,
+        created_by: row.created_by || null,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+    };
+}
+
+function parseRequiredPositiveInteger(value, fieldName) {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw createHttpError(400, `${fieldName} non valido`);
+    }
+    return parsed;
+}
+
+function parseOptionalPositiveInteger(value, fieldName) {
+    if (value === undefined || value === null || value === '') {
+        return null;
+    }
+    return parseRequiredPositiveInteger(value, fieldName);
+}
+
+function parseOptionalCoordinate(value, fieldName, min, max) {
+    if (value === undefined || value === null || value === '') {
+        return null;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+        throw createHttpError(400, `${fieldName} non valido`);
+    }
+    return parsed;
+}
+
+function normalizeAssignmentVisibility(value) {
+    const visibility = cleanCatalogText(value || 'private').toLowerCase() || 'private';
+    if (!['private', 'public'].includes(visibility)) {
+        throw createHttpError(400, 'visibility non valida');
+    }
+    return visibility;
+}
+
+function validateDeviceAssignmentPayload(body = {}) {
+    const latitude = parseOptionalCoordinate(body.latitude, 'latitude', -90, 90);
+    const longitude = parseOptionalCoordinate(body.longitude, 'longitude', -180, 180);
+    if ((latitude === null) !== (longitude === null)) {
+        throw createHttpError(400, 'latitude e longitude devono essere valorizzate insieme');
+    }
+
+    return {
+        clientId: parseRequiredPositiveInteger(body.client_id, 'client_id'),
+        site: cleanCatalogText(body.site) || null,
+        farm: cleanCatalogText(body.farm) || null,
+        zona: cleanCatalogText(body.zona) || null,
+        sensorModelId: parseRequiredPositiveInteger(body.sensor_model_id, 'sensor_model_id'),
+        cropProfileId: parseOptionalPositiveInteger(body.crop_profile_id, 'crop_profile_id'),
+        latitude,
+        longitude,
+        visibility: normalizeAssignmentVisibility(body.visibility),
+        internalNote: cleanCatalogText(body.internal_note) || null
+    };
+}
+
+function isActiveCatalogRow(row) {
+    return row?.active === true || row?.active === 1 || row?.active === '1';
+}
+
+function catalogLabel(labels = {}, fallback = '-') {
+    return labels.it || labels.fr || labels.en || labels.ar || fallback;
+}
+
+function normalizeComparableId(value) {
+    if (value === undefined || value === null || value === '') {
+        return null;
+    }
+    return String(value);
+}
+
+function isSamePhase2Assignment(device, payload) {
+    const metadata = parseJsonColumn(device.metadata, {});
+    const assignment = isPlainCatalogObject(metadata.assignment) ? metadata.assignment : {};
+    const assignedSource = assignment.source || metadata.assignment_source;
+    const assignedClientId = normalizeComparableId(device.user_id || assignment.client_id);
+    const assignedSensorModelId = normalizeComparableId(metadata.sensor_model_id || assignment.sensor_model_id);
+    const assignedCropProfileId = normalizeComparableId(metadata.crop_profile_id || assignment.crop_profile_id);
+
+    return assignedSource === DEVICE_ASSIGNMENT_SOURCE
+        && assignedClientId === normalizeComparableId(payload.clientId)
+        && assignedSensorModelId === normalizeComparableId(payload.sensorModelId)
+        && assignedCropProfileId === normalizeComparableId(payload.cropProfileId);
+}
+
+function buildDeviceAssignmentMetadataPatch(device, payload, adminUser) {
+    const patch = {
+        site: payload.site,
+        farm: payload.farm,
+        zona: payload.zona,
+        visibility: payload.visibility,
+        sensor_model_id: payload.sensorModelId,
+        crop_profile_id: payload.cropProfileId,
+        assignment: {
+            source: DEVICE_ASSIGNMENT_SOURCE,
+            assigned_at: new Date().toISOString(),
+            assigned_by: adminUser.id,
+            client_id: payload.clientId,
+            sensor_model_id: payload.sensorModelId,
+            crop_profile_id: payload.cropProfileId,
+            previous_user_id: device.user_id || null,
+            previous_status: device.status || null,
+            internal_note: payload.internalNote
+        }
+    };
+
+    if (payload.latitude !== null && payload.longitude !== null) {
+        patch.location = {
+            lat: payload.latitude,
+            lng: payload.longitude
+        };
+    }
+
+    return patch;
+}
+
+function buildSensorFromModelParameter(parameter, fallbackType) {
+    const labels = isPlainCatalogObject(parameter.label) ? parameter.label : {};
+    const type = cleanCatalogText(parameter.type) || fallbackType;
+    const subtype = cleanCatalogText(parameter.subtype);
+    const name = catalogLabel(labels, subtype || cleanCatalogText(parameter.key) || 'Sensore');
+    const unit = cleanCatalogText(parameter.unit);
+
+    if (!VALID_SENSOR_TYPES.has(type) || !subtype || !unit) {
+        throw createHttpError(400, 'Parametro modello sensore non valido');
+    }
+
+    return { type, subtype, name, unit };
+}
+
+function serializeAssignedDevice(row) {
+    return {
+        id: row.id,
+        device_id: row.device_id,
+        serial_number: row.device_id,
+        user_id: row.user_id,
+        client_id: row.user_id,
+        status: row.status,
+        metadata: parseJsonColumn(row.metadata, {}),
+        updated_at: row.updated_at || null
     };
 }
 
@@ -574,7 +939,9 @@ function buildDeviceWhereClause(req, flags) {
     }
 
     if (status === 'unassigned') {
-        where.push(`(d.user_id IS NULL OR d.status = 'unassigned')`);
+        where.push(isDeviceManagerPhase2Enabled()
+            ? 'd.user_id IS NULL'
+            : `(d.user_id IS NULL OR d.status = 'unassigned')`);
     } else if (['active', 'inactive', 'error'].includes(status)) {
         where.push('d.status = ?');
         params.push(status);
@@ -795,6 +1162,9 @@ async function buildAdminHealthPayload() { // RAYAT-FIX
         ...health, // RAYAT-FIX
         app: 'ok', // RAYAT-FIX
         uptimeSeconds: Math.floor(process.uptime()), // RAYAT-FIX
+        features: {
+            deviceManagerPhase2: isDeviceManagerPhase2Enabled()
+        },
         alertMonitoring, // RAYAT-FIX
         mqttDirect: { // RAYAT-FIX
             enabled: mqttConfig.enabled, // RAYAT-FIX
@@ -814,6 +1184,420 @@ router.get('/health', isAdminRole, async (_req, res) => { // RAYAT-FIX
         return sendAdminOperationalError(res, error); // RAYAT-FIX
     } // RAYAT-FIX
 }); // RAYAT-FIX
+
+// ─── DEVICE MANAGER PHASE 2 CATALOGS ─────────────────────────────────────────
+
+router.get('/sensor-models', requireDeviceManagerPhase2, isAdminRole, async (req, res) => {
+    try {
+        const { page, pageSize, offset } = parsePagination(req, 25);
+        const where = ['1 = 1'];
+        const params = [];
+        const active = parseActiveFilter(req.query.active);
+        const type = cleanCatalogText(req.query.type);
+        const searchTerm = cleanCatalogText(req.query.q);
+
+        if (active !== null) {
+            where.push('active = ?');
+            params.push(active);
+        }
+        if (type) {
+            if (!VALID_SENSOR_TYPES.has(type)) {
+                return sendAdminError(res, 400, 'Tipo sensore non valido');
+            }
+            where.push('primary_type = ?');
+            params.push(type);
+        }
+        if (searchTerm) {
+            const like = `%${searchTerm}%`;
+            where.push('(slug LIKE ? OR name LIKE ? OR COALESCE(manufacturer, \'\') LIKE ? OR labels::text LIKE ?)');
+            params.push(like, like, like, like);
+        }
+
+        const whereSql = where.join(' AND ');
+        const [countRow] = await query(
+            `SELECT COUNT(*) AS total
+             FROM sensor_models
+             WHERE ${whereSql}`,
+            params
+        );
+        const rows = await query(
+            `SELECT id,
+                    slug,
+                    version,
+                    name,
+                    manufacturer,
+                    primary_type,
+                    labels,
+                    jsonb_array_length(parameters) AS parameters_count,
+                    notes,
+                    active,
+                    created_by,
+                    created_at,
+                    updated_at
+             FROM sensor_models
+             WHERE ${whereSql}
+             ORDER BY active DESC, name ASC, id ASC
+             LIMIT ${offset}, ${pageSize}`,
+            params
+        );
+
+        res.json({
+            success: true,
+            data: rows.map((row) => serializeSensorModel(row)),
+            pagination: buildPaginationMeta(Number(countRow?.total || 0), page, pageSize)
+        });
+    } catch (error) {
+        if (error.statusCode) {
+            return sendAdminError(res, error.statusCode, error.message);
+        }
+        console.error('Get sensor models error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore nel recupero catalogo sensori'
+        });
+    }
+});
+
+router.get('/sensor-models/:id', requireDeviceManagerPhase2, isAdminRole, async (req, res) => {
+    try {
+        const modelId = parseRequiredPositiveInteger(req.params.id, 'id');
+        const rows = await query(
+            `SELECT id,
+                    slug,
+                    version,
+                    name,
+                    manufacturer,
+                    primary_type,
+                    labels,
+                    parameters,
+                    notes,
+                    active,
+                    created_by,
+                    created_at,
+                    updated_at
+             FROM sensor_models
+             WHERE id = ?
+             LIMIT 1`,
+            [modelId]
+        );
+
+        if (!rows.length) {
+            return sendAdminError(res, 404, 'Modello sensore non trovato');
+        }
+
+        res.json({
+            success: true,
+            data: serializeSensorModel(rows[0], { includeParameters: true })
+        });
+    } catch (error) {
+        if (error.statusCode) {
+            return sendAdminError(res, error.statusCode, error.message);
+        }
+        console.error('Get sensor model detail error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore nel recupero modello sensore'
+        });
+    }
+});
+
+router.post('/sensor-models', requireDeviceManagerPhase2, isAdminRole, isSuperAdmin, async (req, res) => {
+    try {
+        const payload = validateSensorModelPayload(req.body || {});
+        const result = await query(
+            `INSERT INTO sensor_models (
+                 slug,
+                 version,
+                 name,
+                 manufacturer,
+                 primary_type,
+                 labels,
+                 parameters,
+                 notes,
+                 active,
+                 created_by,
+                 created_at,
+                 updated_at
+             )
+             VALUES (?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?, ?, ?, NOW(), NOW())`,
+            [
+                payload.slug,
+                payload.version,
+                payload.name,
+                payload.manufacturer,
+                payload.primaryType,
+                JSON.stringify(payload.labels),
+                JSON.stringify(payload.parameters),
+                payload.notes,
+                payload.active,
+                req.adminUser.id
+            ]
+        );
+
+        res.status(201).json({
+            success: true,
+            id: result.insertId,
+            message: 'Modello sensore creato'
+        });
+    } catch (error) {
+        if (error.statusCode) {
+            return sendAdminError(res, error.statusCode, error.message);
+        }
+        if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
+            return sendAdminError(res, 409, 'Modello sensore già esistente');
+        }
+        console.error('Create sensor model error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore durante la creazione del modello sensore'
+        });
+    }
+});
+
+router.put('/sensor-models/:id', requireDeviceManagerPhase2, isAdminRole, isSuperAdmin, async (req, res) => {
+    try {
+        const modelId = parseRequiredPositiveInteger(req.params.id, 'id');
+        const payload = validateSensorModelPayload(req.body || {});
+        const existingRows = await query(
+            `SELECT id, parameters
+             FROM sensor_models
+             WHERE id = ?
+             LIMIT 1`,
+            [modelId]
+        );
+        if (!existingRows.length) {
+            return sendAdminError(res, 404, 'Modello sensore non trovato');
+        }
+
+        const existingParameters = parseJsonColumn(existingRows[0].parameters, []);
+        if (stableStringify(existingParameters) !== stableStringify(payload.parameters)) {
+            const usedRows = await query(
+                `SELECT id
+                 FROM devices
+                 WHERE metadata->>'sensor_model_id' = ?
+                    OR metadata->'assignment'->>'sensor_model_id' = ?
+                 LIMIT 1`,
+                [String(modelId), String(modelId)]
+            );
+            if (usedRows.length) {
+                return sendAdminError(
+                    res,
+                    409,
+                    'Il modello è già usato da almeno un device: crea una nuova versione invece di sovrascrivere la mappa registri.'
+                );
+            }
+        }
+
+        await query(
+            `UPDATE sensor_models
+             SET slug = ?,
+                 version = ?,
+                 name = ?,
+                 manufacturer = ?,
+                 primary_type = ?,
+                 labels = ?::jsonb,
+                 parameters = ?::jsonb,
+                 notes = ?,
+                 active = ?,
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [
+                payload.slug,
+                payload.version,
+                payload.name,
+                payload.manufacturer,
+                payload.primaryType,
+                JSON.stringify(payload.labels),
+                JSON.stringify(payload.parameters),
+                payload.notes,
+                payload.active,
+                modelId
+            ]
+        );
+
+        res.json({
+            success: true,
+            message: 'Modello sensore aggiornato'
+        });
+    } catch (error) {
+        if (error.statusCode) {
+            return sendAdminError(res, error.statusCode, error.message);
+        }
+        if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
+            return sendAdminError(res, 409, 'Slug/versione già esistenti');
+        }
+        console.error('Update sensor model error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore durante l\'aggiornamento del modello sensore'
+        });
+    }
+});
+
+router.get('/crop-profiles', requireDeviceManagerPhase2, isAdminRole, async (req, res) => {
+    try {
+        const { page, pageSize, offset } = parsePagination(req, 25);
+        const where = ['1 = 1'];
+        const params = [];
+        const active = parseActiveFilter(req.query.active);
+        const searchTerm = cleanCatalogText(req.query.q);
+
+        if (active !== null) {
+            where.push('active = ?');
+            params.push(active);
+        }
+        if (searchTerm) {
+            const like = `%${searchTerm}%`;
+            where.push('(slug LIKE ? OR crop_key LIKE ? OR COALESCE(medium, \'\') LIKE ? OR labels::text LIKE ?)');
+            params.push(like, like, like, like);
+        }
+
+        const whereSql = where.join(' AND ');
+        const [countRow] = await query(
+            `SELECT COUNT(*) AS total
+             FROM crop_profiles
+             WHERE ${whereSql}`,
+            params
+        );
+        const rows = await query(
+            `SELECT id,
+                    slug,
+                    version,
+                    crop_key,
+                    medium,
+                    labels,
+                    description,
+                    ranges,
+                    active,
+                    created_by,
+                    created_at,
+                    updated_at
+             FROM crop_profiles
+             WHERE ${whereSql}
+             ORDER BY active DESC, crop_key ASC, id ASC
+             LIMIT ${offset}, ${pageSize}`,
+            params
+        );
+
+        res.json({
+            success: true,
+            data: rows.map((row) => serializeCropProfile(row)),
+            pagination: buildPaginationMeta(Number(countRow?.total || 0), page, pageSize)
+        });
+    } catch (error) {
+        if (error.statusCode) {
+            return sendAdminError(res, error.statusCode, error.message);
+        }
+        console.error('Get crop profiles error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore nel recupero catalogo colture'
+        });
+    }
+});
+
+router.post('/crop-profiles', requireDeviceManagerPhase2, isAdminRole, isSuperAdmin, async (req, res) => {
+    try {
+        const payload = validateCropProfilePayload(req.body || {});
+        const result = await query(
+            `INSERT INTO crop_profiles (
+                 slug,
+                 version,
+                 crop_key,
+                 medium,
+                 labels,
+                 description,
+                 ranges,
+                 active,
+                 created_by,
+                 created_at,
+                 updated_at
+             )
+             VALUES (?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, NOW(), NOW())`,
+            [
+                payload.slug,
+                payload.version,
+                payload.cropKey,
+                payload.medium,
+                JSON.stringify(payload.labels),
+                JSON.stringify(payload.description),
+                JSON.stringify(payload.ranges),
+                payload.active,
+                req.adminUser.id
+            ]
+        );
+
+        res.status(201).json({
+            success: true,
+            id: result.insertId,
+            message: 'Profilo coltura creato'
+        });
+    } catch (error) {
+        if (error.statusCode) {
+            return sendAdminError(res, error.statusCode, error.message);
+        }
+        if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
+            return sendAdminError(res, 409, 'Profilo coltura già esistente');
+        }
+        console.error('Create crop profile error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore durante la creazione del profilo coltura'
+        });
+    }
+});
+
+router.put('/crop-profiles/:id', requireDeviceManagerPhase2, isAdminRole, isSuperAdmin, async (req, res) => {
+    try {
+        const profileId = parseRequiredPositiveInteger(req.params.id, 'id');
+        const payload = validateCropProfilePayload(req.body || {});
+        const existingRows = await query(
+            `SELECT id
+             FROM crop_profiles
+             WHERE id = ?
+             LIMIT 1`,
+            [profileId]
+        );
+        if (!existingRows.length) {
+            return sendAdminError(res, 404, 'Profilo coltura non trovato');
+        }
+
+        await query(
+            `UPDATE crop_profiles
+             SET slug = ?,
+                 version = ?,
+                 crop_key = ?,
+                 medium = ?,
+                 labels = ?::jsonb,
+                 description = ?::jsonb,
+                 ranges = ?::jsonb,
+                 active = ?,
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [
+                payload.slug,
+                payload.version,
+                payload.cropKey,
+                payload.medium,
+                JSON.stringify(payload.labels),
+                JSON.stringify(payload.description),
+                JSON.stringify(payload.ranges),
+                payload.active,
+                profileId
+            ]
+        );
+
+        res.json({
+            success: true,
+            message: 'Profilo coltura aggiornato'
+        });
+    } catch (error) {
+        if (error.statusCode) {
+            return sendAdminError(res, error.statusCode, error.message);
+        }
+        if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
+            return sendAdminError(res, 409, 'Slug/versione già esistenti');
+        }
+        console.error('Update crop profile error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore durante l\'aggiornamento del profilo coltura'
+        });
+    }
+});
 
 // ─── AUTH ──────────────────────────────────────────────────────────────────────
 
@@ -861,6 +1645,9 @@ router.post('/login', async (req, res) => {
         res.json({
             success: true,
             token,
+            features: {
+                deviceManagerPhase2: isDeviceManagerPhase2Enabled()
+            },
             user: {
                 id: user.id,
                 email: user.email,
@@ -919,6 +1706,9 @@ router.get('/session', async (req, res) => {
         res.json({
             success: true,
             token: nextToken,
+            features: {
+                deviceManagerPhase2: isDeviceManagerPhase2Enabled()
+            },
             user: {
                 id: adminUser.id,
                 email: adminUser.email,
@@ -2173,6 +2963,170 @@ router.post('/clients/:id/devices', isAdminRole, async (req, res) => {
         }
         console.error('Create device for client error:', error);
         res.status(500).json({ error: 'Errore durante la creazione' });
+    }
+});
+
+router.post('/devices/:id/assign', requireDeviceManagerPhase2, isAdminRole, isSuperAdmin, async (req, res) => {
+    try {
+        const deviceId = parseRequiredPositiveInteger(req.params.id, 'device_id');
+        const payload = validateDeviceAssignmentPayload(req.body || {});
+
+        const result = await withTransaction(async (connection) => {
+            const executor = createExecutor(connection);
+            const deviceRows = await executor(
+                `SELECT id,
+                        device_id,
+                        user_id,
+                        status,
+                        metadata,
+                        updated_at
+                 FROM devices
+                 WHERE id = ?
+                 FOR UPDATE`,
+                [deviceId]
+            );
+
+            if (!deviceRows.length) {
+                throw createHttpError(404, 'Dispositivo non trovato');
+            }
+
+            const device = deviceRows[0];
+            if (device.user_id !== null && device.user_id !== undefined) {
+                if (isSamePhase2Assignment(device, payload)) {
+                    return {
+                        success: true,
+                        device: serializeAssignedDevice(device),
+                        created_sensors: [],
+                        already_assigned: true
+                    };
+                }
+                throw createHttpError(409, 'Dispositivo già assegnato');
+            }
+
+            await ensureClientExists(payload.clientId, executor);
+
+            const modelRows = await executor(
+                `SELECT id,
+                        slug,
+                        version,
+                        name,
+                        primary_type,
+                        labels,
+                        parameters,
+                        active
+                 FROM sensor_models
+                 WHERE id = ?
+                 LIMIT 1`,
+                [payload.sensorModelId]
+            );
+            if (!modelRows.length || !isActiveCatalogRow(modelRows[0])) {
+                throw createHttpError(404, 'Modello sensore attivo non trovato');
+            }
+
+            if (payload.cropProfileId) {
+                const cropRows = await executor(
+                    `SELECT id, active
+                     FROM crop_profiles
+                     WHERE id = ?
+                     LIMIT 1`,
+                    [payload.cropProfileId]
+                );
+                if (!cropRows.length || !isActiveCatalogRow(cropRows[0])) {
+                    throw createHttpError(404, 'Profilo coltura attivo non trovato');
+                }
+            }
+
+            const model = modelRows[0];
+            const parameters = parseJsonColumn(model.parameters, []);
+            if (!Array.isArray(parameters) || !parameters.length) {
+                throw createHttpError(409, 'Il modello sensore non contiene parametri');
+            }
+
+            const metadataPatch = buildDeviceAssignmentMetadataPatch(device, payload, req.adminUser);
+            await executor(
+                `UPDATE devices
+                 SET user_id = ?,
+                     status = 'active',
+                     metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb,
+                     updated_at = NOW()
+                 WHERE id = ?`,
+                [
+                    payload.clientId,
+                    JSON.stringify(metadataPatch),
+                    deviceId
+                ]
+            );
+
+            const createdSensors = [];
+            const orderedParameters = parameters
+                .slice()
+                .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+            for (const parameter of orderedParameters) {
+                const sensor = buildSensorFromModelParameter(parameter, model.primary_type);
+                const existingSensors = await executor(
+                    `SELECT id
+                     FROM sensors
+                     WHERE device_id = ?
+                       AND type = ?
+                       AND subtype = ?
+                     LIMIT 1`,
+                    [deviceId, sensor.type, sensor.subtype]
+                );
+                if (existingSensors.length) {
+                    continue;
+                }
+
+                const sensorResult = await executor(
+                    `INSERT INTO sensors (device_id, type, subtype, name, unit, enabled)
+                     VALUES (?, ?, ?, ?, ?, TRUE)`,
+                    [deviceId, sensor.type, sensor.subtype, sensor.name, sensor.unit]
+                );
+                createdSensors.push({
+                    id: sensorResult.insertId || null,
+                    device_id: deviceId,
+                    type: sensor.type,
+                    subtype: sensor.subtype,
+                    name: sensor.name,
+                    unit: sensor.unit
+                });
+            }
+
+            const updatedRows = await executor(
+                `SELECT id,
+                        device_id,
+                        user_id,
+                        status,
+                        metadata,
+                        updated_at
+                 FROM devices
+                 WHERE id = ?
+                 LIMIT 1`,
+                [deviceId]
+            );
+
+            return {
+                success: true,
+                device: serializeAssignedDevice(updatedRows[0] || {
+                    ...device,
+                    user_id: payload.clientId,
+                    status: 'active',
+                    metadata: metadataPatch
+                }),
+                created_sensors: createdSensors,
+                already_assigned: false
+            };
+        });
+
+        return res.json(result);
+    } catch (error) {
+        if (error.statusCode) {
+            return sendAdminError(res, error.statusCode, error.message);
+        }
+        console.error('Assign device error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore durante l\'assegnazione del dispositivo'
+        });
     }
 });
 

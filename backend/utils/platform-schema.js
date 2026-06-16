@@ -369,6 +369,53 @@ async function ensureCoreTables(changes) {
   ) {
     changes.push('analytics_events table');
   }
+
+  if (
+    await ensureTable(
+      'sensor_models',
+      `CREATE TABLE IF NOT EXISTS sensor_models (
+         id SERIAL PRIMARY KEY,
+         slug VARCHAR(120) NOT NULL,
+         version VARCHAR(40) NOT NULL DEFAULT '1',
+         name TEXT NOT NULL,
+         manufacturer TEXT NULL,
+         primary_type VARCHAR(32) NOT NULL,
+         labels JSONB NOT NULL DEFAULT '{}'::jsonb,
+         parameters JSONB NOT NULL,
+         notes TEXT NULL,
+         active BOOLEAN NOT NULL DEFAULT TRUE,
+         created_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         UNIQUE (slug, version)
+       )`
+    )
+  ) {
+    changes.push('sensor_models table');
+  }
+
+  if (
+    await ensureTable(
+      'crop_profiles',
+      `CREATE TABLE IF NOT EXISTS crop_profiles (
+         id SERIAL PRIMARY KEY,
+         slug VARCHAR(120) NOT NULL,
+         version VARCHAR(40) NOT NULL DEFAULT '1',
+         crop_key VARCHAR(120) NOT NULL,
+         medium VARCHAR(120) NULL,
+         labels JSONB NOT NULL,
+         description JSONB NOT NULL DEFAULT '{}'::jsonb,
+         ranges JSONB NOT NULL,
+         active BOOLEAN NOT NULL DEFAULT TRUE,
+         created_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         UNIQUE (slug, version)
+       )`
+    )
+  ) {
+    changes.push('crop_profiles table');
+  }
 }
 
 async function ensurePlatformSchema() {
@@ -530,6 +577,42 @@ async function ensurePlatformSchema() {
     )
   ) {
     changes.push('idx_analytics_events_anonymous_id');
+  }
+  if (
+    await ensureIndex(
+      'sensor_models',
+      'idx_sensor_models_active_type',
+      'CREATE INDEX idx_sensor_models_active_type ON sensor_models (active, primary_type)'
+    )
+  ) {
+    changes.push('idx_sensor_models_active_type');
+  }
+  if (
+    await ensureIndex(
+      'sensor_models',
+      'idx_sensor_models_parameters_gin',
+      'CREATE INDEX idx_sensor_models_parameters_gin ON sensor_models USING GIN (parameters)'
+    )
+  ) {
+    changes.push('idx_sensor_models_parameters_gin');
+  }
+  if (
+    await ensureIndex(
+      'crop_profiles',
+      'idx_crop_profiles_active_crop',
+      'CREATE INDEX idx_crop_profiles_active_crop ON crop_profiles (active, crop_key)'
+    )
+  ) {
+    changes.push('idx_crop_profiles_active_crop');
+  }
+  if (
+    await ensureIndex(
+      'crop_profiles',
+      'idx_crop_profiles_ranges_gin',
+      'CREATE INDEX idx_crop_profiles_ranges_gin ON crop_profiles USING GIN (ranges)'
+    )
+  ) {
+    changes.push('idx_crop_profiles_ranges_gin');
   }
   if (
     await ensureIndex(
