@@ -112,6 +112,8 @@ async function ensureCoreTables(changes) {
          verification_code VARCHAR(10),
          is_verified BOOLEAN DEFAULT FALSE,
          role VARCHAR(32) NOT NULL DEFAULT 'client',
+         owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+         customer_role VARCHAR(32) DEFAULT 'owner',
          client_code VARCHAR(20),
          payment_status VARCHAR(20) DEFAULT 'non_pagato',
          payment_date TIMESTAMPTZ NULL,
@@ -369,6 +371,53 @@ async function ensureCoreTables(changes) {
   ) {
     changes.push('analytics_events table');
   }
+
+  if (
+    await ensureTable(
+      'sensor_models',
+      `CREATE TABLE IF NOT EXISTS sensor_models (
+         id SERIAL PRIMARY KEY,
+         slug VARCHAR(120) NOT NULL,
+         version VARCHAR(40) NOT NULL DEFAULT '1',
+         name TEXT NOT NULL,
+         manufacturer TEXT NULL,
+         primary_type VARCHAR(32) NOT NULL,
+         labels JSONB NOT NULL DEFAULT '{}'::jsonb,
+         parameters JSONB NOT NULL,
+         notes TEXT NULL,
+         active BOOLEAN NOT NULL DEFAULT TRUE,
+         created_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         UNIQUE (slug, version)
+       )`
+    )
+  ) {
+    changes.push('sensor_models table');
+  }
+
+  if (
+    await ensureTable(
+      'crop_profiles',
+      `CREATE TABLE IF NOT EXISTS crop_profiles (
+         id SERIAL PRIMARY KEY,
+         slug VARCHAR(120) NOT NULL,
+         version VARCHAR(40) NOT NULL DEFAULT '1',
+         crop_key VARCHAR(120) NOT NULL,
+         medium VARCHAR(120) NULL,
+         labels JSONB NOT NULL,
+         description JSONB NOT NULL DEFAULT '{}'::jsonb,
+         ranges JSONB NOT NULL,
+         active BOOLEAN NOT NULL DEFAULT TRUE,
+         created_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+         UNIQUE (slug, version)
+       )`
+    )
+  ) {
+    changes.push('crop_profiles table');
+  }
 }
 
 async function ensurePlatformSchema() {
@@ -423,6 +472,12 @@ async function ensurePlatformSchema() {
   if (await ensureColumn('users', 'profile_updated_at', 'TIMESTAMPTZ')) {
     changes.push('users.profile_updated_at');
   }
+  if (await ensureColumn('users', 'owner_user_id', 'INTEGER NULL REFERENCES users(id) ON DELETE CASCADE')) {
+    changes.push('users.owner_user_id');
+  }
+  if (await ensureColumn('users', 'customer_role', "VARCHAR(32) DEFAULT 'owner'")) {
+    changes.push('users.customer_role');
+  }
 
   await query(
     `UPDATE users
@@ -459,6 +514,15 @@ async function ensurePlatformSchema() {
      SET approved_at = created_at
      WHERE registration_status = 'active'
        AND approved_at IS NULL`
+  );
+  await query(
+    `UPDATE users
+     SET customer_role = CASE
+         WHEN owner_user_id IS NULL THEN 'owner'
+         ELSE 'viewer'
+       END
+     WHERE role IN ('client', 'farmer')
+       AND (customer_role IS NULL OR customer_role = '' OR customer_role = 'owner')`
   );
   await query(
     `UPDATE users
@@ -533,12 +597,57 @@ async function ensurePlatformSchema() {
   }
   if (
     await ensureIndex(
+      'sensor_models',
+      'idx_sensor_models_active_type',
+      'CREATE INDEX idx_sensor_models_active_type ON sensor_models (active, primary_type)'
+    )
+  ) {
+    changes.push('idx_sensor_models_active_type');
+  }
+  if (
+    await ensureIndex(
+      'sensor_models',
+      'idx_sensor_models_parameters_gin',
+      'CREATE INDEX idx_sensor_models_parameters_gin ON sensor_models USING GIN (parameters)'
+    )
+  ) {
+    changes.push('idx_sensor_models_parameters_gin');
+  }
+  if (
+    await ensureIndex(
+      'crop_profiles',
+      'idx_crop_profiles_active_crop',
+      'CREATE INDEX idx_crop_profiles_active_crop ON crop_profiles (active, crop_key)'
+    )
+  ) {
+    changes.push('idx_crop_profiles_active_crop');
+  }
+  if (
+    await ensureIndex(
+      'crop_profiles',
+      'idx_crop_profiles_ranges_gin',
+      'CREATE INDEX idx_crop_profiles_ranges_gin ON crop_profiles USING GIN (ranges)'
+    )
+  ) {
+    changes.push('idx_crop_profiles_ranges_gin');
+  }
+  if (
+    await ensureIndex(
       'users',
       'idx_users_role_active_created',
       'CREATE INDEX idx_users_role_active_created ON users (role, active, created_at)'
     )
   ) {
     changes.push('idx_users_role_active_created');
+  }
+  if (
+    await ensureIndex(
+      'users',
+      'idx_users_owner_user_id',
+      'CREATE INDEX idx_users_owner_user_id ON users (owner_user_id)'
+    )
+  ) {
+    changes.push('idx_users_owner_user_id');
   }
   if (
     await ensureIndex(

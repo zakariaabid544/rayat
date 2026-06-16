@@ -2,6 +2,7 @@ const express = require('express');
 
 const { query } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
+const { resolveCustomerScope } = require('../utils/customer-access');
 const { sendDatabaseAwareError } = require('../utils/database-http');
 const { ingestDeviceReadings, prepareIncomingSensorPayload } = require('../utils/sensor-ingest');
 
@@ -88,7 +89,7 @@ router.get('/devices', authenticateToken, async (req, res) => {
              ) sm ON sm.device_id = d.id
              WHERE d.user_id = ?
              ORDER BY d.created_at DESC, d.id DESC`,
-            [req.user.id]
+            [resolveCustomerScope(req.user)]
         );
 
         res.json({

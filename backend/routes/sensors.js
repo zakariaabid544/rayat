@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
-const { authenticateToken, checkSubscription } = require('../middleware/auth');
+const { authenticateToken, checkSubscription, requireCustomerPermission } = require('../middleware/auth');
 const { upsertAlarmEvent, resolveAlarmEvent } = require('../utils/alerts');
+const { isPrivilegedAdminRole } = require('../utils/admin-auth');
+const { resolveCustomerScope } = require('../utils/customer-access');
 const {
     VALID_SENSOR_TYPES,
     createHttpError,
@@ -23,6 +25,32 @@ const { cleanString, parseGatewaySignalUpdate, parseSensorUpdate } = require('..
 
 const DEFAULT_BRIDGE_TOKEN_HEADER = 'x-rayat-bridge-token';
 const SENSOR_UPDATE_UNAUTHORIZED = { error: 'Non autorizzato' }; // RAYAT-FIX
+const DEFAULT_PRIVATE_SENSOR_TOPIC_PREFIXES = ['sensors/GW-002/'];
+
+function getPrivateSensorTopicPrefixes() {
+    const configured = cleanString(process.env.PRIVATE_SENSOR_TOPIC_PREFIXES);
+    if (!configured) {
+        return DEFAULT_PRIVATE_SENSOR_TOPIC_PREFIXES;
+    }
+
+    return configured
+        .split(',')
+        .map((prefix) => cleanString(prefix))
+        .filter(Boolean);
+}
+
+function appendPrivateTopicExclusion(sql, params, columnName = 'topic') {
+    let nextSql = sql;
+    getPrivateSensorTopicPrefixes().forEach((prefix) => {
+        nextSql += ` AND (${columnName} IS NULL OR ${columnName} NOT LIKE ?)`;
+        params.push(`${prefix}%`);
+    });
+    return nextSql;
+}
+
+function resolveSensorScopeUserId(user = {}) {
+    return isPrivilegedAdminRole(user.role) ? null : resolveCustomerScope(user);
+}
 
 function parseNumericValue(value) {
     const numeric = Number.parseFloat(value);
@@ -278,9 +306,12 @@ function compareGatewayStatusCandidates(left = {}, right = {}) { // RAYAT-FIX
 }
 
 async function getPublicSensorDataLastAt() { // RAYAT-FIX
-    const rows = await query( // RAYAT-FIX
-        `SELECT MAX(timestamp) AS sensor_data_last_at FROM public_sensor_latest` // RAYAT-FIX
+    const params = []; // RAYAT-FIX
+    const sql = appendPrivateTopicExclusion( // RAYAT-FIX
+        'SELECT MAX(timestamp) AS sensor_data_last_at FROM public_sensor_latest WHERE 1 = 1', // RAYAT-FIX
+        params // RAYAT-FIX
     ); // RAYAT-FIX
+    const rows = await query(sql, params); // RAYAT-FIX
     return normalizeGatewayTimestamp(rows[0]?.sensor_data_last_at); // RAYAT-FIX
 } // RAYAT-FIX
 
@@ -333,8 +364,7 @@ async function resolveGatewayStatusPayload(options = {}) { // RAYAT-FIX
 router.get('/public/latest', async (_req, res) => {
     try {
         const offlineIntervalLiteral = getPostgresMinuteIntervalLiteral(getOfflineAfterMinutes());
-        const rows = await query(
-            `SELECT
+        let sql = `SELECT
                 sensor_type AS type,
                 sensor_subtype AS subtype,
                 value,
@@ -345,8 +375,11 @@ router.get('/public/latest', async (_req, res) => {
                     ELSE 'offline'
                 END AS online_status
              FROM public_sensor_latest
-             ORDER BY sensor_type ASC, sensor_subtype ASC`
-        );
+             WHERE 1 = 1`;
+        const params = [];
+        sql = appendPrivateTopicExclusion(sql, params);
+        sql += ' ORDER BY sensor_type ASC, sensor_subtype ASC';
+        const rows = await query(sql, params);
         const normalizedRows = normalizeSoilReadingPairs(rows, { includeTimestamp: true });
 
         res.json({
@@ -399,6 +432,8 @@ router.get('/public/history', async (req, res) => {
               AND timestamp <= ?
         `;
         const params = [sensorType, startDate, endDate];
+
+        sql = appendPrivateTopicExclusion(sql, params);
 
         if (subtype) {
             sql += ' AND sensor_subtype = ?';
@@ -541,7 +576,7 @@ router.post('/update', async (req, res) => {
 
 router.get('/status', authenticateToken, checkSubscription, async (req, res) => { // RAYAT-FIX
     try { // RAYAT-FIX
-        res.json(await resolveGatewayStatusPayload({ userId: req.user.id })); // RAYAT-FIX
+        res.json(await resolveGatewayStatusPayload({ userId: resolveSensorScopeUserId(req.user) })); // RAYAT-FIX
     } catch (error) { // RAYAT-FIX
         console.error('Get gateway status error:', error); // RAYAT-FIX
         return sendDatabaseAwareError(res, error, {
@@ -554,11 +589,11 @@ router.get('/status', authenticateToken, checkSubscription, async (req, res) => 
 // GET /api/sensors/latest - Ultimi dati di tutti i sensori dell'utente
 router.get('/latest', authenticateToken, checkSubscription, async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = resolveSensorScopeUserId(req.user);
         const offlineIntervalLiteral = getPostgresMinuteIntervalLiteral(getOfflineAfterMinutes());
 
-        const sql = `
-  SELECT 
+        let sql = `
+	  SELECT
     s.id as sensor_id,
     s.type,
     s.subtype,
@@ -578,12 +613,16 @@ router.get('/latest', authenticateToken, checkSubscription, async (req, res) => 
   FROM sensors s
   INNER JOIN devices d ON s.device_id = d.id
   LEFT JOIN sensor_latest sl ON s.id = sl.sensor_id
-  WHERE d.user_id = ? 
-    AND s.enabled = TRUE
-  ORDER BY s.type, s.subtype
-`;
+	  WHERE s.enabled = TRUE
+	`;
+        const params = [];
+        if (userId) {
+            sql += ' AND d.user_id = ?';
+            params.push(userId);
+        }
+        sql += ' ORDER BY s.type, s.subtype';
 
-        const readings = normalizeSoilReadingPairs(await query(sql, [userId]), { includeTimestamp: true });
+        const readings = normalizeSoilReadingPairs(await query(sql, params), { includeTimestamp: true });
 
         // Raggruppa per tipo di sensore per frontend
         const grouped = {
@@ -621,12 +660,12 @@ router.get('/latest', authenticateToken, checkSubscription, async (req, res) => 
 // GET /api/sensors/:type/latest - Ultimi dati di un tipo di sensore specifico
 router.get('/:type/latest', authenticateToken, checkSubscription, async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = resolveSensorScopeUserId(req.user);
         const sensorType = req.params.type;
         const offlineIntervalLiteral = getPostgresMinuteIntervalLiteral(getOfflineAfterMinutes());
 
-        const sql = `
-      SELECT 
+        let sql = `
+	      SELECT
         s.id as sensor_id,
         s.type,
         s.subtype,
@@ -646,12 +685,16 @@ router.get('/:type/latest', authenticateToken, checkSubscription, async (req, re
       FROM sensors s
       INNER JOIN devices d ON s.device_id = d.id
       INNER JOIN sensor_latest sl ON s.id = sl.sensor_id
-      WHERE d.user_id = ? 
-        AND s.type = ?
-        AND s.enabled = TRUE
-    `;
+	      WHERE s.type = ?
+	        AND s.enabled = TRUE
+	    `;
+        const params = [sensorType];
+        if (userId) {
+            sql += ' AND d.user_id = ?';
+            params.push(userId);
+        }
 
-        const readings = normalizeSoilReadingPairs(await query(sql, [userId, sensorType]), { includeTimestamp: true });
+        const readings = normalizeSoilReadingPairs(await query(sql, params), { includeTimestamp: true });
         res.json({
             success: true,
             data: readings,
@@ -670,13 +713,13 @@ router.get('/:type/latest', authenticateToken, checkSubscription, async (req, re
 // GET /api/sensors/:type/history - Storico sensore (ultimi N giorni)
 router.get('/:type/history', authenticateToken, checkSubscription, async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = resolveSensorScopeUserId(req.user);
         const sensorType = req.params.type;
         const subtype = req.query.subtype; // Opzionale per sensori multi-parametro
         const { startDate, endDate } = resolveHistoryRange(req.query);
 
         let sql = `
-      SELECT 
+      SELECT
         sr.value,
         sr.timestamp,
         s.subtype,
@@ -684,13 +727,16 @@ router.get('/:type/history', authenticateToken, checkSubscription, async (req, r
       FROM sensor_readings sr
       INNER JOIN sensors s ON sr.sensor_id = s.id
       INNER JOIN devices d ON s.device_id = d.id
-      WHERE d.user_id = ? 
-        AND s.type = ?
-        AND sr.timestamp >= ?
-        AND sr.timestamp <= ?
-    `;
+	      WHERE s.type = ?
+	        AND sr.timestamp >= ?
+	        AND sr.timestamp <= ?
+	    `;
 
-        const params = [userId, sensorType, startDate, endDate];
+        const params = [sensorType, startDate, endDate];
+        if (userId) {
+            sql += ' AND d.user_id = ?';
+            params.push(userId);
+        }
 
         // Se specificato subtype (es: terreno_moisture)
         if (subtype) {
@@ -731,10 +777,10 @@ router.get('/:type/history', authenticateToken, checkSubscription, async (req, r
 // GET /api/sensors/alerts - Allarmi attivi
 router.get('/alerts', authenticateToken, checkSubscription, async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = resolveCustomerScope(req.user);
 
         const sql = `
-      SELECT 
+      SELECT
         aa.id,
         aa.alert_type,
         aa.message,
@@ -747,7 +793,7 @@ router.get('/alerts', authenticateToken, checkSubscription, async (req, res) => 
         s.name as sensor_name
       FROM active_alerts aa
       INNER JOIN sensors s ON aa.sensor_id = s.id
-      WHERE aa.user_id = ? 
+      WHERE aa.user_id = ?
         AND aa.acknowledged = FALSE
       ORDER BY aa.created_at DESC
     `;
@@ -765,9 +811,9 @@ router.get('/alerts', authenticateToken, checkSubscription, async (req, res) => 
 });
 
 // POST /api/sensors/alarm-events/sync - Sincronizza alert crop-aware dalla dashboard
-router.post('/alarm-events/sync', authenticateToken, checkSubscription, async (req, res) => {
+router.post('/alarm-events/sync', authenticateToken, checkSubscription, requireCustomerPermission('acknowledge_alerts'), async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = resolveCustomerScope(req.user);
         const incomingEvents = Array.isArray(req.body.events) ? req.body.events.slice(0, 50) : [];
 
         for (const event of incomingEvents) {
@@ -822,9 +868,9 @@ router.post('/alarm-events/sync', authenticateToken, checkSubscription, async (r
 });
 
 // POST /api/sensors/alerts/:id/acknowledge - Conferma lettura allarme
-router.post('/alerts/:id/acknowledge', authenticateToken, checkSubscription, async (req, res) => {
+router.post('/alerts/:id/acknowledge', authenticateToken, checkSubscription, requireCustomerPermission('acknowledge_alerts'), async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = resolveCustomerScope(req.user);
         const alertId = req.params.id;
 
         await query(
@@ -846,7 +892,7 @@ router.post('/alerts/:id/acknowledge', authenticateToken, checkSubscription, asy
 // GET /api/sensors/thresholds - Ottieni soglie allarmi utente
 router.get('/thresholds', authenticateToken, checkSubscription, async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = resolveCustomerScope(req.user);
 
         const thresholds = await query(
             'SELECT * FROM alert_thresholds WHERE user_id = ? AND enabled = TRUE',
@@ -865,9 +911,9 @@ router.get('/thresholds', authenticateToken, checkSubscription, async (req, res)
 });
 
 // PUT /api/sensors/thresholds - Aggiorna soglie allarmi
-router.put('/thresholds', authenticateToken, checkSubscription, async (req, res) => {
+router.put('/thresholds', authenticateToken, checkSubscription, requireCustomerPermission('modify_settings'), async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = resolveCustomerScope(req.user);
         const { thresholds } = req.body; // Array di soglie
 
         // Elimina soglie esistenti

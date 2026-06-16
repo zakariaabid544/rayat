@@ -230,7 +230,7 @@ async function startServer() {
 
         if (!dbConnected) {
             console.warn('⚠️  ATTENZIONE: Database non connesso. Alcune funzionalità potrebbero non funzionare.');
-            console.warn('   Verifica DATABASE_URL e assicurati che PostgreSQL Render sia raggiungibile.');
+            console.warn('   Verifica DATABASE_URL e assicurati che PostgreSQL sia raggiungibile sul server configurato.');
         } else {
             try {
                 const schemaChanges = await ensurePlatformSchema();

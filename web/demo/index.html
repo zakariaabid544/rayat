@@ -1,0 +1,8 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Rayat Demo Live</title>
+<script>
+  const query = new URLSearchParams(window.location.search);
+  query.set('view', 'demo');
+  window.location.replace(`/index.html?${query.toString()}${window.location.hash}`);
+</script>

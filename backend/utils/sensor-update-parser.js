@@ -63,7 +63,15 @@ function parseTopicSegments(topic) {
 
 function normalizeGatewaySignalEvent(value) {
     const normalizedEvent = cleanString(value).toLowerCase();
-    return normalizedEvent === 'boot' || normalizedEvent === 'heartbeat' ? normalizedEvent : '';
+    if (normalizedEvent === 'boot' || normalizedEvent === 'heartbeat') {
+        return normalizedEvent;
+    }
+
+    if (['ping', 'pong', 'keepalive', 'keep_alive', 'alive'].includes(normalizedEvent)) {
+        return 'heartbeat';
+    }
+
+    return '';
 }
 
 function normalizeKey(value) {
@@ -210,11 +218,13 @@ function parseGatewaySignalUpdate(body = {}) {
         || source.signal
         || source.eventType
         || source.event_type
+        || source.value
         || payloadObject?.event
         || payloadObject?.gateway_event
         || payloadObject?.signal
         || payloadObject?.eventType
         || payloadObject?.event_type
+        || payloadObject?.value
         || topicEvent
     );
 

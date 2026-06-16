@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'rayat-test-secret';
 process.env.MQTT_INGEST_TOKEN = process.env.MQTT_INGEST_TOKEN || 'rayat-test-ingest-token'; // RAYAT-FIX
 process.env.SENSOR_AGGREGATION_WINDOW_SECONDS = '0.05'; // RAYAT-FIX
+process.env.DEVICE_MANAGER_PHASE2_ENABLED = 'false';
 
 const state = {
   users: [
@@ -22,12 +23,49 @@ const state = {
       payment_status: 'pagato',
       payment_date: null,
       subscription_expiry: null,
+      owner_user_id: null,
+      customer_role: null,
+      registration_status: 'active',
+      registration_source: 'admin',
+      approved_at: '2026-03-22 10:00:00',
       phone: null,
       crop_type: null,
       location_name: null,
+      location_address: null,
+      language: 'it',
+      is_verified: 1,
       latitude: null,
       longitude: null,
-      created_at: '2026-03-22 10:00:00'
+      created_at: '2026-03-22 10:00:00',
+      updated_at: '2026-03-22 10:00:00'
+    },
+    {
+      id: 3,
+      email: 'admin@rayat.ma',
+      password_hash: bcrypt.hashSync('admin123', 10),
+      name: 'Admin Operativo',
+      last_name: null,
+      role: 'admin',
+      active: 1,
+      client_code: null,
+      payment_status: 'pagato',
+      payment_date: null,
+      subscription_expiry: null,
+      owner_user_id: null,
+      customer_role: null,
+      registration_status: 'active',
+      registration_source: 'admin',
+      approved_at: '2026-03-22 10:00:00',
+      phone: null,
+      crop_type: null,
+      location_name: null,
+      location_address: null,
+      language: 'it',
+      is_verified: 1,
+      latitude: null,
+      longitude: null,
+      created_at: '2026-03-22 10:00:00',
+      updated_at: '2026-03-22 10:00:00'
     },
     {
       id: 2,
@@ -40,13 +78,22 @@ const state = {
       client_code: '0001',
       payment_status: 'pagato',
       payment_date: '2026-03-01 10:00:00',
-      subscription_expiry: '2026-04-01 10:00:00',
+      subscription_expiry: '2026-06-01 10:00:00',
+      owner_user_id: null,
+      customer_role: 'owner',
+      registration_status: 'active',
+      registration_source: 'public',
+      approved_at: '2026-03-20 10:00:00',
       phone: '+212600000000',
       crop_type: 'Banana',
       location_name: 'Agadir',
+      location_address: 'Agadir, Souss-Massa',
+      language: 'it',
+      is_verified: 1,
       latitude: 30.4,
       longitude: -9.6,
-      created_at: '2026-03-20 10:00:00'
+      created_at: '2026-03-20 10:00:00',
+      updated_at: '2026-03-20 10:00:00'
     }
   ],
   devices: [],
@@ -54,12 +101,17 @@ const state = {
   sensorReadings: [],
   sensorLatest: [],
   publicLatest: [],
-  publicSensorReadings: []
+  publicSensorReadings: [],
+  sensorModels: [],
+  cropProfiles: []
 };
 
 let nextDeviceId = 1;
 let nextSensorId = 1;
 let nextReadingId = 1;
+let nextUserId = 4;
+let nextSensorModelId = 1;
+let nextCropProfileId = 1;
 
 function normalizeSql(sql) {
   return sql.replace(/\s+/g, ' ').trim();
@@ -125,9 +177,43 @@ function buildDeviceMetrics(device) {
   };
 }
 
-function listClients(offset = 0, limit = 25, singleId = null) {
+function getUserById(userId) {
+  return state.users.find((user) => user.id === Number(userId)) || null;
+}
+
+function isPrimaryCustomer(user) {
+  return Boolean(user)
+    && ['client', 'farmer'].includes(user.role)
+    && (user.owner_user_id === null || user.owner_user_id === undefined);
+}
+
+function buildUserResult(user) {
+  return user ? { ...user } : null;
+}
+
+function listClientTeam(ownerUserId) {
   return state.users
     .filter((user) => ['client', 'farmer'].includes(user.role))
+    .filter((user) => Number(user.owner_user_id) === Number(ownerUserId))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at) || b.id - a.id)
+    .map((user) => buildUserResult(user));
+}
+
+function normalizeMockStoredValue(value) {
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 19).replace('T', ' ');
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+
+  return value;
+}
+
+function listClients(offset = 0, limit = 25, singleId = null) {
+  return state.users
+    .filter((user) => isPrimaryCustomer(user))
     .filter((user) => (singleId ? user.id === Number(singleId) : true))
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at) || b.id - a.id)
     .slice(offset, offset + limit)
@@ -139,6 +225,7 @@ function listClients(offset = 0, limit = 25, singleId = null) {
       phone: user.phone,
       crop_type: user.crop_type,
       location_name: user.location_name,
+      location_address: user.location_address || null,
       latitude: user.latitude,
       longitude: user.longitude,
       active: user.active,
@@ -148,6 +235,9 @@ function listClients(offset = 0, limit = 25, singleId = null) {
       payment_status: user.payment_status,
       payment_date: user.payment_date,
       subscription_expiry: user.subscription_expiry,
+      registration_status: user.registration_status || null,
+      registration_source: user.registration_source || null,
+      approved_at: user.approved_at || null,
       device_count: state.devices.filter((device) => device.user_id === user.id).length
     }));
 }
@@ -214,8 +304,152 @@ function listSensors(offset = 0, limit = 50) {
     .slice(offset, offset + limit);
 }
 
+function catalogIncludes(value, query) {
+  return String(value || '').toLowerCase().includes(String(query || '').toLowerCase());
+}
+
+function filterSensorModelsFromSql(text, params = []) {
+  let paramIndex = 0;
+  let rows = state.sensorModels.slice();
+
+  if (text.includes('active = ?')) {
+    const active = params[paramIndex++];
+    rows = rows.filter((model) => Boolean(model.active) === Boolean(active));
+  }
+
+  if (text.includes('primary_type = ?')) {
+    const primaryType = params[paramIndex++];
+    rows = rows.filter((model) => model.primary_type === primaryType);
+  }
+
+  if (text.includes('slug LIKE ? OR name LIKE ?')) {
+    const queryText = String(params[paramIndex++] || '').replace(/^%|%$/g, '');
+    paramIndex += 3;
+    rows = rows.filter((model) =>
+      catalogIncludes(model.slug, queryText)
+      || catalogIncludes(model.name, queryText)
+      || catalogIncludes(model.manufacturer, queryText)
+      || catalogIncludes(JSON.stringify(model.labels || {}), queryText)
+    );
+  }
+
+  return rows.sort((left, right) =>
+    Number(Boolean(right.active)) - Number(Boolean(left.active))
+    || String(left.name).localeCompare(String(right.name))
+    || left.id - right.id
+  );
+}
+
+function filterCropProfilesFromSql(text, params = []) {
+  let paramIndex = 0;
+  let rows = state.cropProfiles.slice();
+
+  if (text.includes('active = ?')) {
+    const active = params[paramIndex++];
+    rows = rows.filter((profile) => Boolean(profile.active) === Boolean(active));
+  }
+
+  if (text.includes('slug LIKE ? OR crop_key LIKE ?')) {
+    const queryText = String(params[paramIndex++] || '').replace(/^%|%$/g, '');
+    paramIndex += 3;
+    rows = rows.filter((profile) =>
+      catalogIncludes(profile.slug, queryText)
+      || catalogIncludes(profile.crop_key, queryText)
+      || catalogIncludes(profile.medium, queryText)
+      || catalogIncludes(JSON.stringify(profile.labels || {}), queryText)
+    );
+  }
+
+  return rows.sort((left, right) =>
+    Number(Boolean(right.active)) - Number(Boolean(left.active))
+    || String(left.crop_key).localeCompare(String(right.crop_key))
+    || left.id - right.id
+  );
+}
+
+function sensorModelResult(model, includeParameters = false) {
+  const result = {
+    id: model.id,
+    slug: model.slug,
+    version: model.version,
+    name: model.name,
+    manufacturer: model.manufacturer,
+    primary_type: model.primary_type,
+    labels: model.labels,
+    parameters_count: Array.isArray(model.parameters) ? model.parameters.length : 0,
+    notes: model.notes,
+    active: model.active,
+    created_by: model.created_by,
+    created_at: model.created_at,
+    updated_at: model.updated_at
+  };
+
+  if (includeParameters) {
+    result.parameters = model.parameters;
+  }
+
+  return result;
+}
+
+function cropProfileResult(profile) {
+  return {
+    id: profile.id,
+    slug: profile.slug,
+    version: profile.version,
+    crop_key: profile.crop_key,
+    medium: profile.medium,
+    labels: profile.labels,
+    description: profile.description,
+    ranges: profile.ranges,
+    active: profile.active,
+    created_by: profile.created_by,
+    created_at: profile.created_at,
+    updated_at: profile.updated_at
+  };
+}
+
 async function fakeQuery(sql, params = []) {
   const text = normalizeSql(sql);
+
+  if (
+    text.includes('FROM users')
+    && (text.includes('WHERE id = ?') || text.includes('WHERE u.id = ?'))
+    && text.includes("role IN ('client', 'farmer')")
+    && (text.includes('owner_user_id IS NULL') || text.includes('u.owner_user_id IS NULL'))
+  ) {
+    return state.users
+      .filter((user) => user.id === Number(params[0]) && isPrimaryCustomer(user))
+      .map((user) => buildUserResult(user));
+  }
+
+  if (
+    text.includes('FROM users u')
+    && text.includes('u.owner_user_id = ?')
+    && text.includes('WHERE u.id = ?')
+  ) {
+    return state.users
+      .filter((user) => user.id === Number(params[0]))
+      .filter((user) => Number(user.owner_user_id) === Number(params[1]))
+      .map((user) => buildUserResult(user));
+  }
+
+  if (
+    text.includes('FROM users u')
+    && text.includes('u.owner_user_id = ?')
+    && text.includes('ORDER BY u.created_at DESC')
+  ) {
+    return listClientTeam(params[0]);
+  }
+
+  if (
+    text.startsWith('SELECT')
+    && text.includes('FROM users')
+    && text.includes('WHERE id = ?')
+    && text.includes('LIMIT 1')
+  ) {
+    const user = getUserById(params[0]);
+    return user ? [buildUserResult(user)] : [];
+  }
 
   if (text === 'SELECT id, email, name, role, active FROM users WHERE id = ?') {
     return state.users
@@ -239,8 +473,19 @@ async function fakeQuery(sql, params = []) {
       }));
   }
 
+  if (
+    text.startsWith('SELECT')
+    && text.includes('FROM users WHERE id = ?')
+    && !text.includes("role IN ('client', 'farmer')")
+    && !text.includes('AND id <> ?')
+    && !text.includes('AND owner_user_id')
+  ) {
+    const user = getUserById(params[0]);
+    return user ? [buildUserResult(user)] : [];
+  }
+
   if (text.startsWith('SELECT COUNT(*) AS total FROM users u WHERE u.role IN')) {
-    return [{ total: state.users.filter((user) => ['client', 'farmer'].includes(user.role)).length }];
+    return [{ total: state.users.filter((user) => isPrimaryCustomer(user)).length }];
   }
 
   if (
@@ -273,14 +518,285 @@ async function fakeQuery(sql, params = []) {
     return state.users.filter((user) => user.email === params[0]);
   }
 
-  if (text === `SELECT id FROM users WHERE id = ? AND role IN ('client', 'farmer')`) {
+  if (text === 'SELECT id FROM users WHERE phone = ?') {
     return state.users
-      .filter((user) => user.id === Number(params[0]) && ['client', 'farmer'].includes(user.role))
+      .filter((user) => user.phone === params[0])
+      .map((user) => ({ id: user.id }));
+  }
+
+  if (text === 'SELECT id FROM users WHERE email = ? AND id <> ?') {
+    return state.users
+      .filter((user) => user.email === params[0] && user.id !== Number(params[1]))
+      .map((user) => ({ id: user.id }));
+  }
+
+  if (text === 'SELECT id FROM users WHERE phone = ? AND id <> ?') {
+    return state.users
+      .filter((user) => user.phone === params[0] && user.id !== Number(params[1]))
+      .map((user) => ({ id: user.id }));
+  }
+
+  if (text.startsWith('INSERT INTO users (')) {
+    const match = text.match(/^INSERT INTO users \((.+)\) VALUES \((.+)\)$/i);
+    if (!match) {
+      throw new Error(`Unhandled SQL in smoke test: ${text}`);
+    }
+
+    const columns = match[1].split(',').map((column) => column.trim());
+    const now = '2026-03-22 12:00:00';
+    const row = {
+      id: nextUserId++,
+      email: null,
+      password_hash: null,
+      name: null,
+      last_name: null,
+      role: 'client',
+      active: 1,
+      client_code: null,
+      payment_status: null,
+      payment_date: null,
+      subscription_expiry: null,
+      owner_user_id: null,
+      customer_role: null,
+      registration_status: null,
+      registration_source: null,
+      approved_at: null,
+      phone: null,
+      crop_type: null,
+      location_name: null,
+      location_address: null,
+      language: 'it',
+      is_verified: 1,
+      latitude: null,
+      longitude: null,
+      created_at: now,
+      updated_at: now
+    };
+
+    columns.forEach((column, index) => {
+      row[column] = normalizeMockStoredValue(params[index]);
+    });
+
+    state.users.push(row);
+    return { insertId: row.id };
+  }
+
+  if (text.startsWith('UPDATE users SET') && text.includes('WHERE id = ? AND owner_user_id = ?')) {
+    const userId = Number(params[params.length - 2]);
+    const ownerUserId = Number(params[params.length - 1]);
+    const user = state.users.find((row) => row.id === userId && Number(row.owner_user_id) === ownerUserId);
+    if (!user) {
+      return { affectedRows: 0 };
+    }
+
+    const assignmentsSql = text
+      .slice('UPDATE users SET '.length, text.indexOf(' WHERE id = ? AND owner_user_id = ?'))
+      .split(',')
+      .map((part) => part.trim());
+    let paramIndex = 0;
+
+    assignmentsSql.forEach((assignment) => {
+      if (assignment === 'updated_at = NOW()') {
+        user.updated_at = '2026-03-22 12:00:00';
+        return;
+      }
+
+      const match = assignment.match(/^([a-z_]+) = \?$/i);
+      if (!match) {
+        return;
+      }
+
+      user[match[1]] = normalizeMockStoredValue(params[paramIndex]);
+      paramIndex += 1;
+    });
+
+    return { affectedRows: 1 };
+  }
+
+  if (text === 'DELETE FROM users WHERE id = ? AND owner_user_id = ?') {
+    const userId = Number(params[0]);
+    const ownerUserId = Number(params[1]);
+    const index = state.users.findIndex((user) => user.id === userId && Number(user.owner_user_id) === ownerUserId);
+    if (index === -1) {
+      return { affectedRows: 0 };
+    }
+
+    state.users.splice(index, 1);
+    return { affectedRows: 1 };
+  }
+
+  if (text.startsWith(`SELECT id FROM users WHERE id = ? AND role IN ('client', 'farmer')`)) {
+    return state.users
+      .filter((user) => user.id === Number(params[0]) && isPrimaryCustomer(user))
       .map((user) => ({ id: user.id }));
   }
 
   if (text === 'SELECT pg_advisory_xact_lock(hashtext(?))') {
     return [];
+  }
+
+  if (text.startsWith('SELECT COUNT(*) AS total FROM sensor_models')) {
+    return [{ total: filterSensorModelsFromSql(text, params).length }];
+  }
+
+  if (text.startsWith('SELECT id, slug, version, name, manufacturer, primary_type, labels, jsonb_array_length(parameters) AS parameters_count')) {
+    const inlineLimit = parseInlineLimit(text, 25, 0);
+    return filterSensorModelsFromSql(text, params)
+      .slice(inlineLimit.offset, inlineLimit.offset + inlineLimit.limit)
+      .map((model) => sensorModelResult(model));
+  }
+
+  if (text.startsWith('SELECT id, slug, version, name, manufacturer, primary_type, labels, parameters, notes, active, created_by, created_at, updated_at FROM sensor_models WHERE id = ? LIMIT 1')) {
+    return state.sensorModels
+      .filter((model) => model.id === Number(params[0]))
+      .map((model) => sensorModelResult(model, true));
+  }
+
+  if (text === 'SELECT id, parameters FROM sensor_models WHERE id = ? LIMIT 1') {
+    return state.sensorModels
+      .filter((model) => model.id === Number(params[0]))
+      .map((model) => ({ id: model.id, parameters: model.parameters }));
+  }
+
+  if (text.startsWith('INSERT INTO sensor_models')) {
+    const existing = state.sensorModels.find((model) =>
+      model.slug === params[0] && model.version === params[1]
+    );
+    if (existing) {
+      const error = new Error('duplicate sensor model');
+      error.code = '23505';
+      throw error;
+    }
+
+    const now = '2026-03-22 12:00:00';
+    const hasCreatedBy = params.length >= 10;
+    const row = {
+      id: nextSensorModelId++,
+      slug: params[0],
+      version: params[1],
+      name: params[2],
+      manufacturer: params[3],
+      primary_type: params[4],
+      labels: parseJsonObject(params[5]),
+      parameters: parseJsonObject(params[6]),
+      notes: params[7],
+      active: hasCreatedBy ? Boolean(params[8]) : true,
+      created_by: hasCreatedBy ? params[9] : null,
+      created_at: now,
+      updated_at: now
+    };
+    state.sensorModels.push(row);
+    return { insertId: row.id };
+  }
+
+  if (text.startsWith("SELECT id FROM devices WHERE metadata->>'sensor_model_id' = ?")) {
+    return state.devices
+      .filter((device) => {
+        const metadata = parseJsonObject(device.metadata);
+        const assignment = parseJsonObject(metadata.assignment);
+        return String(metadata.sensor_model_id || '') === String(params[0])
+          || String(assignment.sensor_model_id || '') === String(params[1]);
+      })
+      .slice(0, 1)
+      .map((device) => ({ id: device.id }));
+  }
+
+  if (text.startsWith('UPDATE sensor_models SET slug = ?')) {
+    const model = state.sensorModels.find((row) => row.id === Number(params[9]));
+    if (!model) {
+      return { affectedRows: 0 };
+    }
+    const duplicate = state.sensorModels.find((row) =>
+      row.id !== model.id && row.slug === params[0] && row.version === params[1]
+    );
+    if (duplicate) {
+      const error = new Error('duplicate sensor model');
+      error.code = '23505';
+      throw error;
+    }
+    model.slug = params[0];
+    model.version = params[1];
+    model.name = params[2];
+    model.manufacturer = params[3];
+    model.primary_type = params[4];
+    model.labels = parseJsonObject(params[5]);
+    model.parameters = parseJsonObject(params[6]);
+    model.notes = params[7];
+    model.active = Boolean(params[8]);
+    model.updated_at = '2026-03-22 12:00:00';
+    return { affectedRows: 1 };
+  }
+
+  if (text.startsWith('SELECT COUNT(*) AS total FROM crop_profiles')) {
+    return [{ total: filterCropProfilesFromSql(text, params).length }];
+  }
+
+  if (text.startsWith('SELECT id, slug, version, crop_key, medium, labels, description, ranges, active, created_by, created_at, updated_at FROM crop_profiles')) {
+    const inlineLimit = parseInlineLimit(text, 25, 0);
+    return filterCropProfilesFromSql(text, params)
+      .slice(inlineLimit.offset, inlineLimit.offset + inlineLimit.limit)
+      .map((profile) => cropProfileResult(profile));
+  }
+
+  if (text.startsWith('INSERT INTO crop_profiles')) {
+    const existing = state.cropProfiles.find((profile) =>
+      profile.slug === params[0] && profile.version === params[1]
+    );
+    if (existing) {
+      const error = new Error('duplicate crop profile');
+      error.code = '23505';
+      throw error;
+    }
+
+    const now = '2026-03-22 12:00:00';
+    const hasCreatedBy = params.length >= 9;
+    const row = {
+      id: nextCropProfileId++,
+      slug: params[0],
+      version: params[1],
+      crop_key: params[2],
+      medium: params[3],
+      labels: parseJsonObject(params[4]),
+      description: parseJsonObject(params[5]),
+      ranges: parseJsonObject(params[6]),
+      active: hasCreatedBy ? Boolean(params[7]) : true,
+      created_by: hasCreatedBy ? params[8] : null,
+      created_at: now,
+      updated_at: now
+    };
+    state.cropProfiles.push(row);
+    return { insertId: row.id };
+  }
+
+  if (text === 'SELECT id FROM crop_profiles WHERE id = ? LIMIT 1') {
+    return state.cropProfiles
+      .filter((profile) => profile.id === Number(params[0]))
+      .map((profile) => ({ id: profile.id }));
+  }
+
+  if (text.startsWith('UPDATE crop_profiles SET slug = ?')) {
+    const profile = state.cropProfiles.find((row) => row.id === Number(params[8]));
+    if (!profile) {
+      return { affectedRows: 0 };
+    }
+    const duplicate = state.cropProfiles.find((row) =>
+      row.id !== profile.id && row.slug === params[0] && row.version === params[1]
+    );
+    if (duplicate) {
+      const error = new Error('duplicate crop profile');
+      error.code = '23505';
+      throw error;
+    }
+    profile.slug = params[0];
+    profile.version = params[1];
+    profile.crop_key = params[2];
+    profile.medium = params[3];
+    profile.labels = parseJsonObject(params[4]);
+    profile.description = parseJsonObject(params[5]);
+    profile.ranges = parseJsonObject(params[6]);
+    profile.active = Boolean(params[7]);
+    profile.updated_at = '2026-03-22 12:00:00';
+    return { affectedRows: 1 };
   }
 
   if (text.startsWith('SELECT COUNT(*) AS total FROM devices d')) {
@@ -596,8 +1112,8 @@ async function fakeQuery(sql, params = []) {
       .filter((row) => row.sensor_type === params[0])
       .filter((row) => new Date(row.timestamp) >= new Date(params[1]) && new Date(row.timestamp) <= new Date(params[2]));
 
-    if (params[3]) {
-      rows = rows.filter((row) => row.sensor_subtype === params[3]);
+    if (text.includes('AND sensor_subtype = ?')) {
+      rows = rows.filter((row) => row.sensor_subtype === params[params.length - 1]);
     }
 
     return rows
@@ -611,7 +1127,7 @@ async function fakeQuery(sql, params = []) {
       }));
   }
 
-  if (text === 'SELECT MAX(timestamp) AS sensor_data_last_at FROM public_sensor_latest') {
+  if (text.startsWith('SELECT MAX(timestamp) AS sensor_data_last_at FROM public_sensor_latest')) {
     const lastTimestamp = state.publicLatest
       .map((row) => row.timestamp)
       .filter(Boolean)
@@ -689,17 +1205,30 @@ async function run() {
               'password_hash',
               'name',
               'last_name',
+              'language',
               'role',
               'active',
               'phone',
               'crop_type',
               'location_name',
+              'location_address',
               'latitude',
               'longitude',
+              'owner_user_id',
+              'customer_role',
               'client_code',
               'payment_status',
               'payment_date',
               'subscription_expiry',
+              'registration_status',
+              'registration_source',
+              'approved_at',
+              'profile_phone',
+              'profile_description',
+              'profile_photo',
+              'profile_updated_at',
+              'updated_at',
+              'is_verified',
               'created_at'
             ])
           : new Set(),
@@ -787,6 +1316,7 @@ async function run() {
   });
 
   const adminToken = jwt.sign({ id: 1, role: 'super_admin' }, process.env.JWT_SECRET);
+  const regularAdminToken = jwt.sign({ id: 3, role: 'admin' }, process.env.JWT_SECRET);
   const clientToken = jwt.sign({ id: 2, role: 'client' }, process.env.JWT_SECRET);
 
   await new Promise((resolve, reject) => {
@@ -915,6 +1445,185 @@ async function run() {
         assert.equal(adminHealthJson.db, 'ok'); // RAYAT-FIX
         assert.ok(adminHealthJson.mqttDirect); // RAYAT-FIX
 
+        const phase2DisabledRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensor-models`, {
+          headers: { Authorization: `Bearer ${reloginJson.token}` }
+        });
+        assert.equal(phase2DisabledRes.status, 404);
+        assert.deepEqual(await phase2DisabledRes.json(), { error: 'feature_disabled' });
+
+        process.env.DEVICE_MANAGER_PHASE2_ENABLED = 'true';
+
+        const catalogSensorModelPayload = {
+          slug: 'test-climate-model',
+          version: '1',
+          name: 'Test Climate Model',
+          manufacturer: 'Rayat Test',
+          primary_type: 'clima',
+          labels: { it: 'Clima test', fr: 'Climat test', en: 'Test climate', ar: 'مناخ اختبار' },
+          parameters: [
+            {
+              key: 'ambient_temperature',
+              register: { hex: null, int: null, source: 'TODO: confermare' },
+              type: 'clima',
+              subtype: 'clima_temperature',
+              label: { it: 'Temperatura', fr: 'Temperature', en: 'Temperature', ar: 'درجة الحرارة' },
+              unit: '°C',
+              scale: 0.1,
+              signed: true,
+              enabled: true,
+              order: 1
+            }
+          ],
+          notes: 'Smoke test model'
+        };
+
+        const regularAdminCreateModelRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensor-models`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${regularAdminToken}`
+          },
+          body: JSON.stringify(catalogSensorModelPayload)
+        });
+        assert.equal(regularAdminCreateModelRes.status, 403);
+
+        const invalidSensorModelRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensor-models`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify({
+            ...catalogSensorModelPayload,
+            slug: 'invalid-model',
+            parameters: [
+              {
+                ...catalogSensorModelPayload.parameters[0],
+                type: 'meteo'
+              }
+            ]
+          })
+        });
+        assert.equal(invalidSensorModelRes.status, 400);
+
+        const createSensorModelRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensor-models`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify(catalogSensorModelPayload)
+        });
+        assert.equal(createSensorModelRes.status, 201);
+        const createSensorModelJson = await createSensorModelRes.json();
+        assert.equal(createSensorModelJson.success, true);
+        assert.ok(createSensorModelJson.id);
+
+        const listSensorModelsAsAdminRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensor-models?active=true&type=clima`, {
+          headers: { Authorization: `Bearer ${regularAdminToken}` }
+        });
+        assert.equal(listSensorModelsAsAdminRes.status, 200);
+        const listSensorModelsAsAdminJson = await listSensorModelsAsAdminRes.json();
+        assert.equal(listSensorModelsAsAdminJson.success, true);
+        assert.equal(listSensorModelsAsAdminJson.data.length, 1);
+        assert.equal(listSensorModelsAsAdminJson.data[0].parameters_count, 1);
+
+        const sensorModelDetailRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensor-models/${createSensorModelJson.id}`, {
+          headers: { Authorization: `Bearer ${regularAdminToken}` }
+        });
+        assert.equal(sensorModelDetailRes.status, 200);
+        const sensorModelDetailJson = await sensorModelDetailRes.json();
+        assert.equal(sensorModelDetailJson.data.parameters[0].subtype, 'clima_temperature');
+
+        const updateSensorModelRes = await fetch(`http://127.0.0.1:${port}/api/admin/sensor-models/${createSensorModelJson.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify({
+            ...catalogSensorModelPayload,
+            name: 'Test Climate Model Updated'
+          })
+        });
+        assert.equal(updateSensorModelRes.status, 200);
+        const updateSensorModelJson = await updateSensorModelRes.json();
+        assert.equal(updateSensorModelJson.success, true);
+
+        const cropProfilePayload = {
+          slug: 'test-tomato-perlite',
+          version: '1',
+          crop_key: 'tomato',
+          medium: 'perlite',
+          labels: { it: 'Pomodoro test', fr: 'Tomate test', en: 'Test tomato', ar: 'طماطم اختبار' },
+          description: { it: 'Profilo test' },
+          ranges: {
+            ec_root: { min: 2.0, max: 3.5, unit: 'dS/m' },
+            ec_substrate: { min: 0.5, max: 2.0, unit: 'dS/m' }
+          }
+        };
+
+        const invalidCropProfileRes = await fetch(`http://127.0.0.1:${port}/api/admin/crop-profiles`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify({
+            ...cropProfilePayload,
+            slug: 'invalid-crop',
+            ranges: {
+              ec_root: { min: 4, max: 2, unit: 'dS/m' }
+            }
+          })
+        });
+        assert.equal(invalidCropProfileRes.status, 400);
+
+        const regularAdminCreateCropRes = await fetch(`http://127.0.0.1:${port}/api/admin/crop-profiles`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${regularAdminToken}`
+          },
+          body: JSON.stringify(cropProfilePayload)
+        });
+        assert.equal(regularAdminCreateCropRes.status, 403);
+
+        const createCropProfileRes = await fetch(`http://127.0.0.1:${port}/api/admin/crop-profiles`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify(cropProfilePayload)
+        });
+        assert.equal(createCropProfileRes.status, 201);
+        const createCropProfileJson = await createCropProfileRes.json();
+        assert.equal(createCropProfileJson.success, true);
+
+        const listCropProfilesRes = await fetch(`http://127.0.0.1:${port}/api/admin/crop-profiles?active=true`, {
+          headers: { Authorization: `Bearer ${regularAdminToken}` }
+        });
+        assert.equal(listCropProfilesRes.status, 200);
+        const listCropProfilesJson = await listCropProfilesRes.json();
+        assert.equal(listCropProfilesJson.data.length, 1);
+        assert.equal(listCropProfilesJson.data[0].ranges.ec_root.unit, 'dS/m');
+
+        const updateCropProfileRes = await fetch(`http://127.0.0.1:${port}/api/admin/crop-profiles/${createCropProfileJson.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify({
+            ...cropProfilePayload,
+            medium: 'perlite-test'
+          })
+        });
+        assert.equal(updateCropProfileRes.status, 200);
+        const updateCropProfileJson = await updateCropProfileRes.json();
+        assert.equal(updateCropProfileJson.success, true);
+
         const clientsRes = await fetch(`http://127.0.0.1:${port}/api/admin/clients?page=1&pageSize=25`, {
           headers: { Authorization: `Bearer ${reloginJson.token}` }
         });
@@ -922,6 +1631,46 @@ async function run() {
         const clientsJson = await clientsRes.json();
         assert.equal(clientsJson.data.length, 1);
         assert.equal(clientsJson.data[0].client_code, '0001');
+
+        const createTeamMemberRes = await fetch(`http://127.0.0.1:${port}/api/admin/clients/2/team`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${reloginJson.token}`
+          },
+          body: JSON.stringify({
+            name: 'Agronomo Campo',
+            email: 'agronomo@rayat.ma',
+            phone: '+212611111111',
+            password: 'team12345',
+            customer_role: 'agronomist',
+            active: true
+          })
+        });
+        assert.equal(createTeamMemberRes.status, 201);
+        const createTeamMemberJson = await createTeamMemberRes.json();
+        assert.equal(createTeamMemberJson.data.customer_role, 'agronomist');
+        assert.equal(createTeamMemberJson.data.owner_user_id, 2);
+
+        const teamListRes = await fetch(`http://127.0.0.1:${port}/api/admin/clients/2/team`, {
+          headers: { Authorization: `Bearer ${reloginJson.token}` }
+        });
+        assert.equal(teamListRes.status, 200);
+        const teamListJson = await teamListRes.json();
+        assert.equal(teamListJson.data.length, 1);
+        assert.equal(teamListJson.data[0].email, 'agronomo@rayat.ma');
+
+        const teamLoginRes = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'agronomo@rayat.ma', password: 'team12345' })
+        });
+        assert.equal(teamLoginRes.status, 200);
+        const teamLoginJson = await teamLoginRes.json();
+        assert.equal(teamLoginJson.user.role, 'client');
+        assert.equal(teamLoginJson.user.customer_role, 'agronomist');
+        assert.equal(teamLoginJson.user.owner_user_id, 2);
+        assert.equal(teamLoginJson.user.permissions.export_csv, true);
 
         const createDeviceRes = await fetch(`http://127.0.0.1:${port}/api/admin/devices`, {
           method: 'POST',
@@ -1134,6 +1883,14 @@ async function run() {
         const iotDevicesJson = await iotDevicesRes.json();
         assert.equal(iotDevicesJson.data.length, 1);
         assert.equal(iotDevicesJson.data[0].sensor_count, 11);
+
+        const teamIotDevicesRes = await fetch(`http://127.0.0.1:${port}/api/iot/devices`, {
+          headers: { Authorization: `Bearer ${teamLoginJson.token}` }
+        });
+        assert.equal(teamIotDevicesRes.status, 200);
+        const teamIotDevicesJson = await teamIotDevicesRes.json();
+        assert.equal(teamIotDevicesJson.data.length, 1);
+        assert.equal(teamIotDevicesJson.data[0].device_id, 'GW-001');
 
         const unknownDeviceApiKeyRes = await fetch(`http://127.0.0.1:${port}/api/sensors/update`, {
           method: 'POST',

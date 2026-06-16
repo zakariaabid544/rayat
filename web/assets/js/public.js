@@ -63,7 +63,7 @@
             ANALYTICS_TRACK_URL: `${API_BASE_URL}/analytics/track`
         };
         // RAYAT-FIX: keep frontend/service-worker asset versions aligned for immediate heartbeat rollout.
-        const FRONTEND_ASSET_VERSION = '1.1.32'; // RAYAT-FIX
+        const FRONTEND_ASSET_VERSION = '1.1.34'; // RAYAT-FIX
         const PUBLIC_SENSOR_POLL_INTERVAL_MS = 30000;
         const HOMEPAGE_LIVE_SENSOR_POLL_INTERVAL_MS = 60000;
         const DEFAULT_MONITORING_CONFIG = Object.freeze({
@@ -127,20 +127,35 @@
         let selectedSensor = null;
         let user = null;
         let currentLang = localStorage.getItem('rayat_lang') || sessionStorage.getItem('rayat_lang') || 'fr';
+        let currentLuxuryDashboardTab = 'overview';
+        let currentLuxuryDashboardAnalyticsPeriod = '7d';
+        let currentLuxuryDashboardAnalyticsMetric = 'soil:moisture';
+        let luxuryHomeLiveSamples = {};
+        let luxuryDashboardNotificationsEnabled = true;
+        const SENSOR_CARD_MODE_STORAGE_KEY = 'rayat_sensor_card_mode';
+        const SENSOR_CARD_VIEW_MODES = new Set(['visual', 'technical']);
+        const storedSensorCardMode = localStorage.getItem(SENSOR_CARD_MODE_STORAGE_KEY);
+        let currentSensorCardMode = SENSOR_CARD_VIEW_MODES.has(storedSensorCardMode) ? storedSensorCardMode : 'technical';
         let showSettings = false;
         let showNotifications = false;
         let isMobileMenuOpen = false;
         let isProfileMenuOpen = false;
+        let isLuxuryDashboardProfileMenuOpen = false;
         let isAdminView = false;
         let dataError = false; // Track API availability
         const CUSTOMER_ROLES = new Set(['client', 'farmer']);
         const ADMIN_ROLES = new Set(['admin', 'super_admin', 'operator', 'operator_admin']);
         const PRIVILEGED_ADMIN_ROLES = new Set(['super_admin', 'admin', 'operator_admin', 'operator']);
+        const BARAKAH_PERLITE_EMAIL = 'support@barakahperlite.com';
+        const BARAKAH_PERLITE_DEVICE_ID = 'GW-002';
+        const PRIVATE_SENSOR_DEVICE_IDS = new Set([BARAKAH_PERLITE_DEVICE_ID]);
+        const PRIVATE_SENSOR_TOPIC_PREFIXES = [`sensors/${BARAKAH_PERLITE_DEVICE_ID}/`];
         const VIEW_PATHS = {
             home: '/',
             login: '/login',
             register: '/register',
             demo: '/dashboard',
+            'perlite-track': '/perlite-track',
             profilo: '/profilo',
             servizi: '/services',
             'chi-siamo': '/chi-siamo',
@@ -517,6 +532,26 @@
                 windSpeed: 'clima_wind_speed'
             }
         };
+        const RAYAT_DEMO_SENSOR_METRICS = [
+            { key: 'moisture', subtype: 'terreno_moisture', labelKey: 'luxDemoHumidityLabel', unit: '%', objectKeys: ['humidity', 'soilHumidity', 'soil_humidity', 'soilMoisture', 'soil_moisture', 'moisture', 'terreno', 'terreno_moisture'] },
+            { key: 'temperature', subtype: 'terreno_temperature', labelKey: 'luxDemoTemperatureLabel', unit: '°C', objectKeys: ['temperature', 'soilTemperature', 'soil_temperature', 'temp', 'soilTemp', 'terreno_temperature'] },
+            { key: 'ec', subtype: 'terreno_ec', labelKey: 'luxDemoEcLabel', unit: 'mS/cm', objectKeys: ['ec', 'EC', 'electricalConductivity', 'electrical_conductivity', 'terreno_ec'] },
+            { key: 'pH', subtype: 'terreno_ph', labelKey: 'luxDemoPhLabel', unit: '', objectKeys: ['ph', 'pH', 'PH', 'terreno_ph'] },
+            { key: 'nitrogen', subtype: 'terreno_nitrogen', labelKey: 'luxDemoNitrogenLabel', unit: 'mg/kg', objectKeys: ['nitrogen', 'n', 'N', 'terreno_n', 'terreno_nitrogen'] },
+            { key: 'phosphorus', subtype: 'terreno_phosphorus', labelKey: 'luxDemoPhosphorusLabel', unit: 'mg/kg', objectKeys: ['phosphorus', 'p', 'P', 'terreno_p', 'terreno_phosphorus'] },
+            { key: 'potassium', subtype: 'terreno_potassium', labelKey: 'luxDemoPotassiumLabel', unit: 'mg/kg', objectKeys: ['potassium', 'k', 'K', 'terreno_k', 'terreno_potassium'] }
+        ];
+        const RAYAT_PERLITE_SENSOR_METRICS = ['moisture', 'ec', 'temperature']
+            .map((key) => RAYAT_DEMO_SENSOR_METRICS.find((metric) => metric.key === key))
+            .filter(Boolean)
+            .map((metric) => {
+                const labels = {
+                    moisture: 'Umidita substrato',
+                    ec: 'EC substrato',
+                    temperature: 'Temperatura substrato'
+                };
+                return { ...metric, label: labels[metric.key] || metric.labelKey };
+            });
         const ALERT_PRIORITY = { normal: 0, attention: 1, alert: 2 };
         let userCropSelection = loadStoredCropSelection();
         let waterSettings = { hectares: 1, crop: userCropSelection.value };
@@ -800,6 +835,10 @@
             };
         }
 
+        function getMarkerPercent(value, min, max) {
+            return getGaugeMarkerPercent(value, min, max) ?? 0;
+        }
+
         function getGaugeMeta(group, key, range) {
             const bounds = getGaugeBounds(group, key, range);
             const { lowerCritical, upperCritical } = getAlertThresholds(range);
@@ -1047,6 +1086,10 @@
             return CUSTOMER_ROLES.has(role);
         }
 
+        function isBarakahPerliteCustomer(userData = user) {
+            return String(userData?.email || '').trim().toLowerCase() === BARAKAH_PERLITE_EMAIL;
+        }
+
         function isPrivilegedRole(role = currentRole) {
             return ADMIN_ROLES.has(role);
         }
@@ -1080,6 +1123,19 @@
 
         function hasPrivilegedAdminShortcut() {
             return Boolean(getPrivilegedAdminSessionUser());
+        }
+
+        function canAccessPerliteTrack(userData = user, role = currentRole) {
+            return (isAuthenticated() && isCustomerRole(role) && isBarakahPerliteCustomer(userData))
+                || hasPrivilegedAdminShortcut();
+        }
+
+        function getPrivateSensorAuthToken() {
+            if (isAuthenticated() && isCustomerRole(currentRole)) {
+                return authToken;
+            }
+
+            return getPrivilegedAdminSessionUser() ? getAdminSessionTokenCandidate() : null;
         }
 
         function getAdminSessionTokenCandidate() {
@@ -1211,8 +1267,13 @@
             goToAdminArea();
         }
 
+        function normalizePublicDashboardView(view) {
+            return view === 'dashboard' ? 'demo' : view;
+        }
+
         function getPathForView(view) {
-            return VIEW_PATHS[view] || '/';
+            const normalizedView = normalizePublicDashboardView(view);
+            return VIEW_PATHS[normalizedView] || '/';
         }
 
         function normalizeDashboardSensorKey(sensorKey) {
@@ -1239,7 +1300,22 @@
         }
 
         function getViewFromPath(pathname = window.location.pathname) {
+            const requestedView = new URLSearchParams(window.location.search).get('view');
+            if (requestedView) {
+                const normalizedRequestedView = normalizePublicDashboardView(requestedView);
+                if (Object.prototype.hasOwnProperty.call(VIEW_PATHS, normalizedRequestedView)) {
+                    return normalizedRequestedView;
+                }
+            }
+
             const normalizedPath = pathname.replace(/\/+$/, '') || '/';
+            if (
+                normalizedPath === '/perlite-track'
+                || normalizedPath === '/rayat-perlite-track'
+                || normalizedPath === '/dashboard/perlite-track'
+            ) {
+                return 'perlite-track';
+            }
             if (
                 normalizedPath === '/demo'
                 || normalizedPath === '/dashboard'
@@ -1255,11 +1331,31 @@
         function shouldLoadSensorDataForView(view = currentView) {
             return view === 'home'
                 || view === 'demo'
+                || (view === 'perlite-track' && canAccessPerliteTrack())
                 || (view === 'profilo' && isAuthenticated() && isCustomerRole(currentRole));
         }
 
         function shouldLoadHistoryDataForView(view = currentView) {
-            return view === 'demo';
+            return view === 'demo' || (view === 'perlite-track' && canAccessPerliteTrack());
+        }
+
+        function getCurrentCustomerPermissions() {
+            if (!user || !isCustomerRole(currentRole)) {
+                return null;
+            }
+
+            return user.permissions && typeof user.permissions === 'object'
+                ? user.permissions
+                : null;
+        }
+
+        function hasCustomerPermission(permissionKey) {
+            const permissions = getCurrentCustomerPermissions();
+            if (!permissions) {
+                return true;
+            }
+
+            return permissions[permissionKey] !== false;
         }
 
         function requestViewData(view = currentView, options = {}) {
@@ -1295,6 +1391,11 @@
 
                     user = {
                         ...user,
+                        owner_user_id: data.owner_user_id ?? user.owner_user_id ?? null,
+                        customer_role: data.customer_role ?? user.customer_role ?? null,
+                        permissions: data.permissions ?? user.permissions ?? null,
+                        is_primary_account: data.is_primary_account ?? user.is_primary_account ?? true,
+                        scope_owner_user_id: data.scope_owner_user_id ?? user.scope_owner_user_id ?? user.id,
                         profile_phone: data.profile_phone ?? null,
                         profile_description: data.profile_description ?? null,
                         profile_photo: data.profile_photo ?? null,
@@ -2272,6 +2373,2098 @@
         });
         /* PATCH-02 — end */
 
+        const HOMEPAGE_2026_TRANSLATIONS = {
+            it: {
+                luxBrandName: 'RAYAT',
+                luxBrandSubtitle: 'SMART MONITORING',
+                luxLogoAlt: 'Logo Rayat',
+                luxTreeAlt: 'Illustrazione albero tecnologico Rayat',
+                luxLanguageLabel: 'Seleziona lingua',
+                luxMobileMenuLabel: 'Apri menu',
+                luxNavProduct: 'Prodotto',
+                luxNavSolutions: 'Soluzioni',
+                luxNavTechnology: 'Tecnologia',
+                luxNavResources: 'Risorse',
+                luxNavPricing: 'Prezzi',
+                luxNavAbout: 'Chi siamo',
+                luxCtaDemo: 'Richiedi una demo',
+                luxHeroEyebrow: 'Agricoltura intelligente',
+                luxHeroTitleLine1: 'L’intelligenza',
+                luxHeroTitleLine2: 'al servizio delle tue',
+                luxHeroTitleAccent: 'colture.',
+                luxHeroBody: 'Rayat trasforma i dati delle tue parcelle in decisioni precise per ottimizzare l’acqua, anticipare i rischi e migliorare i rendimenti.',
+                luxHeroPrimaryCta: 'Richiedi una demo',
+                luxHeroSecondaryCta: 'Scopri la piattaforma',
+                luxMetricHumidityLabel: 'Umidità del suolo',
+                luxMetricHumidityValue: '62%',
+                luxMetricHumidityStatus: 'Ottimale',
+                luxMetricTemperatureLabel: 'Temperatura',
+                luxMetricTemperatureValue: '28.5°C',
+                luxMetricTemperatureStatus: 'Stabile',
+                luxMetricCropHealthLabel: 'Salute delle colture',
+                luxMetricCropHealthValue: '85/100',
+                luxMetricCropHealthStatus: 'Buona',
+                luxMetricWaterLabel: 'Consumo d’acqua',
+                luxMetricWaterValue: '-30%',
+                luxMetricWaterStatus: 'vs settimana scorsa',
+                luxLangShortIt: 'IT',
+                luxLangShortEn: 'EN',
+                luxLangShortFr: 'FR',
+                luxLangShortAr: 'AR',
+                luxLangShortTz: 'TZ',
+                luxLangIt: 'Italiano',
+                luxLangEn: 'English',
+                luxLangFr: 'Français',
+                luxLangAr: 'العربية',
+                luxLangTz: 'Amazigh'
+            },
+            en: {
+                luxBrandName: 'RAYAT',
+                luxBrandSubtitle: 'SMART MONITORING',
+                luxLogoAlt: 'Rayat logo',
+                luxTreeAlt: 'Rayat technology tree illustration',
+                luxLanguageLabel: 'Select language',
+                luxMobileMenuLabel: 'Open menu',
+                luxNavProduct: 'Product',
+                luxNavSolutions: 'Solutions',
+                luxNavTechnology: 'Technology',
+                luxNavResources: 'Resources',
+                luxNavPricing: 'Pricing',
+                luxNavAbout: 'About',
+                luxCtaDemo: 'Request a demo',
+                luxHeroEyebrow: 'Intelligent agriculture',
+                luxHeroTitleLine1: 'Intelligence',
+                luxHeroTitleLine2: 'serving your',
+                luxHeroTitleAccent: 'crops.',
+                luxHeroBody: 'Rayat turns field data into precise decisions to optimize water, anticipate risks and improve yields.',
+                luxHeroPrimaryCta: 'Request a demo',
+                luxHeroSecondaryCta: 'Discover the platform',
+                luxMetricHumidityLabel: 'Soil humidity',
+                luxMetricHumidityValue: '62%',
+                luxMetricHumidityStatus: 'Optimal',
+                luxMetricTemperatureLabel: 'Temperature',
+                luxMetricTemperatureValue: '28.5°C',
+                luxMetricTemperatureStatus: 'Stable',
+                luxMetricCropHealthLabel: 'Crop health',
+                luxMetricCropHealthValue: '85/100',
+                luxMetricCropHealthStatus: 'Good',
+                luxMetricWaterLabel: 'Water consumption',
+                luxMetricWaterValue: '-30%',
+                luxMetricWaterStatus: 'vs last week',
+                luxLangShortIt: 'IT',
+                luxLangShortEn: 'EN',
+                luxLangShortFr: 'FR',
+                luxLangShortAr: 'AR',
+                luxLangShortTz: 'TZ',
+                luxLangIt: 'Italiano',
+                luxLangEn: 'English',
+                luxLangFr: 'Français',
+                luxLangAr: 'العربية',
+                luxLangTz: 'Amazigh'
+            },
+            fr: {
+                luxBrandName: 'RAYAT',
+                luxBrandSubtitle: 'SMART MONITORING',
+                luxLogoAlt: 'Logo Rayat',
+                luxTreeAlt: 'Illustration arbre technologique Rayat',
+                luxLanguageLabel: 'Sélectionner la langue',
+                luxMobileMenuLabel: 'Ouvrir le menu',
+                luxNavProduct: 'Produit',
+                luxNavSolutions: 'Solutions',
+                luxNavTechnology: 'Technologie',
+                luxNavResources: 'Ressources',
+                luxNavPricing: 'Tarifs',
+                luxNavAbout: 'À propos',
+                luxCtaDemo: 'Demander une démo',
+                luxHeroEyebrow: 'Agriculture intelligente',
+                luxHeroTitleLine1: 'L’intelligence',
+                luxHeroTitleLine2: 'au service de vos',
+                luxHeroTitleAccent: 'cultures.',
+                luxHeroBody: 'Rayat transforme les données de vos parcelles en décisions précises pour optimiser l’eau, anticiper les risques et améliorer vos rendements.',
+                luxHeroPrimaryCta: 'Demander une démo',
+                luxHeroSecondaryCta: 'Découvrir la plateforme',
+                luxMetricHumidityLabel: 'Humidité du sol',
+                luxMetricHumidityValue: '62%',
+                luxMetricHumidityStatus: 'Optimal',
+                luxMetricTemperatureLabel: 'Température',
+                luxMetricTemperatureValue: '28.5°C',
+                luxMetricTemperatureStatus: 'Stable',
+                luxMetricCropHealthLabel: 'Santé des cultures',
+                luxMetricCropHealthValue: '85/100',
+                luxMetricCropHealthStatus: 'Bonne',
+                luxMetricWaterLabel: 'Consommation d’eau',
+                luxMetricWaterValue: '-30%',
+                luxMetricWaterStatus: 'vs semaine dernière',
+                luxLangShortIt: 'IT',
+                luxLangShortEn: 'EN',
+                luxLangShortFr: 'FR',
+                luxLangShortAr: 'AR',
+                luxLangShortTz: 'TZ',
+                luxLangIt: 'Italiano',
+                luxLangEn: 'English',
+                luxLangFr: 'Français',
+                luxLangAr: 'العربية',
+                luxLangTz: 'Amazigh'
+            },
+            ar: {
+                luxBrandName: 'رايات',
+                luxBrandSubtitle: 'المراقبة الذكية',
+                luxLogoAlt: 'شعار رايات',
+                luxTreeAlt: 'رسم شجرة رايات التقنية',
+                luxLanguageLabel: 'اختر اللغة',
+                luxMobileMenuLabel: 'افتح القائمة',
+                luxNavProduct: 'المنتج',
+                luxNavSolutions: 'الحلول',
+                luxNavTechnology: 'التقنية',
+                luxNavResources: 'الموارد',
+                luxNavPricing: 'الأسعار',
+                luxNavAbout: 'من نحن',
+                luxCtaDemo: 'اطلب عرضا تجريبيا',
+                luxHeroEyebrow: 'زراعة ذكية',
+                luxHeroTitleLine1: 'الذكاء',
+                luxHeroTitleLine2: 'في خدمة',
+                luxHeroTitleAccent: 'محاصيلك.',
+                luxHeroBody: 'تحول رايات بيانات حقولك إلى قرارات دقيقة لتحسين استهلاك الماء، توقع المخاطر ورفع المردودية.',
+                luxHeroPrimaryCta: 'اطلب عرضا تجريبيا',
+                luxHeroSecondaryCta: 'اكتشف المنصة',
+                luxMetricHumidityLabel: 'رطوبة التربة',
+                luxMetricHumidityValue: '62%',
+                luxMetricHumidityStatus: 'مثالية',
+                luxMetricTemperatureLabel: 'درجة الحرارة',
+                luxMetricTemperatureValue: '28.5°C',
+                luxMetricTemperatureStatus: 'مستقرة',
+                luxMetricCropHealthLabel: 'صحة المحاصيل',
+                luxMetricCropHealthValue: '85/100',
+                luxMetricCropHealthStatus: 'جيدة',
+                luxMetricWaterLabel: 'استهلاك الماء',
+                luxMetricWaterValue: '-30%',
+                luxMetricWaterStatus: 'مقارنة بالأسبوع الماضي',
+                luxLangShortIt: 'IT',
+                luxLangShortEn: 'EN',
+                luxLangShortFr: 'FR',
+                luxLangShortAr: 'AR',
+                luxLangShortTz: 'TZ',
+                luxLangIt: 'Italiano',
+                luxLangEn: 'English',
+                luxLangFr: 'Français',
+                luxLangAr: 'العربية',
+                luxLangTz: 'Amazigh'
+            },
+            tz: {
+                luxBrandName: 'RAYAT',
+                luxBrandSubtitle: 'SMART MONITORING',
+                luxLogoAlt: 'ⵍⵓⴳⵓ ⵏ Rayat',
+                luxTreeAlt: 'ⵜⵓⵙⵙⵏⴰ ⵏ ⵓⵙⴽⵍⵓ ⴰⵜⵉⴽⵏⵉ ⵏ Rayat',
+                luxLanguageLabel: 'ⴼⵔⵏ ⵜⵓⵜⵍⴰⵢⵜ',
+                luxMobileMenuLabel: 'ⵍⴷⵉ ⵎⵉⵏⵓ',
+                luxNavProduct: 'ⴰⴼⴰⵔⵉⵙ',
+                luxNavSolutions: 'ⵜⵉⴼⵔⴰⵜⵉⵏ',
+                luxNavTechnology: 'ⵜⵉⴽⵏⵓⵍⵓⵊⵉⵜ',
+                luxNavResources: 'ⵉⵙⵓⴳⴰⵎ',
+                luxNavPricing: 'ⵜⴰⵙⵎⴽⵜ',
+                luxNavAbout: 'ⴼⵍⵍⴰⵏⵖ',
+                luxCtaDemo: 'ⵜⵜⵔ ⴷⵉⵎⵓ',
+                luxHeroEyebrow: 'ⵜⴼⵍⵍⴰⵃⵜ ⵜⴰⵎⵓⵙⵙⵏⴰⵜ',
+                luxHeroTitleLine1: 'ⵜⵉⵎⵓⵙⵙⵏⵉ',
+                luxHeroTitleLine2: 'ⵉ ⵓⴼⵓⵙ ⵏ',
+                luxHeroTitleAccent: 'ⵜⵎⴳⵔⵜ ⵏⵏⵓⵏ.',
+                luxHeroBody: 'Rayat ⵜⵙⴱⴷⴰⴷ ⵉⵙⴼⴽⴰ ⵏ ⵓⴽⴰⵍ ⵏⵏⵓⵏ ⴷ ⵜⵉⵖⵜⴰⵙ ⵉⵣⴷⵉⴳⵏ ⵉ ⵓⵙⵙⴷⵔⵓⵙ ⵏ ⵡⴰⵎⴰⵏ ⴷ ⵓⵙⴼⵔⴽ ⵏ ⵉⵎⵉⵀⵉⵜⵏ.',
+                luxHeroPrimaryCta: 'ⵜⵜⵔ ⴷⵉⵎⵓ',
+                luxHeroSecondaryCta: 'ⵙⵏⴼⵍ ⵜⴰⵎⵏⴰⴹⵜ',
+                luxMetricHumidityLabel: 'ⵜⴰⵎⵉⴷⵉ ⵏ ⵓⴽⴰⵍ',
+                luxMetricHumidityValue: '62%',
+                luxMetricHumidityStatus: 'ⵉⵖⵓⴷⴰ',
+                luxMetricTemperatureLabel: 'ⵜⴰⴼⵓⴽⵍⴰ',
+                luxMetricTemperatureValue: '28.5°C',
+                luxMetricTemperatureStatus: 'ⵜⵙⴷⴰⵡ',
+                luxMetricCropHealthLabel: 'ⵜⴰⵎⴰⵣⵉⵔⵜ ⵏ ⵜⵎⴳⵔⵜ',
+                luxMetricCropHealthValue: '85/100',
+                luxMetricCropHealthStatus: 'ⵜⵖⵓⴷⴰ',
+                luxMetricWaterLabel: 'ⴰⵙⵎⵔⵙ ⵏ ⵡⴰⵎⴰⵏ',
+                luxMetricWaterValue: '-30%',
+                luxMetricWaterStatus: 'ⵎⴳⴰⵍ ⵉⵎⴰⵍⴰⵙ ⵉⵣⵔⵉⵏ',
+                luxLangShortIt: 'IT',
+                luxLangShortEn: 'EN',
+                luxLangShortFr: 'FR',
+                luxLangShortAr: 'AR',
+                luxLangShortTz: 'TZ',
+                luxLangIt: 'Italiano',
+                luxLangEn: 'English',
+                luxLangFr: 'Français',
+                luxLangAr: 'العربية',
+                luxLangTz: 'Amazigh'
+            }
+        };
+        HOMEPAGE_2026_TRANSLATIONS.zgh = { ...HOMEPAGE_2026_TRANSLATIONS.tz };
+
+        Object.entries(HOMEPAGE_2026_TRANSLATIONS).forEach(([lang, values]) => {
+            translations[lang] = {
+                ...(translations[lang] || {}),
+                ...values
+            };
+        });
+
+        const HOMEPAGE_2026_STEP2_TRANSLATIONS = {
+            it: {
+                luxDashboardSidebarTitle: 'RAYAT',
+                luxDashboardSidebarSubtitle: 'Smart Monitoring',
+                luxDashboardNavOverview: 'Vista generale',
+                luxDashboardNavParcels: 'Parcelle',
+                luxDashboardNavSensors: 'Sensori',
+                luxDashboardNavIrrigation: 'Irrigazione',
+                luxDashboardNavAlerts: 'Avvisi',
+                luxDashboardNavAnalytics: 'Analisi',
+                luxDashboardNavReports: 'Report',
+                luxDashboardNavSettings: 'Impostazioni',
+                luxDashboardProfileInitials: 'MA',
+                luxDashboardProfileName: 'Mohamed Amine',
+                luxDashboardProfileRole: 'Agricoltore',
+                luxDashboardOverviewTitle: 'Vista d’insieme',
+                luxDashboardPeriod: '18 - 24 Maggio 2026',
+                luxDashboardExport: 'Esporta',
+                luxKpiWaterLabel: 'Consumo d’acqua',
+                luxKpiWaterValue: '-30%',
+                luxKpiWaterStatus: 'vs settimana scorsa',
+                luxKpiHealthLabel: 'Salute delle colture',
+                luxKpiHealthValue: '85/100',
+                luxKpiHealthStatus: 'Buona',
+                luxKpiIrrigationLabel: 'Efficienza irrigazione',
+                luxKpiIrrigationValue: '92%',
+                luxKpiIrrigationStatus: 'Eccellente',
+                luxKpiTempLabel: 'Temperatura media',
+                luxKpiTempValue: '28.5°C',
+                luxKpiTempStatus: 'Stabile',
+                luxMapTitle: 'Le mie parcelle',
+                luxMapFilter: 'Tutte le parcelle',
+                luxMapZoomInLabel: 'Aumenta zoom',
+                luxMapZoomOutLabel: 'Riduci zoom',
+                luxMapLegendExcellent: 'Eccellente',
+                luxMapLegendGood: 'Buona',
+                luxMapLegendAverage: 'Media',
+                luxMapLegendAlert: 'Allerta',
+                luxAiTitle: 'Raccomandazioni IA',
+                luxAiBadge: '3',
+                luxAiRow1Title: 'Irrigazione consigliata',
+                luxAiRow1Text: 'Tra 2h · Durata stimata 45 min',
+                luxAiRow2Title: 'Rischio stress idrico',
+                luxAiRow2Text: 'Elevato domani · Temperatura prevista 32°',
+                luxAiRow3Title: 'Fertilizzazione',
+                luxAiRow3Text: 'Nutrienti OK · Nessuna azione richiesta',
+                luxAiViewAll: 'Vedi tutte le raccomandazioni',
+                luxMobileCardTitle: 'Rayat Mobile',
+                luxMobileCardText: 'La tua azienda sempre in tasca.',
+                luxMobileAppStore: 'App Store',
+                luxMobileGooglePlay: 'Google Play',
+                luxPhoneParcel: 'Parcella 01',
+                luxPhoneHumidityLabel: 'Umidità suolo',
+                luxPhoneTempLabel: 'Temp.',
+                luxPhoneEcLabel: 'EC',
+                luxPhonePhLabel: 'pH',
+                luxPhoneAirHumidityLabel: 'Umidità aria',
+                luxPhoneTempValue: '28.5°C',
+                luxPhoneEcValue: '1.2 dS/m',
+                luxPhonePhValue: '6.3',
+                luxPhoneAirHumidityValue: '45%',
+                luxPhoneHome: 'Home',
+                luxPhonePlots: 'Parcelle',
+                luxPhoneAlerts: 'Avvisi',
+                luxPhoneProfile: 'Profilo',
+                luxFeatureIotTitle: 'Monitoraggio IoT',
+                luxFeatureIotText: 'Sensori ad alta precisione in tempo reale.',
+                luxFeatureIrrigationTitle: 'Irrigazione smart',
+                luxFeatureIrrigationText: 'Consigli precisi per risparmiare acqua.',
+                luxFeatureAnalyticsTitle: 'Analisi avanzate',
+                luxFeatureAnalyticsText: 'Dati affidabili per decisioni chiare.',
+                luxFeatureAlertsTitle: 'Avvisi e prevenzione',
+                luxFeatureAlertsText: 'Notifiche prima che i problemi impattino.',
+                luxFeatureAiTitle: 'Agronomo IA',
+                luxFeatureAiText: 'Assistente intelligente disponibile 24/7.'
+            },
+            en: {
+                luxDashboardSidebarTitle: 'RAYAT',
+                luxDashboardSidebarSubtitle: 'Smart Monitoring',
+                luxDashboardNavOverview: 'Overview',
+                luxDashboardNavParcels: 'Parcels',
+                luxDashboardNavSensors: 'Sensors',
+                luxDashboardNavIrrigation: 'Irrigation',
+                luxDashboardNavAlerts: 'Alerts',
+                luxDashboardNavAnalytics: 'Analytics',
+                luxDashboardNavReports: 'Reports',
+                luxDashboardNavSettings: 'Settings',
+                luxDashboardProfileInitials: 'MA',
+                luxDashboardProfileName: 'Mohamed Amine',
+                luxDashboardProfileRole: 'Farmer',
+                luxDashboardOverviewTitle: 'Overview',
+                luxDashboardPeriod: '18 - 24 May 2026',
+                luxDashboardExport: 'Export',
+                luxKpiWaterLabel: 'Water consumption',
+                luxKpiWaterValue: '-30%',
+                luxKpiWaterStatus: 'vs last week',
+                luxKpiHealthLabel: 'Crop health',
+                luxKpiHealthValue: '85/100',
+                luxKpiHealthStatus: 'Good',
+                luxKpiIrrigationLabel: 'Irrigation efficiency',
+                luxKpiIrrigationValue: '92%',
+                luxKpiIrrigationStatus: 'Excellent',
+                luxKpiTempLabel: 'Average temperature',
+                luxKpiTempValue: '28.5°C',
+                luxKpiTempStatus: 'Stable',
+                luxMapTitle: 'My parcels',
+                luxMapFilter: 'All parcels',
+                luxMapZoomInLabel: 'Zoom in',
+                luxMapZoomOutLabel: 'Zoom out',
+                luxMapLegendExcellent: 'Excellent',
+                luxMapLegendGood: 'Good',
+                luxMapLegendAverage: 'Average',
+                luxMapLegendAlert: 'Alert',
+                luxAiTitle: 'AI recommendations',
+                luxAiBadge: '3',
+                luxAiRow1Title: 'Recommended irrigation',
+                luxAiRow1Text: 'In 2h · Estimated duration 45 min',
+                luxAiRow2Title: 'Water stress risk',
+                luxAiRow2Text: 'High tomorrow · Forecast temperature 32°',
+                luxAiRow3Title: 'Fertilization',
+                luxAiRow3Text: 'Nutrients OK · No action required',
+                luxAiViewAll: 'View all recommendations',
+                luxMobileCardTitle: 'Rayat Mobile',
+                luxMobileCardText: 'Your operation in your pocket.',
+                luxMobileAppStore: 'App Store',
+                luxMobileGooglePlay: 'Google Play',
+                luxPhoneParcel: 'Parcel 01',
+                luxPhoneHumidityLabel: 'Soil humidity',
+                luxPhoneTempLabel: 'Temp.',
+                luxPhoneEcLabel: 'EC',
+                luxPhonePhLabel: 'pH',
+                luxPhoneAirHumidityLabel: 'Air humidity',
+                luxPhoneTempValue: '28.5°C',
+                luxPhoneEcValue: '1.2 dS/m',
+                luxPhonePhValue: '6.3',
+                luxPhoneAirHumidityValue: '45%',
+                luxPhoneHome: 'Home',
+                luxPhonePlots: 'Parcels',
+                luxPhoneAlerts: 'Alerts',
+                luxPhoneProfile: 'Profile',
+                luxFeatureIotTitle: 'IoT Monitoring',
+                luxFeatureIotText: 'High-precision sensors in real time.',
+                luxFeatureIrrigationTitle: 'Smart Irrigation',
+                luxFeatureIrrigationText: 'Precise recommendations to save water.',
+                luxFeatureAnalyticsTitle: 'Analytics',
+                luxFeatureAnalyticsText: 'Reliable data for clear decisions.',
+                luxFeatureAlertsTitle: 'Alerts',
+                luxFeatureAlertsText: 'Notifications before problems impact crops.',
+                luxFeatureAiTitle: 'AI Agronomist',
+                luxFeatureAiText: 'Intelligent assistant available 24/7.'
+            },
+            fr: {
+                luxDashboardSidebarTitle: 'RAYAT',
+                luxDashboardSidebarSubtitle: 'Smart Monitoring',
+                luxDashboardNavOverview: 'Vue d’ensemble',
+                luxDashboardNavParcels: 'Parcelles',
+                luxDashboardNavSensors: 'Capteurs',
+                luxDashboardNavIrrigation: 'Irrigation',
+                luxDashboardNavAlerts: 'Alertes',
+                luxDashboardNavAnalytics: 'Analyses',
+                luxDashboardNavReports: 'Rapports',
+                luxDashboardNavSettings: 'Paramètres',
+                luxDashboardProfileInitials: 'MA',
+                luxDashboardProfileName: 'Mohamed Amine',
+                luxDashboardProfileRole: 'Agriculteur',
+                luxDashboardOverviewTitle: 'Vue d’ensemble',
+                luxDashboardPeriod: '18 - 24 Mai 2026',
+                luxDashboardExport: 'Exporter',
+                luxKpiWaterLabel: 'Consommation d’eau',
+                luxKpiWaterValue: '-30%',
+                luxKpiWaterStatus: 'vs semaine dernière',
+                luxKpiHealthLabel: 'Santé des cultures',
+                luxKpiHealthValue: '85/100',
+                luxKpiHealthStatus: 'Bonne',
+                luxKpiIrrigationLabel: 'Efficacité irrigation',
+                luxKpiIrrigationValue: '92%',
+                luxKpiIrrigationStatus: 'Excellente',
+                luxKpiTempLabel: 'Température moyenne',
+                luxKpiTempValue: '28.5°C',
+                luxKpiTempStatus: 'Stable',
+                luxMapTitle: 'Mes parcelles',
+                luxMapFilter: 'Toutes les parcelles',
+                luxMapZoomInLabel: 'Zoom avant',
+                luxMapZoomOutLabel: 'Zoom arrière',
+                luxMapLegendExcellent: 'Excellente',
+                luxMapLegendGood: 'Bonne',
+                luxMapLegendAverage: 'Moyenne',
+                luxMapLegendAlert: 'Alerte',
+                luxAiTitle: 'Recommandations IA',
+                luxAiBadge: '3',
+                luxAiRow1Title: 'Irrigation recommandée',
+                luxAiRow1Text: 'Dans 2h · Durée estimée 45 min',
+                luxAiRow2Title: 'Risque stress hydrique',
+                luxAiRow2Text: 'Élevé demain · Température prévue 32°',
+                luxAiRow3Title: 'Fertilisation',
+                luxAiRow3Text: 'Nutriments OK · Aucune action requise',
+                luxAiViewAll: 'Voir toutes les recommandations',
+                luxMobileCardTitle: 'Rayat Mobile',
+                luxMobileCardText: 'Votre exploitation dans votre poche.',
+                luxMobileAppStore: 'App Store',
+                luxMobileGooglePlay: 'Google Play',
+                luxPhoneParcel: 'Parcelle 01',
+                luxPhoneHumidityLabel: 'Humidité du sol',
+                luxPhoneTempLabel: 'Temp.',
+                luxPhoneEcLabel: 'EC',
+                luxPhonePhLabel: 'pH',
+                luxPhoneAirHumidityLabel: 'Humidité air',
+                luxPhoneTempValue: '28.5°C',
+                luxPhoneEcValue: '1.2 dS/m',
+                luxPhonePhValue: '6.3',
+                luxPhoneAirHumidityValue: '45%',
+                luxPhoneHome: 'Accueil',
+                luxPhonePlots: 'Parcelles',
+                luxPhoneAlerts: 'Alertes',
+                luxPhoneProfile: 'Profil',
+                luxFeatureIotTitle: 'Surveillance IoT',
+                luxFeatureIotText: 'Capteurs haute précision en temps réel.',
+                luxFeatureIrrigationTitle: 'Irrigation optimisée',
+                luxFeatureIrrigationText: 'Recommandations précises pour économiser l’eau.',
+                luxFeatureAnalyticsTitle: 'Analyses avancées',
+                luxFeatureAnalyticsText: 'Données fiables pour des décisions claires.',
+                luxFeatureAlertsTitle: 'Alertes & prévention',
+                luxFeatureAlertsText: 'Notifications avant que les problèmes n’impactent vos cultures.',
+                luxFeatureAiTitle: 'Agronome IA',
+                luxFeatureAiText: 'Assistant intelligent disponible 24/7.'
+            },
+            ar: {
+                luxDashboardSidebarTitle: 'رايات',
+                luxDashboardSidebarSubtitle: 'المراقبة الذكية',
+                luxDashboardNavOverview: 'نظرة عامة',
+                luxDashboardNavParcels: 'القطع',
+                luxDashboardNavSensors: 'الحساسات',
+                luxDashboardNavIrrigation: 'السقي',
+                luxDashboardNavAlerts: 'التنبيهات',
+                luxDashboardNavAnalytics: 'التحليلات',
+                luxDashboardNavReports: 'التقارير',
+                luxDashboardNavSettings: 'الإعدادات',
+                luxDashboardProfileInitials: 'MA',
+                luxDashboardProfileName: 'محمد أمين',
+                luxDashboardProfileRole: 'مزارع',
+                luxDashboardOverviewTitle: 'نظرة عامة',
+                luxDashboardPeriod: '18 - 24 مايو 2026',
+                luxDashboardExport: 'تصدير',
+                luxKpiWaterLabel: 'استهلاك الماء',
+                luxKpiWaterValue: '-30%',
+                luxKpiWaterStatus: 'مقارنة بالأسبوع الماضي',
+                luxKpiHealthLabel: 'صحة المحاصيل',
+                luxKpiHealthValue: '85/100',
+                luxKpiHealthStatus: 'جيدة',
+                luxKpiIrrigationLabel: 'كفاءة السقي',
+                luxKpiIrrigationValue: '92%',
+                luxKpiIrrigationStatus: 'ممتازة',
+                luxKpiTempLabel: 'متوسط الحرارة',
+                luxKpiTempValue: '28.5°C',
+                luxKpiTempStatus: 'مستقرة',
+                luxMapTitle: 'قطعي الزراعية',
+                luxMapFilter: 'كل القطع',
+                luxMapZoomInLabel: 'تكبير',
+                luxMapZoomOutLabel: 'تصغير',
+                luxMapLegendExcellent: 'ممتازة',
+                luxMapLegendGood: 'جيدة',
+                luxMapLegendAverage: 'متوسطة',
+                luxMapLegendAlert: 'تنبيه',
+                luxAiTitle: 'توصيات الذكاء الاصطناعي',
+                luxAiBadge: '3',
+                luxAiRow1Title: 'سقي موصى به',
+                luxAiRow1Text: 'بعد ساعتين · مدة تقديرية 45 دقيقة',
+                luxAiRow2Title: 'خطر الإجهاد المائي',
+                luxAiRow2Text: 'مرتفع غدا · الحرارة المتوقعة 32°',
+                luxAiRow3Title: 'التسميد',
+                luxAiRow3Text: 'العناصر جيدة · لا إجراء مطلوب',
+                luxAiViewAll: 'عرض كل التوصيات',
+                luxMobileCardTitle: 'رايات موبايل',
+                luxMobileCardText: 'ضيعتك دائما في جيبك.',
+                luxMobileAppStore: 'App Store',
+                luxMobileGooglePlay: 'Google Play',
+                luxPhoneParcel: 'القطعة 01',
+                luxPhoneHumidityLabel: 'رطوبة التربة',
+                luxPhoneTempLabel: 'الحرارة',
+                luxPhoneEcLabel: 'EC',
+                luxPhonePhLabel: 'pH',
+                luxPhoneAirHumidityLabel: 'رطوبة الهواء',
+                luxPhoneTempValue: '28.5°C',
+                luxPhoneEcValue: '1.2 dS/m',
+                luxPhonePhValue: '6.3',
+                luxPhoneAirHumidityValue: '45%',
+                luxPhoneHome: 'الرئيسية',
+                luxPhonePlots: 'القطع',
+                luxPhoneAlerts: 'التنبيهات',
+                luxPhoneProfile: 'الملف',
+                luxFeatureIotTitle: 'مراقبة IoT',
+                luxFeatureIotText: 'حساسات عالية الدقة في الوقت الحقيقي.',
+                luxFeatureIrrigationTitle: 'سقي ذكي',
+                luxFeatureIrrigationText: 'توصيات دقيقة لتوفير الماء.',
+                luxFeatureAnalyticsTitle: 'تحليلات',
+                luxFeatureAnalyticsText: 'بيانات موثوقة لقرارات واضحة.',
+                luxFeatureAlertsTitle: 'تنبيهات',
+                luxFeatureAlertsText: 'إشعارات قبل تأثير المشاكل على المحاصيل.',
+                luxFeatureAiTitle: 'مهندس زراعي IA',
+                luxFeatureAiText: 'مساعد ذكي متاح 24/7.'
+            },
+            tz: {
+                luxDashboardSidebarTitle: 'RAYAT',
+                luxDashboardSidebarSubtitle: 'Smart Monitoring',
+                luxDashboardNavOverview: 'ⵜⴰⵎⵓⵖⵍⵉ',
+                luxDashboardNavParcels: 'ⵉⴳⵔⴰⵏ',
+                luxDashboardNavSensors: 'ⵉⵎⵙⵙⵜⴰⵏⵏ',
+                luxDashboardNavIrrigation: 'ⴰⵙⵙⴰⵢ',
+                luxDashboardNavAlerts: 'ⴰⵍⵖⵓⵏ',
+                luxDashboardNavAnalytics: 'ⵜⴰⵙⵍⴹⵜ',
+                luxDashboardNavReports: 'ⵜⵉⵇⵇⴰⴷⵉⵏ',
+                luxDashboardNavSettings: 'ⵜⵉⵙⵖⴰⵍ',
+                luxDashboardProfileInitials: 'MA',
+                luxDashboardProfileName: 'Mohamed Amine',
+                luxDashboardProfileRole: 'ⴰⴼⵍⵍⴰⵃ',
+                luxDashboardOverviewTitle: 'ⵜⴰⵎⵓⵖⵍⵉ',
+                luxDashboardPeriod: '18 - 24 Mayyu 2026',
+                luxDashboardExport: 'ⵙⵙⵓⴼⵖ',
+                luxKpiWaterLabel: 'ⴰⵙⵎⵔⵙ ⵏ ⵡⴰⵎⴰⵏ',
+                luxKpiWaterValue: '-30%',
+                luxKpiWaterStatus: 'ⵎⴳⴰⵍ ⵉⵎⴰⵍⴰⵙ ⵉⵣⵔⵉⵏ',
+                luxKpiHealthLabel: 'ⵜⴰⴷⵓⵙⵉ ⵏ ⵜⵎⴳⵔⵜ',
+                luxKpiHealthValue: '85/100',
+                luxKpiHealthStatus: 'ⵜⵖⵓⴷⴰ',
+                luxKpiIrrigationLabel: 'ⵜⵉⵣⵎⵎⴰⵔ ⵏ ⵓⵙⵙⴰⵢ',
+                luxKpiIrrigationValue: '92%',
+                luxKpiIrrigationStatus: 'ⵉⵎⵜⵉⵢⴰⵣ',
+                luxKpiTempLabel: 'ⵜⴰⴼⵓⴽⵍⴰ ⵜⴰⵎⵙⵏⴰⵎⵜ',
+                luxKpiTempValue: '28.5°C',
+                luxKpiTempStatus: 'ⵜⵙⴷⴰⵡ',
+                luxMapTitle: 'ⵉⴳⵔⴰⵏ ⵉⵏⵓ',
+                luxMapFilter: 'ⴽⵓ ⵉⴳⵔⴰⵏ',
+                luxMapZoomInLabel: 'ⵙⵎⵖⵔ',
+                luxMapZoomOutLabel: 'ⵙⵎⵥⵥⵉ',
+                luxMapLegendExcellent: 'ⵉⵎⵜⵉⵢⴰⵣ',
+                luxMapLegendGood: 'ⵜⵖⵓⴷⴰ',
+                luxMapLegendAverage: 'ⵜⴰⵎⵙⵏⴰⵎⵜ',
+                luxMapLegendAlert: 'ⴰⵍⵖⵓ',
+                luxAiTitle: 'ⵜⵉⵡⵏⵏⴹⵉⵏ IA',
+                luxAiBadge: '3',
+                luxAiRow1Title: 'ⴰⵙⵙⴰⵢ ⵉⵜⵜⵓⵙⵎⵔⵙⵏ',
+                luxAiRow1Text: 'ⴳ 2h · 45 min',
+                luxAiRow2Title: 'ⵉⵎⵉⵀⵉ ⵏ ⵓⵥⵕⵓ ⵏ ⵡⴰⵎⴰⵏ',
+                luxAiRow2Text: 'ⵉⵄⵍⴰ ⴰⵙⴽⴽⴰ · 32°',
+                luxAiRow3Title: 'ⴰⵙⴼⵔⴰⵔ',
+                luxAiRow3Text: 'ⵉⵎⴰⵏⵏ ⵖⵓⴷⴰⵏ · ⵓⵔ ⵉⵅⵚⵚⴰ ⵡⴰⵍⵓ',
+                luxAiViewAll: 'ⵥⵔ ⴽⵓ ⵜⵉⵡⵏⵏⴹⵉⵏ',
+                luxMobileCardTitle: 'Rayat Mobile',
+                luxMobileCardText: 'ⵜⵉⴳⵎⵎⵉ ⵏⵏⴽ ⴳ ⵜⵓⴼⴼⵓⵙⵜ.',
+                luxMobileAppStore: 'App Store',
+                luxMobileGooglePlay: 'Google Play',
+                luxPhoneParcel: 'ⴰⴳⵔ 01',
+                luxPhoneHumidityLabel: 'ⵜⴰⵎⵉⴷⵉ ⵏ ⵓⴽⴰⵍ',
+                luxPhoneTempLabel: 'ⵜⴰⴼⵓⴽⵍⴰ',
+                luxPhoneEcLabel: 'EC',
+                luxPhonePhLabel: 'pH',
+                luxPhoneAirHumidityLabel: 'ⵜⴰⵎⵉⴷⵉ ⵏ ⵡⴰⵍⵍⵓⵏ',
+                luxPhoneTempValue: '28.5°C',
+                luxPhoneEcValue: '1.2 dS/m',
+                luxPhonePhValue: '6.3',
+                luxPhoneAirHumidityValue: '45%',
+                luxPhoneHome: 'ⴰⵙⵏⵓⴱⴳ',
+                luxPhonePlots: 'ⵉⴳⵔⴰⵏ',
+                luxPhoneAlerts: 'ⴰⵍⵖⵓⵏ',
+                luxPhoneProfile: 'ⴰⴼⵔⵙ',
+                luxFeatureIotTitle: 'ⵜⴰⴳⴳⴰ IoT',
+                luxFeatureIotText: 'ⵉⵎⵙⵙⵜⴰⵏⵏ ⵙ ⵜⵉⵙⴷⴷⵉ ⵉⵄⵍⴰⵏ.',
+                luxFeatureIrrigationTitle: 'ⴰⵙⵙⴰⵢ ⴰⵎⵓⵙⵙⵏ',
+                luxFeatureIrrigationText: 'ⵜⵉⵡⵏⵏⴹⵉⵏ ⵉ ⵓⵙⵙⴷⵔⵓⵙ ⵏ ⵡⴰⵎⴰⵏ.',
+                luxFeatureAnalyticsTitle: 'ⵜⴰⵙⵍⴹⵜ',
+                luxFeatureAnalyticsText: 'ⵉⵙⴼⴽⴰ ⵉⵖⵓⴷⴰⵏ ⵉ ⵜⵉⵖⵜⴰⵙ ⵉⴼⴰⵡⵏ.',
+                luxFeatureAlertsTitle: 'ⴰⵍⵖⵓⵏ',
+                luxFeatureAlertsText: 'ⵉⵍⵖⴰ ⵇⴱⵍ ⴰⴷ ⵉⵎⵙⴰⵙⴰ ⵓⴳⵓⵔ.',
+                luxFeatureAiTitle: 'ⴰⴳⵔⵓⵏⵓⵎ IA',
+                luxFeatureAiText: 'ⴰⵎⴰⵣⵣⴰⵍ ⴰⵎⵓⵙⵙⵏ 24/7.'
+            }
+        };
+        HOMEPAGE_2026_STEP2_TRANSLATIONS.zgh = { ...HOMEPAGE_2026_STEP2_TRANSLATIONS.tz };
+
+        Object.entries(HOMEPAGE_2026_STEP2_TRANSLATIONS).forEach(([lang, values]) => {
+            translations[lang] = {
+                ...(translations[lang] || {}),
+                ...values
+            };
+        });
+
+        const RAYAT_HOMEPAGE_EDITORIAL_2026_TRANSLATIONS = {
+            it: {
+                luxEditorialEyebrow: 'Perche Rayat?',
+                luxEditorialTitle: 'Una piattaforma completa, intelligente, connessa.',
+                luxEditorialText: 'Rayat unisce sensori IoT professionali, intelligenza agronomica e dati sul campo in un\'unica piattaforma, per aiutarti a prendere decisioni migliori al momento giusto.',
+                luxEditorialLiveTitle: 'Dati in tempo reale',
+                luxEditorialLiveText: 'Monitora le parcelle 24/7 con sensori IoT ad alta precisione.',
+                luxEditorialAiTitle: 'Intelligenza agronomica',
+                luxEditorialAiText: 'L\'IA analizza i dati e fornisce consigli agronomici operativi.',
+                luxEditorialWaterTitle: 'Ottimizzazione dell\'acqua',
+                luxEditorialWaterText: 'Riduci fino al 30% il consumo idrico con raccomandazioni mirate.',
+                luxEditorialAlertsTitle: 'Prevenzione e avvisi',
+                luxEditorialAlertsText: 'Anticipa i rischi con avvisi tempestivi per proteggere le colture.',
+                luxEditorialPrimaryCta: 'Scopri la piattaforma',
+                luxEditorialSecondaryCta: 'Guarda come funziona',
+                luxEditorialPhotoAlt: 'Coltivazioni verdi monitorate da Rayat',
+                luxEditorialKpiWaterValue: '+30%',
+                luxEditorialKpiWaterText: 'Risparmio idrico medio',
+                luxEditorialKpiYieldValue: '+25%',
+                luxEditorialKpiYieldText: 'Produttivita delle colture',
+                luxEditorialKpiMonitoringValue: '24/7',
+                luxEditorialKpiMonitoringText: 'Monitoraggio continuo',
+                luxEditorialKpiFarmersValue: '+500',
+                luxEditorialKpiFarmersText: 'Agricoltori si fidano di noi'
+            },
+            en: {
+                luxEditorialEyebrow: 'Why Rayat?',
+                luxEditorialTitle: 'A complete, intelligent, connected platform.',
+                luxEditorialText: 'Rayat brings professional IoT sensors, agronomic intelligence and field data together in one platform, helping you make better decisions at the right time.',
+                luxEditorialLiveTitle: 'Real-time data',
+                luxEditorialLiveText: 'Monitor plots 24/7 with high-precision IoT sensors.',
+                luxEditorialAiTitle: 'Agronomic intelligence',
+                luxEditorialAiText: 'AI analyzes your data and delivers actionable agronomic guidance.',
+                luxEditorialWaterTitle: 'Water optimization',
+                luxEditorialWaterText: 'Reduce water use by up to 30% with targeted recommendations.',
+                luxEditorialAlertsTitle: 'Prevention and alerts',
+                luxEditorialAlertsText: 'Anticipate risks with timely alerts that protect your crops.',
+                luxEditorialPrimaryCta: 'Discover the platform',
+                luxEditorialSecondaryCta: 'See how it works',
+                luxEditorialPhotoAlt: 'Green crops monitored by Rayat',
+                luxEditorialKpiWaterValue: '+30%',
+                luxEditorialKpiWaterText: 'Average water savings',
+                luxEditorialKpiYieldValue: '+25%',
+                luxEditorialKpiYieldText: 'Crop productivity',
+                luxEditorialKpiMonitoringValue: '24/7',
+                luxEditorialKpiMonitoringText: 'Continuous monitoring',
+                luxEditorialKpiFarmersValue: '+500',
+                luxEditorialKpiFarmersText: 'Farmers trust us'
+            },
+            fr: {
+                luxEditorialEyebrow: 'Pourquoi Rayat ?',
+                luxEditorialTitle: 'Une plateforme complete, intelligente, connectee.',
+                luxEditorialText: 'Rayat reunit capteurs IoT professionnels, intelligence agronomique et donnees terrain dans une seule plateforme pour vous aider a prendre les meilleures decisions, au bon moment.',
+                luxEditorialLiveTitle: 'Donnees en temps reel',
+                luxEditorialLiveText: 'Surveillez vos parcelles 24/7 grace a des capteurs IoT de haute precision.',
+                luxEditorialAiTitle: 'Intelligence agronomique',
+                luxEditorialAiText: 'L\'IA analyse vos donnees et fournit des conseils agronomiques actionnables.',
+                luxEditorialWaterTitle: 'Optimisation de l\'eau',
+                luxEditorialWaterText: 'Reduisez jusqu\'a 30% votre consommation d\'eau avec des recommandations ciblees.',
+                luxEditorialAlertsTitle: 'Prevention et alertes',
+                luxEditorialAlertsText: 'Anticipez les risques avec des alertes instantanees pour proteger vos cultures.',
+                luxEditorialPrimaryCta: 'Decouvrir la plateforme',
+                luxEditorialSecondaryCta: 'Voir comment ca marche',
+                luxEditorialPhotoAlt: 'Cultures vertes surveillees par Rayat',
+                luxEditorialKpiWaterValue: '+30%',
+                luxEditorialKpiWaterText: 'Economie d\'eau en moyenne',
+                luxEditorialKpiYieldValue: '+25%',
+                luxEditorialKpiYieldText: 'Productivite des cultures',
+                luxEditorialKpiMonitoringValue: '24/7',
+                luxEditorialKpiMonitoringText: 'Surveillance continue',
+                luxEditorialKpiFarmersValue: '+500',
+                luxEditorialKpiFarmersText: 'Agriculteurs nous font confiance'
+            },
+            ar: {
+                luxEditorialEyebrow: 'لماذا رايات؟',
+                luxEditorialTitle: 'منصة متكاملة وذكية ومتصلة.',
+                luxEditorialText: 'تجمع رايات بين مستشعرات إنترنت الأشياء الاحترافية والذكاء الزراعي وبيانات الحقل في منصة واحدة لاتخاذ قرارات أفضل في الوقت المناسب.',
+                luxEditorialLiveTitle: 'بيانات في الوقت الحقيقي',
+                luxEditorialLiveText: 'راقب قطعك الزراعية على مدار الساعة بمستشعرات عالية الدقة.',
+                luxEditorialAiTitle: 'ذكاء زراعي',
+                luxEditorialAiText: 'يحلل الذكاء الاصطناعي بياناتك ويقدم توصيات عملية.',
+                luxEditorialWaterTitle: 'تحسين استخدام المياه',
+                luxEditorialWaterText: 'قلل استهلاك المياه حتى 30% بتوصيات موجهة.',
+                luxEditorialAlertsTitle: 'الوقاية والتنبيهات',
+                luxEditorialAlertsText: 'توقع المخاطر بتنبيهات فورية تحمي محاصيلك.',
+                luxEditorialPrimaryCta: 'اكتشف المنصة',
+                luxEditorialSecondaryCta: 'شاهد كيف تعمل',
+                luxEditorialPhotoAlt: 'محاصيل خضراء تراقبها رايات',
+                luxEditorialKpiWaterValue: '+30%',
+                luxEditorialKpiWaterText: 'متوسط توفير المياه',
+                luxEditorialKpiYieldValue: '+25%',
+                luxEditorialKpiYieldText: 'إنتاجية المحاصيل',
+                luxEditorialKpiMonitoringValue: '24/7',
+                luxEditorialKpiMonitoringText: 'مراقبة مستمرة',
+                luxEditorialKpiFarmersValue: '+500',
+                luxEditorialKpiFarmersText: 'مزارعون يثقون بنا'
+            },
+            tz: {
+                luxEditorialEyebrow: 'ⵎⴰⵅ ⵔⴰⵢⴰⵜ?',
+                luxEditorialTitle: 'ⵜⴰⵙⵏⵙⵉ ⵉⴽⵎⵍⵏ, ⵉⵎⵓⵙⵙⵏ, ⵉⵣⴷⵉⵏ.',
+                luxEditorialText: 'Rayat ⴰⵔ ⵜⵙⵎⵓⵏ IoT, ⵜⵉⵎⵓⵙⵙⵏⵉ ⵏ ⵜⴼⵍⴰⵃⵜ ⴷ ⵉⵙⴼⴽⴰ ⵏ ⵓⴳⵔ ⴳ ⵢⴰⵜ ⵜⵙⵏⵙⵉ.',
+                luxEditorialLiveTitle: 'ⵉⵙⴼⴽⴰ ⵙ ⵓⵣⵎⵣ',
+                luxEditorialLiveText: 'ⵙⵙⵜⵉ ⵉⴳⵔⴰⵏ 24/7 ⵙ IoT ⵉⵖⵓⴷⴰⵏ.',
+                luxEditorialAiTitle: 'ⵜⵉⵎⵓⵙⵙⵏⵉ ⵏ ⵜⴼⵍⴰⵃⵜ',
+                luxEditorialAiText: 'IA ⵜⴻⵜⵜⴰⵡⵙⴰ ⵉⵙⴼⴽⴰ ⵏⵏⴽ ⴰⴷ ⵜⴰⴼⴷ ⵜⵉⵡⵏⵏⴹⵉⵏ.',
+                luxEditorialWaterTitle: 'ⴰⵙⵙⴷⵔⵓⵙ ⵏ ⵡⴰⵎⴰⵏ',
+                luxEditorialWaterText: 'ⵙⵙⴷⵔⵓⵙ ⴰⵙⴻⵇⴷⴻⵛ ⵏ ⵡⴰⵎⴰⵏ ⴰⵔ 30%.',
+                luxEditorialAlertsTitle: 'ⴰⵙⴳⴷⵍ ⴷ ⵉⵍⵖⴰ',
+                luxEditorialAlertsText: 'ⵙⵙⵉⵡⴹ ⵉⵍⵖⴰ ⵣⵉⴽ ⵉ ⵓⵃⵔⴰⵣ ⵏ ⵉⵎⵉⵔⴰⵏ.',
+                luxEditorialPrimaryCta: 'ⵙⵙⵏ ⵜⴰⵙⵏⵙⵉ',
+                luxEditorialSecondaryCta: 'ⵥⵔ ⵎⴰⵎⴽ ⵜⵙⵡⵓⵔⵉ',
+                luxEditorialPhotoAlt: 'ⵉⵎⵉⵔⴰⵏ ⵉⵣⴳⵣⴰⵡⵏ ⵙ Rayat',
+                luxEditorialKpiWaterValue: '+30%',
+                luxEditorialKpiWaterText: 'ⴰⵙⴻⵇⴷⴻⵛ ⵏ ⵡⴰⵎⴰⵏ',
+                luxEditorialKpiYieldValue: '+25%',
+                luxEditorialKpiYieldText: 'ⴰⵙⴼⴰⵔⵉ ⵏ ⵉⵎⵉⵔⴰⵏ',
+                luxEditorialKpiMonitoringValue: '24/7',
+                luxEditorialKpiMonitoringText: 'ⵜⴰⴳⴳⴰ ⵜⴰⵎⵖⵍⴰⵍⵜ',
+                luxEditorialKpiFarmersValue: '+500',
+                luxEditorialKpiFarmersText: 'ⵉⴼⵍⵍⴰⵃⵏ ⵜⵜⴰⴽⴽⵯⵙⵏ ⵖⵓⵔⵏⵖ'
+            }
+        };
+        RAYAT_HOMEPAGE_EDITORIAL_2026_TRANSLATIONS.zgh = { ...RAYAT_HOMEPAGE_EDITORIAL_2026_TRANSLATIONS.tz };
+
+        Object.entries(RAYAT_HOMEPAGE_EDITORIAL_2026_TRANSLATIONS).forEach(([lang, values]) => {
+            translations[lang] = {
+                ...(translations[lang] || {}),
+                ...values
+            };
+        });
+
+        const RAYAT_HOMEPAGE_LIVE_SUITE_2026_TRANSLATIONS = {
+            it: {
+                luxLiveSensorEyebrow: 'Sensori in tempo reale',
+                luxLiveSensorTitle: 'Tutti i parametri, sotto controllo.',
+                luxLiveSensorText: 'Dati in tempo reale dai tuoi campi.',
+                luxLiveHumidityLabel: 'Umidità',
+                luxLiveAllSensors: 'Vedi tutti i sensori',
+                luxLiveChartCollecting: 'Raccolta dati live',
+                luxLiveAiEyebrow: 'Raccomandazioni IA',
+                luxLiveAiTitle: 'Decisioni intelligenti, colture più sane.',
+                luxLiveAiText: 'L\'intelligenza artificiale analizza i dati e anticipa i problemi prima che accadano.',
+                luxLiveAiHowWorks: 'Scopri come funziona',
+                luxLivePriorityMedium: 'Priorità media',
+                luxLivePriorityHigh: 'Priorità alta',
+                luxLivePriorityLow: 'Priorità bassa',
+                luxLiveIrrigationOutcome: 'Tra 2 ore',
+                luxLiveIrrigationFactOne: 'Durata stimata: 45 min',
+                luxLiveIrrigationFactTwo: 'Risparmio acqua: 18%',
+                luxLiveIrrigationCta: 'Vedi dettagli e programma',
+                luxLiveRiskOutcome: 'Elevato domani',
+                luxLiveRiskFactOne: 'Temperatura prevista: 32 C',
+                luxLiveRiskFactTwo: 'Umidità suolo in calo',
+                luxLiveRiskCta: 'Vedi analisi dettagliata',
+                luxLiveFertilizationOutcome: 'Azoto consigliato',
+                luxLiveFertilizationFactOne: 'Dose suggerita: 25 kg/ha',
+                luxLiveFertilizationFactTwo: 'Entro 48 ore',
+                luxLiveFertilizationCta: 'Piano di fertilizzazione',
+                luxLiveHealthTitle: 'Salute delle colture',
+                luxLiveHealthOutcome: 'Buona',
+                luxLiveHealthFactOne: 'Nessun rischio rilevato',
+                luxLiveHealthFactTwo: 'Continua così',
+                luxLiveHealthCta: 'Vedi raccomandazioni',
+                luxLiveApplicationsTitle: 'Applicazioni',
+                luxLiveApplicationsText: 'Dove Rayat può essere utilizzato.',
+                luxLiveAppGreenhouses: 'Serre',
+                luxLiveAppBananas: 'Banane',
+                luxLiveAppMelons: 'Meloni',
+                luxLiveAppTomatoes: 'Pomodori',
+                luxLiveAppIrrigation: 'Irrigazione smart',
+                luxLiveAppCooperatives: 'Cooperative',
+                luxLiveAllApplications: 'Vedi tutte le applicazioni'
+            },
+            en: {
+                luxLiveSensorEyebrow: 'Real-time sensors',
+                luxLiveSensorTitle: 'Every parameter, under control.',
+                luxLiveSensorText: 'Real-time data from your fields.',
+                luxLiveHumidityLabel: 'Humidity',
+                luxLiveAllSensors: 'View all sensors',
+                luxLiveChartCollecting: 'Collecting live data',
+                luxLiveAiEyebrow: 'AI recommendations',
+                luxLiveAiTitle: 'Smarter decisions, healthier crops.',
+                luxLiveAiText: 'Artificial intelligence analyzes data and anticipates issues before they occur.',
+                luxLiveAiHowWorks: 'Discover how it works',
+                luxLivePriorityMedium: 'Medium priority',
+                luxLivePriorityHigh: 'High priority',
+                luxLivePriorityLow: 'Low priority',
+                luxLiveIrrigationOutcome: 'In 2 hours',
+                luxLiveIrrigationFactOne: 'Estimated duration: 45 min',
+                luxLiveIrrigationFactTwo: 'Water saving: 18%',
+                luxLiveIrrigationCta: 'View details and schedule',
+                luxLiveRiskOutcome: 'High tomorrow',
+                luxLiveRiskFactOne: 'Forecast temperature: 32 C',
+                luxLiveRiskFactTwo: 'Soil humidity decreasing',
+                luxLiveRiskCta: 'View detailed analysis',
+                luxLiveFertilizationOutcome: 'Recommended nitrogen',
+                luxLiveFertilizationFactOne: 'Suggested dose: 25 kg/ha',
+                luxLiveFertilizationFactTwo: 'Within 48 hours',
+                luxLiveFertilizationCta: 'Fertilization plan',
+                luxLiveHealthTitle: 'Crop health',
+                luxLiveHealthOutcome: 'Good',
+                luxLiveHealthFactOne: 'No risk detected',
+                luxLiveHealthFactTwo: 'Keep going',
+                luxLiveHealthCta: 'View recommendations',
+                luxLiveApplicationsTitle: 'Applications',
+                luxLiveApplicationsText: 'Where Rayat can be used.',
+                luxLiveAppGreenhouses: 'Greenhouses',
+                luxLiveAppBananas: 'Bananas',
+                luxLiveAppMelons: 'Melons',
+                luxLiveAppTomatoes: 'Tomatoes',
+                luxLiveAppIrrigation: 'Smart irrigation',
+                luxLiveAppCooperatives: 'Cooperatives',
+                luxLiveAllApplications: 'View all applications'
+            },
+            fr: {
+                luxLiveSensorEyebrow: 'Capteurs en temps reel',
+                luxLiveSensorTitle: 'Tous les parametres sous controle.',
+                luxLiveSensorText: 'Donnees en temps reel depuis vos champs.',
+                luxLiveHumidityLabel: 'Humidite',
+                luxLiveAllSensors: 'Voir tous les capteurs',
+                luxLiveChartCollecting: 'Collecte des donnees live',
+                luxLiveAiEyebrow: 'Recommandations IA',
+                luxLiveAiTitle: 'Decisions intelligentes, cultures plus saines.',
+                luxLiveAiText: 'L\'intelligence artificielle analyse les donnees et anticipe les problemes avant qu\'ils ne surviennent.',
+                luxLiveAiHowWorks: 'Decouvrir le fonctionnement',
+                luxLivePriorityMedium: 'Priorite moyenne',
+                luxLivePriorityHigh: 'Priorite haute',
+                luxLivePriorityLow: 'Priorite basse',
+                luxLiveIrrigationOutcome: 'Dans 2 heures',
+                luxLiveIrrigationFactOne: 'Duree estimee : 45 min',
+                luxLiveIrrigationFactTwo: 'Economie d\'eau : 18%',
+                luxLiveIrrigationCta: 'Voir details et programme',
+                luxLiveRiskOutcome: 'Eleve demain',
+                luxLiveRiskFactOne: 'Temperature prevue : 32 C',
+                luxLiveRiskFactTwo: 'Humidite du sol en baisse',
+                luxLiveRiskCta: 'Voir l\'analyse detaillee',
+                luxLiveFertilizationOutcome: 'Azote conseille',
+                luxLiveFertilizationFactOne: 'Dose suggeree : 25 kg/ha',
+                luxLiveFertilizationFactTwo: 'Sous 48 heures',
+                luxLiveFertilizationCta: 'Plan de fertilisation',
+                luxLiveHealthTitle: 'Sante des cultures',
+                luxLiveHealthOutcome: 'Bonne',
+                luxLiveHealthFactOne: 'Aucun risque detecte',
+                luxLiveHealthFactTwo: 'Continuez ainsi',
+                luxLiveHealthCta: 'Voir recommandations',
+                luxLiveApplicationsTitle: 'Applications',
+                luxLiveApplicationsText: 'Ou Rayat peut etre utilise.',
+                luxLiveAppGreenhouses: 'Serres',
+                luxLiveAppBananas: 'Bananes',
+                luxLiveAppMelons: 'Melons',
+                luxLiveAppTomatoes: 'Tomates',
+                luxLiveAppIrrigation: 'Irrigation intelligente',
+                luxLiveAppCooperatives: 'Cooperatives',
+                luxLiveAllApplications: 'Voir toutes les applications'
+            },
+            ar: {
+                luxLiveSensorEyebrow: 'حساسات في الوقت الحقيقي',
+                luxLiveSensorTitle: 'كل المؤشرات تحت السيطرة.',
+                luxLiveSensorText: 'بيانات مباشرة من حقولك.',
+                luxLiveHumidityLabel: 'الرطوبة',
+                luxLiveAllSensors: 'عرض كل الحساسات',
+                luxLiveChartCollecting: 'جار جمع البيانات المباشرة',
+                luxLiveAiEyebrow: 'توصيات الذكاء الاصطناعي',
+                luxLiveAiTitle: 'قرارات أذكى ومحاصيل أكثر صحة.',
+                luxLiveAiText: 'يحلل الذكاء الاصطناعي البيانات ويتوقع المشكلات قبل وقوعها.',
+                luxLiveAiHowWorks: 'اكتشف كيف يعمل',
+                luxLivePriorityMedium: 'أولوية متوسطة',
+                luxLivePriorityHigh: 'أولوية عالية',
+                luxLivePriorityLow: 'أولوية منخفضة',
+                luxLiveIrrigationOutcome: 'خلال ساعتين',
+                luxLiveIrrigationFactOne: 'المدة المتوقعة: 45 دقيقة',
+                luxLiveIrrigationFactTwo: 'توفير المياه: 18%',
+                luxLiveIrrigationCta: 'عرض التفاصيل والبرنامج',
+                luxLiveRiskOutcome: 'مرتفع غدا',
+                luxLiveRiskFactOne: 'الحرارة المتوقعة: 32 C',
+                luxLiveRiskFactTwo: 'انخفاض رطوبة التربة',
+                luxLiveRiskCta: 'عرض التحليل المفصل',
+                luxLiveFertilizationOutcome: 'آزوت موصى به',
+                luxLiveFertilizationFactOne: 'الجرعة المقترحة: 25 كغ/هكتار',
+                luxLiveFertilizationFactTwo: 'خلال 48 ساعة',
+                luxLiveFertilizationCta: 'خطة التسميد',
+                luxLiveHealthTitle: 'صحة المحاصيل',
+                luxLiveHealthOutcome: 'جيدة',
+                luxLiveHealthFactOne: 'لا مخاطر مكتشفة',
+                luxLiveHealthFactTwo: 'استمر هكذا',
+                luxLiveHealthCta: 'عرض التوصيات',
+                luxLiveApplicationsTitle: 'التطبيقات',
+                luxLiveApplicationsText: 'مجالات استخدام رايات.',
+                luxLiveAppGreenhouses: 'البيوت المحمية',
+                luxLiveAppBananas: 'الموز',
+                luxLiveAppMelons: 'البطيخ',
+                luxLiveAppTomatoes: 'الطماطم',
+                luxLiveAppIrrigation: 'السقي الذكي',
+                luxLiveAppCooperatives: 'التعاونيات',
+                luxLiveAllApplications: 'عرض كل التطبيقات'
+            },
+            tz: {
+                luxLiveSensorEyebrow: 'ⵉⵎⵙⵙⵜⴰⵏⵏ ⵙ ⵓⵣⵎⵣ',
+                luxLiveSensorTitle: 'ⴽⵓ ⵉⵎⵉⵜⴰⵔⵏ ⴳ ⵓⵎⵓⵔⵙ.',
+                luxLiveSensorText: 'ⵉⵙⴼⴽⴰ ⵙ ⵓⵣⵎⵣ ⵙⴳ ⵉⴳⵔⴰⵏ ⵏⵏⴽ.',
+                luxLiveHumidityLabel: 'ⵜⴰⵎⵉⴷⵉ',
+                luxLiveAllSensors: 'ⵥⵔ ⴽⵓ ⵉⵎⵙⵙⵜⴰⵏⵏ',
+                luxLiveChartCollecting: 'ⴰⵙⵎⵎⵓⵏ ⵏ ⵉⵙⴼⴽⴰ',
+                luxLiveAiEyebrow: 'ⵜⵉⵡⵏⵏⴹⵉⵏ IA',
+                luxLiveAiTitle: 'ⵜⵉⵖⵜⴰⵙ ⵉⵎⵓⵙⵙⵏ, ⵉⵎⵉⵔⴰⵏ ⵉⵖⵓⴷⴰⵏ.',
+                luxLiveAiText: 'IA ⴰⵔ ⵜⵙⵍⴹ ⵉⵙⴼⴽⴰ ⵜⵙⵙⵏ ⵉⵎⵓⴽⵔⵉⵙⵏ ⵣⵉⴽ.',
+                luxLiveAiHowWorks: 'ⵙⵙⵏ ⵎⴰⵎⴽ ⵜⵙⵡⵓⵔⵉ',
+                luxLivePriorityMedium: 'ⵜⴰⵣⵡⴰⵔⵜ ⵜⴰⵏⴰⵎⵎⴰⵙⵜ',
+                luxLivePriorityHigh: 'ⵜⴰⵣⵡⴰⵔⵜ ⵜⴰⵎⵇⵇⵔⴰⵏⵜ',
+                luxLivePriorityLow: 'ⵜⴰⵣⵡⴰⵔⵜ ⵉⴷⵔⵓⵙⵏ',
+                luxLiveIrrigationOutcome: 'ⴳ 2h',
+                luxLiveIrrigationFactOne: 'ⴰⴽⵓⴷ: 45 min',
+                luxLiveIrrigationFactTwo: 'ⴰⵎⴰⵏ: 18%',
+                luxLiveIrrigationCta: 'ⵥⵔ ⵜⵉⵙⴳⴳⵯⴰⵍ',
+                luxLiveRiskOutcome: 'ⵉⵄⵍⴰ ⴰⵙⴽⴽⴰ',
+                luxLiveRiskFactOne: 'ⵜⴰⴼⵓⴽⵍⴰ: 32 C',
+                luxLiveRiskFactTwo: 'ⵜⴰⵎⵉⴷⵉ ⴰⵔ ⵜⴷⵔⵓⵙ',
+                luxLiveRiskCta: 'ⵥⵔ ⵜⴰⵙⵍⴹⵜ',
+                luxLiveFertilizationOutcome: 'ⴰⵣⵓⵜ ⵉⵜⵜⵓⵙⵎⵔⵙⵏ',
+                luxLiveFertilizationFactOne: '25 kg/ha',
+                luxLiveFertilizationFactTwo: 'ⴳ 48h',
+                luxLiveFertilizationCta: 'ⴰⵙⵖⵉⵡⵙ ⵏ ⵓⵙⴼⵔⴰⵔ',
+                luxLiveHealthTitle: 'ⵜⴰⵣⵎⵔⵜ ⵏ ⵉⵎⵉⵔⴰⵏ',
+                luxLiveHealthOutcome: 'ⵜⵖⵓⴷⴰ',
+                luxLiveHealthFactOne: 'ⵓⵔ ⵉⵍⵍⵉ ⵓⵎⵉⵀⵉ',
+                luxLiveHealthFactTwo: 'ⴽⵎⵎⵍ',
+                luxLiveHealthCta: 'ⵥⵔ ⵜⵉⵡⵏⵏⴹⵉⵏ',
+                luxLiveApplicationsTitle: 'ⵉⵙⵎⵔⴰⵙⵏ',
+                luxLiveApplicationsText: 'ⵎⴰⵏⵉ ⵉⵣⵎⵔ ⴰⴷ ⵜⵜⵓⵙⵎⵔⵙ Rayat.',
+                luxLiveAppGreenhouses: 'ⵉⴼⵔⴰⴳⵏ',
+                luxLiveAppBananas: 'ⴱⴰⵏⴰⵏ',
+                luxLiveAppMelons: 'ⵎⵉⵍⵓⵏ',
+                luxLiveAppTomatoes: 'ⵜⵉⵎⴰⵜⵉⵛⵉⵏ',
+                luxLiveAppIrrigation: 'ⴰⵙⵙⴰⵢ ⴰⵎⵓⵙⵙⵏ',
+                luxLiveAppCooperatives: 'ⵜⵉⵡⵉⵙⵉ',
+                luxLiveAllApplications: 'ⵥⵔ ⴽⵓ ⵉⵙⵎⵔⴰⵙⵏ'
+            }
+        };
+        RAYAT_HOMEPAGE_LIVE_SUITE_2026_TRANSLATIONS.zgh = { ...RAYAT_HOMEPAGE_LIVE_SUITE_2026_TRANSLATIONS.tz };
+
+        Object.entries(RAYAT_HOMEPAGE_LIVE_SUITE_2026_TRANSLATIONS).forEach(([lang, values]) => {
+            translations[lang] = {
+                ...(translations[lang] || {}),
+                ...values
+            };
+        });
+
+        const RAYAT_HOMEPAGE_FINAL_2026_TRANSLATIONS = {
+            it: {
+                luxFinalMobileStep: '8',
+                luxFinalMobileEyebrow: 'I tuoi campi, sempre con te',
+                luxFinalMobileTitle: 'Il tuo campo, sempre in tasca.',
+                luxFinalMobileText: 'Monitora, analizza e gestisci tutto da dove vuoi. In ogni momento.',
+                luxFinalDownloadOn: 'Scarica su',
+                luxFinalAvailableOn: 'Disponibile su',
+                luxFinalAppStore: 'App Store',
+                luxFinalGooglePlay: 'Google Play',
+                luxFinalMapTitle: 'Mappa dei campi',
+                luxFinalFieldName: 'Campo Nord',
+                luxFinalCropName: 'Pomodori',
+                luxFinalSensorsTitle: 'Sensori',
+                luxFinalTrendTitle: 'Andamento',
+                luxFinalToday: 'Oggi',
+                luxFinalActivityTitle: 'Attivita',
+                luxFinalIrrigationItem: 'Irrigazione',
+                luxFinalFertilizationItem: 'Fertilizzazione',
+                luxFinalAlarmItem: 'Allarme',
+                luxFinalSensorsItem: 'Sensori',
+                luxFinalIrrigationTime: 'Oggi, 08:30',
+                luxFinalFertilizationTime: 'Ieri, 11:15',
+                luxFinalAlarmTime: 'Ieri, 14:00',
+                luxFinalCompleted: 'Completata',
+                luxFinalOperating: 'Tutti operativi',
+                luxFinalNewActivity: 'Nuova attivita',
+                luxFinalReportTitle: 'Report',
+                luxFinalReportHealth: 'Salute delle colture',
+                luxFinalReportExcellent: 'Ottima',
+                luxFinalTrendPositive: 'Trend positivo',
+                luxFinalTrendValue: '+12%',
+                luxFinalComparedYesterday: 'rispetto a ieri',
+                luxFinalResultsStep: '9',
+                luxFinalResultsEyebrow: 'Risultati reali, ogni giorno',
+                luxFinalResultsTitle: 'Risultati reali, ogni giorno.',
+                luxFinalSatisfactionValue: '98%',
+                luxFinalSatisfactionText: 'Soddisfazione clienti',
+                luxFinalFooterSubtitle: 'SMART FARMING',
+                luxFinalFooterText: 'La piattaforma tecnologica per un’agricoltura piu intelligente, produttiva e sostenibile.',
+                luxFinalFooterProduct: 'Prodotto',
+                luxFinalFooterSolutions: 'Soluzioni',
+                luxFinalFooterResources: 'Risorse',
+                luxFinalFooterCompany: 'Azienda',
+                luxFinalFooterNewsletter: 'Newsletter',
+                luxFinalFooterDashboard: 'Dashboard',
+                luxFinalFooterSensors: 'Sensori IoT',
+                luxFinalFooterIrrigation: 'Irrigazione',
+                luxFinalFooterAnalytics: 'Analisi',
+                luxFinalFooterAdvisor: 'AI Advisor',
+                luxFinalFooterOpenFields: 'Colture in pieno campo',
+                luxFinalFooterGreenhouses: 'Serre',
+                luxFinalFooterOrchards: 'Frutteti',
+                luxFinalFooterSmartIrrigation: 'Irrigazione smart',
+                luxFinalFooterCooperatives: 'Cooperative',
+                luxFinalFooterDocumentation: 'Documentazione',
+                luxFinalFooterBlog: 'Blog',
+                luxFinalFooterGuides: 'Guide',
+                luxFinalFooterSupport: 'Supporto',
+                luxFinalFooterApi: 'API',
+                luxFinalFooterAbout: 'Chi siamo',
+                luxFinalFooterCareer: 'Carriera',
+                luxFinalFooterWork: 'Lavora con noi',
+                luxFinalFooterDemo: 'Demo',
+                luxFinalNewsletterText: 'Ricevi aggiornamenti, novita e consigli sull’agricoltura intelligente.',
+                luxFinalEmailPlaceholder: 'La tua email',
+                luxFinalNewsletterSubmit: 'Iscriviti alla newsletter',
+                luxFinalCookiePolicy: 'Cookie Policy',
+                luxFinalSocialLinkedin: 'LinkedIn',
+                luxFinalSocialInstagram: 'Instagram',
+                luxFinalSocialYoutube: 'YouTube'
+            },
+            en: {
+                luxFinalMobileStep: '8',
+                luxFinalMobileEyebrow: 'Your fields, always with you',
+                luxFinalMobileTitle: 'Your field, always in your pocket.',
+                luxFinalMobileText: 'Monitor, analyze and manage everything wherever you are. At any time.',
+                luxFinalDownloadOn: 'Download on the',
+                luxFinalAvailableOn: 'Available on',
+                luxFinalAppStore: 'App Store',
+                luxFinalGooglePlay: 'Google Play',
+                luxFinalMapTitle: 'Field map',
+                luxFinalFieldName: 'North Field',
+                luxFinalCropName: 'Tomatoes',
+                luxFinalSensorsTitle: 'Sensors',
+                luxFinalTrendTitle: 'Trend',
+                luxFinalToday: 'Today',
+                luxFinalActivityTitle: 'Activity',
+                luxFinalIrrigationItem: 'Irrigation',
+                luxFinalFertilizationItem: 'Fertilization',
+                luxFinalAlarmItem: 'Alert',
+                luxFinalSensorsItem: 'Sensors',
+                luxFinalIrrigationTime: 'Today, 08:30',
+                luxFinalFertilizationTime: 'Yesterday, 11:15',
+                luxFinalAlarmTime: 'Yesterday, 14:00',
+                luxFinalCompleted: 'Completed',
+                luxFinalOperating: 'All operating',
+                luxFinalNewActivity: 'New activity',
+                luxFinalReportTitle: 'Report',
+                luxFinalReportHealth: 'Crop health',
+                luxFinalReportExcellent: 'Excellent',
+                luxFinalTrendPositive: 'Positive trend',
+                luxFinalTrendValue: '+12%',
+                luxFinalComparedYesterday: 'compared to yesterday',
+                luxFinalResultsStep: '9',
+                luxFinalResultsEyebrow: 'Real results, every day',
+                luxFinalResultsTitle: 'Real results, every day.',
+                luxFinalSatisfactionValue: '98%',
+                luxFinalSatisfactionText: 'Customer satisfaction',
+                luxFinalFooterSubtitle: 'SMART FARMING',
+                luxFinalFooterText: 'The technology platform for smarter, more productive and sustainable agriculture.',
+                luxFinalFooterProduct: 'Product',
+                luxFinalFooterSolutions: 'Solutions',
+                luxFinalFooterResources: 'Resources',
+                luxFinalFooterCompany: 'Company',
+                luxFinalFooterNewsletter: 'Newsletter',
+                luxFinalFooterDashboard: 'Dashboard',
+                luxFinalFooterSensors: 'IoT Sensors',
+                luxFinalFooterIrrigation: 'Irrigation',
+                luxFinalFooterAnalytics: 'Analytics',
+                luxFinalFooterAdvisor: 'AI Advisor',
+                luxFinalFooterOpenFields: 'Open-field crops',
+                luxFinalFooterGreenhouses: 'Greenhouses',
+                luxFinalFooterOrchards: 'Orchards',
+                luxFinalFooterSmartIrrigation: 'Smart irrigation',
+                luxFinalFooterCooperatives: 'Cooperatives',
+                luxFinalFooterDocumentation: 'Documentation',
+                luxFinalFooterBlog: 'Blog',
+                luxFinalFooterGuides: 'Guides',
+                luxFinalFooterSupport: 'Support',
+                luxFinalFooterApi: 'API',
+                luxFinalFooterAbout: 'About us',
+                luxFinalFooterCareer: 'Careers',
+                luxFinalFooterWork: 'Work with us',
+                luxFinalFooterDemo: 'Demo',
+                luxFinalNewsletterText: 'Receive updates, news and advice on intelligent agriculture.',
+                luxFinalEmailPlaceholder: 'Your email',
+                luxFinalNewsletterSubmit: 'Subscribe to the newsletter',
+                luxFinalCookiePolicy: 'Cookie Policy',
+                luxFinalSocialLinkedin: 'LinkedIn',
+                luxFinalSocialInstagram: 'Instagram',
+                luxFinalSocialYoutube: 'YouTube'
+            },
+            fr: {
+                luxFinalMobileStep: '8',
+                luxFinalMobileEyebrow: 'Vos champs, toujours avec vous',
+                luxFinalMobileTitle: 'Votre champ, toujours en poche.',
+                luxFinalMobileText: 'Surveillez, analysez et gerez tout, ou que vous soyez. A tout moment.',
+                luxFinalDownloadOn: 'Telecharger sur',
+                luxFinalAvailableOn: 'Disponible sur',
+                luxFinalAppStore: 'App Store',
+                luxFinalGooglePlay: 'Google Play',
+                luxFinalMapTitle: 'Carte des champs',
+                luxFinalFieldName: 'Champ Nord',
+                luxFinalCropName: 'Tomates',
+                luxFinalSensorsTitle: 'Capteurs',
+                luxFinalTrendTitle: 'Evolution',
+                luxFinalToday: 'Aujourd’hui',
+                luxFinalActivityTitle: 'Activite',
+                luxFinalIrrigationItem: 'Irrigation',
+                luxFinalFertilizationItem: 'Fertilisation',
+                luxFinalAlarmItem: 'Alerte',
+                luxFinalSensorsItem: 'Capteurs',
+                luxFinalIrrigationTime: 'Aujourd’hui, 08:30',
+                luxFinalFertilizationTime: 'Hier, 11:15',
+                luxFinalAlarmTime: 'Hier, 14:00',
+                luxFinalCompleted: 'Terminee',
+                luxFinalOperating: 'Tous operationnels',
+                luxFinalNewActivity: 'Nouvelle activite',
+                luxFinalReportTitle: 'Rapport',
+                luxFinalReportHealth: 'Sante des cultures',
+                luxFinalReportExcellent: 'Excellente',
+                luxFinalTrendPositive: 'Tendance positive',
+                luxFinalTrendValue: '+12%',
+                luxFinalComparedYesterday: 'par rapport a hier',
+                luxFinalResultsStep: '9',
+                luxFinalResultsEyebrow: 'Des resultats reels, chaque jour',
+                luxFinalResultsTitle: 'Des resultats reels, chaque jour.',
+                luxFinalSatisfactionValue: '98%',
+                luxFinalSatisfactionText: 'Satisfaction clients',
+                luxFinalFooterSubtitle: 'SMART FARMING',
+                luxFinalFooterText: 'La plateforme technologique pour une agriculture plus intelligente, productive et durable.',
+                luxFinalFooterProduct: 'Produit',
+                luxFinalFooterSolutions: 'Solutions',
+                luxFinalFooterResources: 'Ressources',
+                luxFinalFooterCompany: 'Entreprise',
+                luxFinalFooterNewsletter: 'Newsletter',
+                luxFinalFooterDashboard: 'Tableau de bord',
+                luxFinalFooterSensors: 'Capteurs IoT',
+                luxFinalFooterIrrigation: 'Irrigation',
+                luxFinalFooterAnalytics: 'Analyses',
+                luxFinalFooterAdvisor: 'Conseiller IA',
+                luxFinalFooterOpenFields: 'Cultures de plein champ',
+                luxFinalFooterGreenhouses: 'Serres',
+                luxFinalFooterOrchards: 'Vergers',
+                luxFinalFooterSmartIrrigation: 'Irrigation intelligente',
+                luxFinalFooterCooperatives: 'Cooperatives',
+                luxFinalFooterDocumentation: 'Documentation',
+                luxFinalFooterBlog: 'Blog',
+                luxFinalFooterGuides: 'Guides',
+                luxFinalFooterSupport: 'Support',
+                luxFinalFooterApi: 'API',
+                luxFinalFooterAbout: 'Qui sommes-nous',
+                luxFinalFooterCareer: 'Carriere',
+                luxFinalFooterWork: 'Nous rejoindre',
+                luxFinalFooterDemo: 'Demo',
+                luxFinalNewsletterText: 'Recevez les nouveautes et conseils sur l’agriculture intelligente.',
+                luxFinalEmailPlaceholder: 'Votre email',
+                luxFinalNewsletterSubmit: 'S’inscrire a la newsletter',
+                luxFinalCookiePolicy: 'Politique de cookies',
+                luxFinalSocialLinkedin: 'LinkedIn',
+                luxFinalSocialInstagram: 'Instagram',
+                luxFinalSocialYoutube: 'YouTube'
+            },
+            ar: {
+                luxFinalMobileStep: '8',
+                luxFinalMobileEyebrow: 'حقولك معك دائما',
+                luxFinalMobileTitle: 'حقلك دائما في جيبك.',
+                luxFinalMobileText: 'راقب وحلل وادِر كل شيء من اي مكان وفي كل وقت.',
+                luxFinalDownloadOn: 'تنزيل من',
+                luxFinalAvailableOn: 'متاح على',
+                luxFinalAppStore: 'App Store',
+                luxFinalGooglePlay: 'Google Play',
+                luxFinalMapTitle: 'خريطة الحقول',
+                luxFinalFieldName: 'الحقل الشمالي',
+                luxFinalCropName: 'طماطم',
+                luxFinalSensorsTitle: 'الحساسات',
+                luxFinalTrendTitle: 'الاتجاه',
+                luxFinalToday: 'اليوم',
+                luxFinalActivityTitle: 'النشاط',
+                luxFinalIrrigationItem: 'الري',
+                luxFinalFertilizationItem: 'التسميد',
+                luxFinalAlarmItem: 'تنبيه',
+                luxFinalSensorsItem: 'الحساسات',
+                luxFinalIrrigationTime: 'اليوم، 08:30',
+                luxFinalFertilizationTime: 'امس، 11:15',
+                luxFinalAlarmTime: 'امس، 14:00',
+                luxFinalCompleted: 'مكتمل',
+                luxFinalOperating: 'كلها تعمل',
+                luxFinalNewActivity: 'نشاط جديد',
+                luxFinalReportTitle: 'تقرير',
+                luxFinalReportHealth: 'صحة المحاصيل',
+                luxFinalReportExcellent: 'ممتازة',
+                luxFinalTrendPositive: 'اتجاه ايجابي',
+                luxFinalTrendValue: '+12%',
+                luxFinalComparedYesterday: 'مقارنة بالامس',
+                luxFinalResultsStep: '9',
+                luxFinalResultsEyebrow: 'نتائج حقيقية كل يوم',
+                luxFinalResultsTitle: 'نتائج حقيقية كل يوم.',
+                luxFinalSatisfactionValue: '98%',
+                luxFinalSatisfactionText: 'رضا العملاء',
+                luxFinalFooterSubtitle: 'SMART FARMING',
+                luxFinalFooterText: 'المنصة التقنية لزراعة اذكى واكثر انتاجية واستدامة.',
+                luxFinalFooterProduct: 'المنتج',
+                luxFinalFooterSolutions: 'الحلول',
+                luxFinalFooterResources: 'الموارد',
+                luxFinalFooterCompany: 'الشركة',
+                luxFinalFooterNewsletter: 'النشرة البريدية',
+                luxFinalFooterDashboard: 'لوحة التحكم',
+                luxFinalFooterSensors: 'حساسات IoT',
+                luxFinalFooterIrrigation: 'الري',
+                luxFinalFooterAnalytics: 'التحليلات',
+                luxFinalFooterAdvisor: 'مستشار IA',
+                luxFinalFooterOpenFields: 'محاصيل الحقول',
+                luxFinalFooterGreenhouses: 'البيوت المحمية',
+                luxFinalFooterOrchards: 'البساتين',
+                luxFinalFooterSmartIrrigation: 'الري الذكي',
+                luxFinalFooterCooperatives: 'التعاونيات',
+                luxFinalFooterDocumentation: 'التوثيق',
+                luxFinalFooterBlog: 'المدونة',
+                luxFinalFooterGuides: 'الادلة',
+                luxFinalFooterSupport: 'الدعم',
+                luxFinalFooterApi: 'API',
+                luxFinalFooterAbout: 'من نحن',
+                luxFinalFooterCareer: 'الوظائف',
+                luxFinalFooterWork: 'اعمل معنا',
+                luxFinalFooterDemo: 'عرض تجريبي',
+                luxFinalNewsletterText: 'احصل على الاخبار والنصائح حول الزراعة الذكية.',
+                luxFinalEmailPlaceholder: 'بريدك الالكتروني',
+                luxFinalNewsletterSubmit: 'اشترك في النشرة',
+                luxFinalCookiePolicy: 'سياسة ملفات تعريف الارتباط',
+                luxFinalSocialLinkedin: 'LinkedIn',
+                luxFinalSocialInstagram: 'Instagram',
+                luxFinalSocialYoutube: 'YouTube'
+            },
+            tz: {
+                luxFinalMobileStep: '8',
+                luxFinalMobileEyebrow: 'ⵉⴳⵔⴰⵏ ⵏⵏⴽ ⵍⵍⴰⵏ ⴷⵉⴷⴽ',
+                luxFinalMobileTitle: 'ⴰⴳⵔ ⵏⵏⴽ ⵖⵓⵔⴽ ⴽⵓ ⵜⵉⴽⴽⵍⵜ.',
+                luxFinalMobileText: 'ⵙⵙⵜⵉ, ⵙⵍⴹ ⴷ ⵙⵡⵓⴷⴷⵓ ⴽⵓ ⵎⴰⴷ ⵉⵍⵍⴰ.',
+                luxFinalDownloadOn: 'ⴰⴳⵎ ⵙⴳ',
+                luxFinalAvailableOn: 'ⵉⵍⵍⴰ ⴳ',
+                luxFinalAppStore: 'App Store',
+                luxFinalGooglePlay: 'Google Play',
+                luxFinalMapTitle: 'ⵜⴰⴽⴰⵕⴹⴰ ⵏ ⵉⴳⵔⴰⵏ',
+                luxFinalFieldName: 'ⴰⴳⵔ ⵏ ⵓⴳⴰⴼⴰ',
+                luxFinalCropName: 'ⵜⵉⵎⴰⵜⵉⵛⵉⵏ',
+                luxFinalSensorsTitle: 'ⵉⵎⵙⵙⵜⴰⵏⵏ',
+                luxFinalTrendTitle: 'ⴰⵙⴰⴷⴷⵓ',
+                luxFinalToday: 'ⴰⵙⵙⴰ',
+                luxFinalActivityTitle: 'ⴰⵎⵓⵙⵙⵓ',
+                luxFinalIrrigationItem: 'ⴰⵙⵙⴰⵢ',
+                luxFinalFertilizationItem: 'ⴰⵙⴼⵔⴰⵔ',
+                luxFinalAlarmItem: 'ⴰⵍⵖⵓ',
+                luxFinalSensorsItem: 'ⵉⵎⵙⵙⵜⴰⵏⵏ',
+                luxFinalIrrigationTime: 'ⴰⵙⵙⴰ, 08:30',
+                luxFinalFertilizationTime: 'ⵉⴹⴳⴰⵎ, 11:15',
+                luxFinalAlarmTime: 'ⵉⴹⴳⴰⵎ, 14:00',
+                luxFinalCompleted: 'ⵉⴽⵎⵍ',
+                luxFinalOperating: 'ⴽⵓ ⵙⵡⵓⵔⵉⵏ',
+                luxFinalNewActivity: 'ⴰⵎⵓⵙⵙⵓ ⴰⵎⴰⵢⵏⵓ',
+                luxFinalReportTitle: 'ⴰⵏⵇⵇⵉⵙ',
+                luxFinalReportHealth: 'ⵜⴰⵣⵎⵔⵜ ⵏ ⵉⵎⵉⵔⴰⵏ',
+                luxFinalReportExcellent: 'ⵜⵖⵓⴷⴰ',
+                luxFinalTrendPositive: 'ⴰⵙⴰⴷⴷⵓ ⵉⵖⵓⴷⴰ',
+                luxFinalTrendValue: '+12%',
+                luxFinalComparedYesterday: 'ⵖⴼ ⵉⴹⴳⴰⵎ',
+                luxFinalResultsStep: '9',
+                luxFinalResultsEyebrow: 'ⵜⵉⴼⵔⴰⵙ ⵏ ⵜⵉⴷⵜ ⴽⵓ ⴰⵙⵙ',
+                luxFinalResultsTitle: 'ⵜⵉⴼⵔⴰⵙ ⵏ ⵜⵉⴷⵜ, ⴽⵓ ⴰⵙⵙ.',
+                luxFinalSatisfactionValue: '98%',
+                luxFinalSatisfactionText: 'ⴰⵔⴹⴰ ⵏ ⵉⵎⵙⵙⵓⵜⵔⵏ',
+                luxFinalFooterSubtitle: 'SMART FARMING',
+                luxFinalFooterText: 'ⵜⴰⵙⵏⵙⵉ ⵜⴰⵜⵉⴽⵏⵓⵍⵓⵊⵉⵜ ⵉ ⵜⴼⵍⴰⵃⵜ ⵜⴰⵎⵓⵙⵙⵏⵜ.',
+                luxFinalFooterProduct: 'ⴰⴼⴰⵔⵉⵙ',
+                luxFinalFooterSolutions: 'ⵜⵉⴼⵔⴰⵜ',
+                luxFinalFooterResources: 'ⵜⵉⵖⴱⵓⵍⴰ',
+                luxFinalFooterCompany: 'ⵜⴰⵎⵙⵙⵓⵔⵜ',
+                luxFinalFooterNewsletter: 'Newsletter',
+                luxFinalFooterDashboard: 'Dashboard',
+                luxFinalFooterSensors: 'IoT',
+                luxFinalFooterIrrigation: 'ⴰⵙⵙⴰⵢ',
+                luxFinalFooterAnalytics: 'ⵜⴰⵙⵍⴹⵜ',
+                luxFinalFooterAdvisor: 'AI Advisor',
+                luxFinalFooterOpenFields: 'ⵉⴳⵔⴰⵏ',
+                luxFinalFooterGreenhouses: 'ⵉⴼⵔⴰⴳⵏ',
+                luxFinalFooterOrchards: 'ⵓⵔⵜⴰⵏ',
+                luxFinalFooterSmartIrrigation: 'ⴰⵙⵙⴰⵢ ⴰⵎⵓⵙⵙⵏ',
+                luxFinalFooterCooperatives: 'ⵜⵉⵡⵉⵙⵉ',
+                luxFinalFooterDocumentation: 'Documentation',
+                luxFinalFooterBlog: 'Blog',
+                luxFinalFooterGuides: 'Guides',
+                luxFinalFooterSupport: 'Support',
+                luxFinalFooterApi: 'API',
+                luxFinalFooterAbout: 'ⵖⴼⵏⵖ',
+                luxFinalFooterCareer: 'ⵜⴰⵡⵓⵔⵉ',
+                luxFinalFooterWork: 'ⵙⵡⵓⵔⵉ ⴷⵉⴷⵏⵖ',
+                luxFinalFooterDemo: 'Demo',
+                luxFinalNewsletterText: 'ⴰⵡⵉ ⵉⵎⴰⵢⵏⵓⵜⵏ ⴷ ⵜⵉⵡⵏⵏⴹⵉⵏ.',
+                luxFinalEmailPlaceholder: 'Email',
+                luxFinalNewsletterSubmit: 'Newsletter',
+                luxFinalCookiePolicy: 'Cookie Policy',
+                luxFinalSocialLinkedin: 'LinkedIn',
+                luxFinalSocialInstagram: 'Instagram',
+                luxFinalSocialYoutube: 'YouTube'
+            }
+        };
+        RAYAT_HOMEPAGE_FINAL_2026_TRANSLATIONS.zgh = { ...RAYAT_HOMEPAGE_FINAL_2026_TRANSLATIONS.tz };
+
+        Object.entries(RAYAT_HOMEPAGE_FINAL_2026_TRANSLATIONS).forEach(([lang, values]) => {
+            translations[lang] = {
+                ...(translations[lang] || {}),
+                ...values
+            };
+        });
+
+        const RAYAT_DASHBOARD_INTERNAL_TABS_2026_TRANSLATIONS = {
+            it: {
+                luxDashboardOverviewSubtitle: 'Prestazioni e raccomandazioni della parcella',
+                luxDashboardParcelsTitle: 'Parcelle',
+                luxDashboardParcelsSubtitle: 'Colture monitorate e sensori collegati',
+                luxDashboardParcelOne: 'Parcella 01',
+                luxDashboardParcelNorth: 'Parcella Nord',
+                luxDashboardParcelGreenhouse: 'Serra controllo',
+                luxDashboardCropType: 'Coltura',
+                luxDashboardParcelStatus: 'Stato',
+                luxDashboardLinkedSensors: 'Sensori collegati',
+                luxDashboardLastUpdate: 'Ultimo aggiornamento',
+                luxDashboardOperational: 'Operativa',
+                luxDashboardSensorsTitle: 'Sensori suolo 7 in 1',
+                luxDashboardSensorsSubtitle: 'Ultime letture disponibili per la coltura selezionata',
+                luxDashboardLatestValue: 'Valore recente',
+                luxDashboardOnline: 'Online',
+                luxDashboardOffline: 'Offline',
+                luxDashboardIrrigationTitle: 'Irrigazione',
+                luxDashboardIrrigationSubtitle: 'Raccomandazione basata su umidita e coltura',
+                luxDashboardRecommendation: 'Raccomandazione',
+                luxDashboardNextIrrigation: 'Prossima irrigazione',
+                luxDashboardDuration: 'Durata',
+                luxDashboardWaterSaving: 'Risparmio idrico',
+                luxDashboardHistory: 'Storico irrigazione',
+                luxDashboardPlaceholder: 'Dati disponibili con il prossimo ciclo',
+                luxDashboardAlertsTitle: 'Avvisi attivi',
+                luxDashboardAlertsSubtitle: 'Eventi che richiedono attenzione',
+                luxDashboardNoAlerts: 'Nessun avviso attivo',
+                luxDashboardNoAlertsText: 'Le misure correnti rientrano nelle soglie previste.',
+                luxDashboardSeverity: 'Severita',
+                luxDashboardRecommendedAction: 'Azione consigliata',
+                luxDashboardAnalyticsTitle: 'Analisi',
+                luxDashboardAnalyticsSubtitle: 'Andamento degli indicatori agronomici',
+                luxDashboardTrendMoisture: 'Umidità suolo',
+                luxDashboardTrendTemperature: 'Temperatura',
+                luxDashboardTrendEc: 'Conducibilita',
+                luxDashboardAnalyticsLatest: 'Ultimo valore',
+                luxDashboardAnalyticsAverage: 'Media',
+                luxDashboardAnalyticsMinimum: 'Minimo',
+                luxDashboardAnalyticsMaximum: 'Massimo',
+                luxDashboardAnalyticsChange: 'Variazione',
+                luxDashboardAnalyticsOptimalBand: 'Range ottimale',
+                luxDashboardAnalyticsReadings: 'letture',
+                luxDashboardAnalyticsWaiting: 'In attesa di ulteriori letture',
+                luxDashboardAnalyticsSoilTemperature: 'Temperatura terreno',
+                luxDashboardAnalyticsElectricalConductivity: 'Conducibilità elettrica',
+                luxDashboardAnalyticsPh: 'pH',
+                luxDashboardAnalyticsNitrogen: 'Azoto',
+                luxDashboardAnalyticsPhosphorus: 'Fosforo',
+                luxDashboardAnalyticsPotassium: 'Potassio',
+                luxDashboardAnalyticsAirTemperature: 'Temperatura ambiente',
+                luxDashboardAnalyticsAirHumidity: 'Umidità relativa',
+                luxDashboardAnalyticsCo2: 'CO2',
+                luxDashboardAnalyticsWindSpeed: 'Velocità vento',
+                luxDashboardAnalyticsSoilSensor: 'Suolo 7 in 1',
+                luxDashboardAnalyticsClimateSensor: 'Clima',
+                luxDashboardAnalyticsPrevious: 'Parametri precedenti',
+                luxDashboardAnalyticsNext: 'Altri parametri',
+                luxDashboardReportsTitle: 'Rapporti',
+                luxDashboardReportsSubtitle: 'Esporta e consulta le analisi recenti',
+                luxDashboardCsvExport: 'Esporta CSV',
+                luxDashboardPdfReport: 'Rapporto PDF',
+                luxDashboardPdfPlaceholder: 'Disponibile prossimamente',
+                luxDashboardRecentReports: 'Rapporti recenti',
+                luxDashboardReportWeekly: 'Riepilogo suolo settimanale',
+                luxDashboardReportIrrigation: 'Efficienza irrigazione',
+                luxDashboardSettingsTitle: 'Parametri',
+                luxDashboardSettingsSubtitle: 'Preferenze operative della parcella',
+                luxDashboardCropSelection: 'Coltura selezionata',
+                luxDashboardThresholds: 'Soglie ottimali',
+                luxDashboardLanguage: 'Lingua',
+                luxDashboardNotifications: 'Notifiche',
+                luxDashboardNotificationsEnabled: 'Avvisi attivati',
+                luxDashboardNotificationsDisabled: 'Avvisi disattivati',
+                luxDashboardPeriod24h: '24 ore',
+                luxDashboardPeriod7d: '7 giorni',
+                luxDashboardPeriod30d: '30 giorni',
+                luxDashboardActionAdjust: 'Verificare irrigazione e soglie',
+                luxDashboardSensorsConnected: '7 attivi',
+                luxDashboardNow: 'Ora',
+                luxDashboardScheduled: 'Tra 2h',
+                luxDashboardMinutes: '45 min'
+            },
+            en: {
+                luxDashboardOverviewSubtitle: 'Parcel performance and recommendations',
+                luxDashboardParcelsTitle: 'Parcels',
+                luxDashboardParcelsSubtitle: 'Monitored crops and linked sensors',
+                luxDashboardParcelOne: 'Parcel 01',
+                luxDashboardParcelNorth: 'North Parcel',
+                luxDashboardParcelGreenhouse: 'Control greenhouse',
+                luxDashboardCropType: 'Crop',
+                luxDashboardParcelStatus: 'Status',
+                luxDashboardLinkedSensors: 'Linked sensors',
+                luxDashboardLastUpdate: 'Last update',
+                luxDashboardOperational: 'Operational',
+                luxDashboardSensorsTitle: 'Soil sensors 7 in 1',
+                luxDashboardSensorsSubtitle: 'Latest readings for the selected crop',
+                luxDashboardLatestValue: 'Latest value',
+                luxDashboardOnline: 'Online',
+                luxDashboardOffline: 'Offline',
+                luxDashboardIrrigationTitle: 'Irrigation',
+                luxDashboardIrrigationSubtitle: 'Recommendation based on humidity and crop',
+                luxDashboardRecommendation: 'Recommendation',
+                luxDashboardNextIrrigation: 'Next irrigation',
+                luxDashboardDuration: 'Duration',
+                luxDashboardWaterSaving: 'Water saving',
+                luxDashboardHistory: 'Irrigation history',
+                luxDashboardPlaceholder: 'Data available with the next cycle',
+                luxDashboardAlertsTitle: 'Active alerts',
+                luxDashboardAlertsSubtitle: 'Events requiring attention',
+                luxDashboardNoAlerts: 'No active alerts',
+                luxDashboardNoAlertsText: 'Current readings are within expected thresholds.',
+                luxDashboardSeverity: 'Severity',
+                luxDashboardRecommendedAction: 'Recommended action',
+                luxDashboardAnalyticsTitle: 'Analytics',
+                luxDashboardAnalyticsSubtitle: 'Agronomic indicator trends',
+                luxDashboardTrendMoisture: 'Soil humidity',
+                luxDashboardTrendTemperature: 'Temperature',
+                luxDashboardTrendEc: 'Conductivity',
+                luxDashboardAnalyticsLatest: 'Latest value',
+                luxDashboardAnalyticsAverage: 'Average',
+                luxDashboardAnalyticsMinimum: 'Minimum',
+                luxDashboardAnalyticsMaximum: 'Maximum',
+                luxDashboardAnalyticsChange: 'Change',
+                luxDashboardAnalyticsOptimalBand: 'Optimal range',
+                luxDashboardAnalyticsReadings: 'readings',
+                luxDashboardAnalyticsWaiting: 'Waiting for additional readings',
+                luxDashboardAnalyticsSoilTemperature: 'Soil temperature',
+                luxDashboardAnalyticsElectricalConductivity: 'Electrical conductivity',
+                luxDashboardAnalyticsPh: 'pH',
+                luxDashboardAnalyticsNitrogen: 'Nitrogen',
+                luxDashboardAnalyticsPhosphorus: 'Phosphorus',
+                luxDashboardAnalyticsPotassium: 'Potassium',
+                luxDashboardAnalyticsAirTemperature: 'Air temperature',
+                luxDashboardAnalyticsAirHumidity: 'Relative humidity',
+                luxDashboardAnalyticsCo2: 'CO2',
+                luxDashboardAnalyticsWindSpeed: 'Wind speed',
+                luxDashboardAnalyticsSoilSensor: 'Soil 7 in 1',
+                luxDashboardAnalyticsClimateSensor: 'Climate',
+                luxDashboardAnalyticsPrevious: 'Previous parameters',
+                luxDashboardAnalyticsNext: 'More parameters',
+                luxDashboardReportsTitle: 'Reports',
+                luxDashboardReportsSubtitle: 'Export and review recent analyses',
+                luxDashboardCsvExport: 'Export CSV',
+                luxDashboardPdfReport: 'PDF report',
+                luxDashboardPdfPlaceholder: 'Available soon',
+                luxDashboardRecentReports: 'Recent reports',
+                luxDashboardReportWeekly: 'Weekly soil summary',
+                luxDashboardReportIrrigation: 'Irrigation efficiency',
+                luxDashboardSettingsTitle: 'Settings',
+                luxDashboardSettingsSubtitle: 'Parcel operating preferences',
+                luxDashboardCropSelection: 'Selected crop',
+                luxDashboardThresholds: 'Optimal thresholds',
+                luxDashboardLanguage: 'Language',
+                luxDashboardNotifications: 'Notifications',
+                luxDashboardNotificationsEnabled: 'Alerts enabled',
+                luxDashboardNotificationsDisabled: 'Alerts disabled',
+                luxDashboardPeriod24h: '24 hours',
+                luxDashboardPeriod7d: '7 days',
+                luxDashboardPeriod30d: '30 days',
+                luxDashboardActionAdjust: 'Review irrigation and thresholds',
+                luxDashboardSensorsConnected: '7 active',
+                luxDashboardNow: 'Now',
+                luxDashboardScheduled: 'In 2h',
+                luxDashboardMinutes: '45 min'
+            },
+            fr: {
+                luxDashboardOverviewSubtitle: 'Performance et recommandations de la parcelle',
+                luxDashboardParcelsTitle: 'Parcelles',
+                luxDashboardParcelsSubtitle: 'Cultures surveillées et capteurs liés',
+                luxDashboardParcelOne: 'Parcelle 01',
+                luxDashboardParcelNorth: 'Parcelle Nord',
+                luxDashboardParcelGreenhouse: 'Serre contrôle',
+                luxDashboardCropType: 'Culture',
+                luxDashboardParcelStatus: 'Statut',
+                luxDashboardLinkedSensors: 'Capteurs liés',
+                luxDashboardLastUpdate: 'Dernière mise à jour',
+                luxDashboardOperational: 'Opérationnelle',
+                luxDashboardSensorsTitle: 'Capteurs sol 7 en 1',
+                luxDashboardSensorsSubtitle: 'Dernières mesures pour la culture sélectionnée',
+                luxDashboardLatestValue: 'Valeur récente',
+                luxDashboardOnline: 'En ligne',
+                luxDashboardOffline: 'Hors ligne',
+                luxDashboardIrrigationTitle: 'Irrigation',
+                luxDashboardIrrigationSubtitle: 'Recommandation basée sur l’humidité et la culture',
+                luxDashboardRecommendation: 'Recommandation',
+                luxDashboardNextIrrigation: 'Prochaine irrigation',
+                luxDashboardDuration: 'Durée',
+                luxDashboardWaterSaving: 'Économie d’eau',
+                luxDashboardHistory: 'Historique irrigation',
+                luxDashboardPlaceholder: 'Données disponibles au prochain cycle',
+                luxDashboardAlertsTitle: 'Alertes actives',
+                luxDashboardAlertsSubtitle: 'Événements nécessitant une attention',
+                luxDashboardNoAlerts: 'Aucune alerte active',
+                luxDashboardNoAlertsText: 'Les mesures actuelles respectent les seuils prévus.',
+                luxDashboardSeverity: 'Sévérité',
+                luxDashboardRecommendedAction: 'Action recommandée',
+                luxDashboardAnalyticsTitle: 'Analyses',
+                luxDashboardAnalyticsSubtitle: 'Tendances des indicateurs agronomiques',
+                luxDashboardTrendMoisture: 'Humidité du sol',
+                luxDashboardTrendTemperature: 'Température',
+                luxDashboardTrendEc: 'Conductivité',
+                luxDashboardAnalyticsLatest: 'Dernière valeur',
+                luxDashboardAnalyticsAverage: 'Moyenne',
+                luxDashboardAnalyticsMinimum: 'Minimum',
+                luxDashboardAnalyticsMaximum: 'Maximum',
+                luxDashboardAnalyticsChange: 'Variation',
+                luxDashboardAnalyticsOptimalBand: 'Plage optimale',
+                luxDashboardAnalyticsReadings: 'mesures',
+                luxDashboardAnalyticsWaiting: 'En attente de mesures supplémentaires',
+                luxDashboardAnalyticsSoilTemperature: 'Température du sol',
+                luxDashboardAnalyticsElectricalConductivity: 'Conductivité électrique',
+                luxDashboardAnalyticsPh: 'pH',
+                luxDashboardAnalyticsNitrogen: 'Azote',
+                luxDashboardAnalyticsPhosphorus: 'Phosphore',
+                luxDashboardAnalyticsPotassium: 'Potassium',
+                luxDashboardAnalyticsAirTemperature: 'Température ambiante',
+                luxDashboardAnalyticsAirHumidity: 'Humidité relative',
+                luxDashboardAnalyticsCo2: 'CO2',
+                luxDashboardAnalyticsWindSpeed: 'Vitesse du vent',
+                luxDashboardAnalyticsSoilSensor: 'Sol 7 en 1',
+                luxDashboardAnalyticsClimateSensor: 'Climat',
+                luxDashboardAnalyticsPrevious: 'Paramètres précédents',
+                luxDashboardAnalyticsNext: 'Autres paramètres',
+                luxDashboardReportsTitle: 'Rapports',
+                luxDashboardReportsSubtitle: 'Exporter et consulter les analyses récentes',
+                luxDashboardCsvExport: 'Exporter CSV',
+                luxDashboardPdfReport: 'Rapport PDF',
+                luxDashboardPdfPlaceholder: 'Bientôt disponible',
+                luxDashboardRecentReports: 'Rapports récents',
+                luxDashboardReportWeekly: 'Synthèse sol hebdomadaire',
+                luxDashboardReportIrrigation: 'Efficacité irrigation',
+                luxDashboardSettingsTitle: 'Paramètres',
+                luxDashboardSettingsSubtitle: 'Préférences opérationnelles de la parcelle',
+                luxDashboardCropSelection: 'Culture sélectionnée',
+                luxDashboardThresholds: 'Seuils optimaux',
+                luxDashboardLanguage: 'Langue',
+                luxDashboardNotifications: 'Notifications',
+                luxDashboardNotificationsEnabled: 'Alertes activées',
+                luxDashboardNotificationsDisabled: 'Alertes désactivées',
+                luxDashboardPeriod24h: '24 heures',
+                luxDashboardPeriod7d: '7 jours',
+                luxDashboardPeriod30d: '30 jours',
+                luxDashboardActionAdjust: 'Vérifier irrigation et seuils',
+                luxDashboardSensorsConnected: '7 actifs',
+                luxDashboardNow: 'Maintenant',
+                luxDashboardScheduled: 'Dans 2h',
+                luxDashboardMinutes: '45 min'
+            },
+            ar: {
+                luxDashboardOverviewSubtitle: 'أداء القطعة والتوصيات',
+                luxDashboardParcelsTitle: 'القطع',
+                luxDashboardParcelsSubtitle: 'المحاصيل المراقبة والحساسات المرتبطة',
+                luxDashboardParcelOne: 'القطعة 01',
+                luxDashboardParcelNorth: 'القطعة الشمالية',
+                luxDashboardParcelGreenhouse: 'البيت المحمي',
+                luxDashboardCropType: 'المحصول',
+                luxDashboardParcelStatus: 'الحالة',
+                luxDashboardLinkedSensors: 'الحساسات المرتبطة',
+                luxDashboardLastUpdate: 'آخر تحديث',
+                luxDashboardOperational: 'تعمل',
+                luxDashboardSensorsTitle: 'حساسات التربة 7 في 1',
+                luxDashboardSensorsSubtitle: 'آخر القراءات للمحصول المختار',
+                luxDashboardLatestValue: 'آخر قيمة',
+                luxDashboardOnline: 'متصل',
+                luxDashboardOffline: 'غير متصل',
+                luxDashboardIrrigationTitle: 'السقي',
+                luxDashboardIrrigationSubtitle: 'توصية حسب الرطوبة والمحصول',
+                luxDashboardRecommendation: 'التوصية',
+                luxDashboardNextIrrigation: 'السقي القادم',
+                luxDashboardDuration: 'المدة',
+                luxDashboardWaterSaving: 'توفير الماء',
+                luxDashboardHistory: 'سجل السقي',
+                luxDashboardPlaceholder: 'تتوفر البيانات في الدورة القادمة',
+                luxDashboardAlertsTitle: 'التنبيهات النشطة',
+                luxDashboardAlertsSubtitle: 'أحداث تتطلب الانتباه',
+                luxDashboardNoAlerts: 'لا توجد تنبيهات نشطة',
+                luxDashboardNoAlertsText: 'القراءات الحالية ضمن الحدود المتوقعة.',
+                luxDashboardSeverity: 'الخطورة',
+                luxDashboardRecommendedAction: 'الإجراء الموصى به',
+                luxDashboardAnalyticsTitle: 'التحليلات',
+                luxDashboardAnalyticsSubtitle: 'اتجاهات المؤشرات الزراعية',
+                luxDashboardTrendMoisture: 'رطوبة التربة',
+                luxDashboardTrendTemperature: 'الحرارة',
+                luxDashboardTrendEc: 'التوصيل',
+                luxDashboardAnalyticsLatest: 'آخر قيمة',
+                luxDashboardAnalyticsAverage: 'المتوسط',
+                luxDashboardAnalyticsMinimum: 'الأدنى',
+                luxDashboardAnalyticsMaximum: 'الأعلى',
+                luxDashboardAnalyticsChange: 'التغير',
+                luxDashboardAnalyticsOptimalBand: 'النطاق المثالي',
+                luxDashboardAnalyticsReadings: 'قراءات',
+                luxDashboardAnalyticsWaiting: 'في انتظار قراءات إضافية',
+                luxDashboardAnalyticsSoilTemperature: 'حرارة التربة',
+                luxDashboardAnalyticsElectricalConductivity: 'التوصيل الكهربائي',
+                luxDashboardAnalyticsPh: 'pH',
+                luxDashboardAnalyticsNitrogen: 'الآزوت',
+                luxDashboardAnalyticsPhosphorus: 'الفوسفور',
+                luxDashboardAnalyticsPotassium: 'البوتاسيوم',
+                luxDashboardAnalyticsAirTemperature: 'حرارة الجو',
+                luxDashboardAnalyticsAirHumidity: 'الرطوبة النسبية',
+                luxDashboardAnalyticsCo2: 'CO2',
+                luxDashboardAnalyticsWindSpeed: 'سرعة الرياح',
+                luxDashboardAnalyticsSoilSensor: 'تربة 7 في 1',
+                luxDashboardAnalyticsClimateSensor: 'المناخ',
+                luxDashboardAnalyticsPrevious: 'المؤشرات السابقة',
+                luxDashboardAnalyticsNext: 'مؤشرات أخرى',
+                luxDashboardReportsTitle: 'التقارير',
+                luxDashboardReportsSubtitle: 'تصدير ومراجعة التحليلات الحديثة',
+                luxDashboardCsvExport: 'تصدير CSV',
+                luxDashboardPdfReport: 'تقرير PDF',
+                luxDashboardPdfPlaceholder: 'متاح قريبا',
+                luxDashboardRecentReports: 'التقارير الحديثة',
+                luxDashboardReportWeekly: 'ملخص التربة الأسبوعي',
+                luxDashboardReportIrrigation: 'كفاءة السقي',
+                luxDashboardSettingsTitle: 'الإعدادات',
+                luxDashboardSettingsSubtitle: 'تفضيلات تشغيل القطعة',
+                luxDashboardCropSelection: 'المحصول المختار',
+                luxDashboardThresholds: 'الحدود المثلى',
+                luxDashboardLanguage: 'اللغة',
+                luxDashboardNotifications: 'الإشعارات',
+                luxDashboardNotificationsEnabled: 'التنبيهات مفعلة',
+                luxDashboardNotificationsDisabled: 'التنبيهات معطلة',
+                luxDashboardPeriod24h: '24 ساعة',
+                luxDashboardPeriod7d: '7 أيام',
+                luxDashboardPeriod30d: '30 يوما',
+                luxDashboardActionAdjust: 'راجع السقي والحدود',
+                luxDashboardSensorsConnected: '7 نشطة',
+                luxDashboardNow: 'الآن',
+                luxDashboardScheduled: 'بعد ساعتين',
+                luxDashboardMinutes: '45 دقيقة'
+            },
+            tz: {
+                luxDashboardOverviewSubtitle: 'ⵜⵉⵣⵎⵎⴰⵔ ⴷ ⵜⵉⵡⵏⵏⴹⵉⵏ ⵏ ⵓⴳⵔ',
+                luxDashboardParcelsTitle: 'ⵉⴳⵔⴰⵏ',
+                luxDashboardParcelsSubtitle: 'ⵜⵉⵎⴳⵔⵉⵡⵉⵏ ⴷ ⵉⵎⵙⵙⵜⴰⵏⵏ',
+                luxDashboardParcelOne: 'ⴰⴳⵔ 01',
+                luxDashboardParcelNorth: 'ⴰⴳⵔ ⵏ ⵓⴳⴰⴼⴰ',
+                luxDashboardParcelGreenhouse: 'ⴰⴼⵔⴰⴳ',
+                luxDashboardCropType: 'ⵜⴰⵎⴳⵔⵜ',
+                luxDashboardParcelStatus: 'ⴰⴷⴷⴰⴷ',
+                luxDashboardLinkedSensors: 'ⵉⵎⵙⵙⵜⴰⵏⵏ',
+                luxDashboardLastUpdate: 'ⴰⵙⴳⴳⵯⴷ ⴰⵎⴳⴳⴰⵔⵓ',
+                luxDashboardOperational: 'ⵜⵙⵡⵓⵔⵉ',
+                luxDashboardSensorsTitle: 'ⵉⵎⵙⵙⵜⴰⵏⵏ 7 ⴳ 1',
+                luxDashboardSensorsSubtitle: 'ⵜⵉⵖⵓⵔⵉⵡⵉⵏ ⵜⵉⵎⴳⴳⴰⵔⵓⵜⵉⵏ',
+                luxDashboardLatestValue: 'ⵜⴰⵖⵓⵔⵉ ⵜⴰⵎⴳⴳⴰⵔⵓⵜ',
+                luxDashboardOnline: 'Online',
+                luxDashboardOffline: 'Offline',
+                luxDashboardIrrigationTitle: 'ⴰⵙⵙⴰⵢ',
+                luxDashboardIrrigationSubtitle: 'ⵜⴰⵡⵏⴳⵉⵎⵜ ⵏ ⵡⴰⵎⴰⵏ',
+                luxDashboardRecommendation: 'ⵜⴰⵡⵏⴳⵉⵎⵜ',
+                luxDashboardNextIrrigation: 'ⴰⵙⵙⴰⵢ ⵉⴷⴷⴰⵏ',
+                luxDashboardDuration: 'ⴰⴽⵓⴷ',
+                luxDashboardWaterSaving: 'ⴰⵙⵙⴷⵔⵓⵙ ⵏ ⵡⴰⵎⴰⵏ',
+                luxDashboardHistory: 'ⴰⵎⵣⵔⵓⵢ ⵏ ⵓⵙⵙⴰⵢ',
+                luxDashboardPlaceholder: 'ⵉⵙⴼⴽⴰ ⴳ ⵓⵎⵓⵜⵜⵓ ⵉⴷⴷⴰⵏ',
+                luxDashboardAlertsTitle: 'ⴰⵍⵖⵓⵏ',
+                luxDashboardAlertsSubtitle: 'ⵜⵉⴷⵢⴰⵏⵉⵏ ⵉⵃⵜⴰⵊⵊⴰⵏ',
+                luxDashboardNoAlerts: 'ⵓⵔ ⵉⵍⵍⵉ ⵓⵍⵖⵓ',
+                luxDashboardNoAlertsText: 'ⵜⵉⵖⵓⵔⵉⵡⵉⵏ ⵖⵓⴷⴰⵏⵜ.',
+                luxDashboardSeverity: 'ⴰⵙⴷⵓⵙ',
+                luxDashboardRecommendedAction: 'ⵜⵉⴳⴰⵡⵜ',
+                luxDashboardAnalyticsTitle: 'ⵜⴰⵙⵍⴹⵜ',
+                luxDashboardAnalyticsSubtitle: 'ⵜⵉⵎⵉⵜⴰⵔ ⵏ ⵉⵙⴼⴽⴰ',
+                luxDashboardTrendMoisture: 'ⵜⴰⵎⵉⴷⵉ',
+                luxDashboardTrendTemperature: 'ⵜⴰⴼⵓⴽⵍⴰ',
+                luxDashboardTrendEc: 'EC',
+                luxDashboardAnalyticsLatest: 'ⵜⴰⵖⵓⵔⵉ ⵜⴰⵎⴳⴳⴰⵔⵓⵜ',
+                luxDashboardAnalyticsAverage: 'ⴰⵙⵎⵎⵓⵏ',
+                luxDashboardAnalyticsMinimum: 'Min',
+                luxDashboardAnalyticsMaximum: 'Max',
+                luxDashboardAnalyticsChange: 'ⴰⵙⵏⴼⵍ',
+                luxDashboardAnalyticsOptimalBand: 'ⴰⵣⵍⴰⵢ ⵉⵖⵓⴷⴰⵏ',
+                luxDashboardAnalyticsReadings: 'ⵜⵉⵖⵓⵔⵉⵡⵉⵏ',
+                luxDashboardAnalyticsWaiting: 'ⴰⵔ ⵏⵜⵜⵔⴰⵊⵓ ⵜⵉⵖⵓⵔⵉⵡⵉⵏ',
+                luxDashboardAnalyticsSoilTemperature: 'ⵜⴰⴼⵓⴽⵍⴰ ⵏ ⵓⴽⴰⵍ',
+                luxDashboardAnalyticsElectricalConductivity: 'EC',
+                luxDashboardAnalyticsPh: 'pH',
+                luxDashboardAnalyticsNitrogen: 'N',
+                luxDashboardAnalyticsPhosphorus: 'P',
+                luxDashboardAnalyticsPotassium: 'K',
+                luxDashboardAnalyticsAirTemperature: 'ⵜⴰⴼⵓⴽⵍⴰ ⵏ ⵡⴰⴹⵓ',
+                luxDashboardAnalyticsAirHumidity: 'ⵜⴰⵎⵉⴷⵉ ⵏ ⵡⴰⴹⵓ',
+                luxDashboardAnalyticsCo2: 'CO2',
+                luxDashboardAnalyticsWindSpeed: 'ⴰⴹⵓ',
+                luxDashboardAnalyticsSoilSensor: 'ⴰⴽⴰⵍ 7 ⴳ 1',
+                luxDashboardAnalyticsClimateSensor: 'ⴰⵙⵉⴳⵏⴰ',
+                luxDashboardAnalyticsPrevious: 'ⵉⵎⵉⵜⴰⵔⵏ ⵉⵣⵔⵉⵏ',
+                luxDashboardAnalyticsNext: 'ⵉⵎⵉⵜⴰⵔⵏ ⵢⴰⴹⵏ',
+                luxDashboardReportsTitle: 'ⵜⵉⵇⵇⴰⴷⵉⵏ',
+                luxDashboardReportsSubtitle: 'ⵙⵙⵓⴼⵖ ⵉⵙⴼⴽⴰ',
+                luxDashboardCsvExport: 'CSV',
+                luxDashboardPdfReport: 'PDF',
+                luxDashboardPdfPlaceholder: 'ⴰⴷ ⵉⵍⵉ ⵇⵔⵉⴱⴰ',
+                luxDashboardRecentReports: 'ⵜⵉⵇⵇⴰⴷⵉⵏ',
+                luxDashboardReportWeekly: 'ⴰⵙⵎⵎⵓⵏ ⵏ ⵓⴽⴰⵍ',
+                luxDashboardReportIrrigation: 'ⵜⵉⵣⵎⵎⴰⵔ ⵏ ⵓⵙⵙⴰⵢ',
+                luxDashboardSettingsTitle: 'ⵜⵉⵙⵖⴰⵍ',
+                luxDashboardSettingsSubtitle: 'ⵜⵉⴼⵔⴰⵏⵉⵏ ⵏ ⵓⴳⵔ',
+                luxDashboardCropSelection: 'ⵜⴰⵎⴳⵔⵜ',
+                luxDashboardThresholds: 'ⵉⵙⵡⵉⵔⵏ',
+                luxDashboardLanguage: 'ⵜⵓⵜⵍⴰⵢⵜ',
+                luxDashboardNotifications: 'ⴰⵍⵖⵓⵏ',
+                luxDashboardNotificationsEnabled: 'ⵔⵎⴷⵏ',
+                luxDashboardNotificationsDisabled: 'ⵏⵙⵏ',
+                luxDashboardPeriod24h: '24h',
+                luxDashboardPeriod7d: '7d',
+                luxDashboardPeriod30d: '30d',
+                luxDashboardActionAdjust: 'ⵙⴼⵙⵉ ⴰⵙⵙⴰⵢ',
+                luxDashboardSensorsConnected: '7',
+                luxDashboardNow: 'ⴷⵖⵉ',
+                luxDashboardScheduled: 'ⴳ 2h',
+                luxDashboardMinutes: '45 min'
+            }
+        };
+        RAYAT_DASHBOARD_INTERNAL_TABS_2026_TRANSLATIONS.zgh = { ...RAYAT_DASHBOARD_INTERNAL_TABS_2026_TRANSLATIONS.tz };
+
+        Object.entries(RAYAT_DASHBOARD_INTERNAL_TABS_2026_TRANSLATIONS).forEach(([lang, values]) => {
+            translations[lang] = {
+                ...(translations[lang] || {}),
+                ...values
+            };
+        });
+
+        const RAYAT_LUXURY_DASHBOARD_TRANSLATIONS_2026 = {
+            it: {
+                luxuryDashGreeting: 'Buongiorno',
+                luxuryDashGreetingSubtitle: 'Ecco la panoramica aggiornata della tua serra.',
+                luxuryDashUserName: 'Marco',
+                luxuryDashCompany: 'Azienda Agricola Verdi',
+                luxuryDashFarmLocation: 'Serra di Banane - Taroudant, Marocco',
+                luxuryDashMenuDashboard: 'Dashboard',
+                luxuryDashMenuGreenhouses: 'Serre',
+                luxuryDashMenuSensors: 'Sensori',
+                luxuryDashMenuIrrigation: 'Irrigazione',
+                luxuryDashMenuAlarms: 'Allarmi',
+                luxuryDashMenuAnalysis: 'Analisi',
+                luxuryDashMenuReports: 'Report',
+                luxuryDashMenuHistory: 'Storico',
+                luxuryDashMenuSettings: 'Impostazioni',
+                luxuryDashSupport: 'Supporto',
+                luxuryDashPlan: 'Piano attuale',
+                luxuryDashProfessional: 'Professional',
+                luxuryDashExpiry: 'Scade il 12/06/2026',
+                luxuryDashHealthIndex: 'Indice di salute',
+                luxuryDashSensorsOnline: 'Sensori online',
+                luxuryDashActiveAlarms: 'Allarmi attivi',
+                luxuryDashIrrigationsToday: 'Irrigazioni oggi',
+                luxuryDashWaterSaving: 'Risparmio idrico',
+                luxuryDashOperating: 'Operativi',
+                luxuryDashProgrammed: 'Da pianificare',
+                luxuryDashNoMeasuredValue: 'Dato non disponibile',
+                luxuryDashDemoFallback: 'Dati dimostrativi',
+                luxuryDashUpdated: 'Ultimo aggiornamento',
+                luxuryDashMapTitle: 'Mappa della serra',
+                luxuryDashSatellite: 'Vista satellitare',
+                luxuryDashAllSensors: 'Tutti i sensori',
+                luxuryDashCropHealth: 'Salute coltura',
+                luxuryDashFieldInfo: 'Serra di Banane - Taroudant, Marocco',
+                luxuryDashRecommendations: 'Raccomandazioni IA',
+                luxuryDashIrrigationAdvice: 'Irrigazione consigliata',
+                luxuryDashIrrigationStable: 'Umidita nel range: mantieni il programma corrente.',
+                luxuryDashIrrigationReview: 'L umidita richiede una verifica del prossimo ciclo.',
+                luxuryDashHydricRisk: 'Rischio stress idrico',
+                luxuryDashHydricStable: 'Nessun rischio immediato rilevato dai valori disponibili.',
+                luxuryDashHydricWarning: 'Controlla umidita e temperatura prima del prossimo turno.',
+                luxuryDashNutritionAdvice: 'Nutrizione del suolo',
+                luxuryDashNutritionStable: 'Azoto nel range ottimale della coltura.',
+                luxuryDashNutritionReview: 'Valuta il piano di fertilizzazione in base all azoto.',
+                luxuryDashPriorityLow: 'Priorita bassa',
+                luxuryDashPriorityMedium: 'Priorita media',
+                luxuryDashPriorityHigh: 'Priorita alta',
+                luxuryDashSeeRecommendations: 'Vedi tutte le raccomandazioni',
+                luxuryDashSensorStatus: 'Stato sensori',
+                luxuryDashSensorDetails: 'Vedi dettagli sensori',
+                luxuryDashTrendTitle: 'Andamento ultimi 7 giorni',
+                luxuryDashTrendMetric: 'Umidita',
+                luxuryDashEmptyTrend: 'I dati storici appariranno qui appena disponibili.',
+                luxuryDashSoilConditions: 'Condizioni attuali del suolo',
+                luxuryDashOrganicMatter: 'Sostanza organica',
+                luxuryDashWeather: 'Meteo locale',
+                luxuryDashWeatherLive: 'Dati ambientali dalla serra',
+                luxuryDashRelativeHumidity: 'Umidita aria',
+                luxuryDashWind: 'Vento',
+                luxuryDashRecentActivities: 'Attivita recenti',
+                luxuryDashActivityEmpty: 'Nessun allarme attivo nei dati correnti.',
+                luxuryDashEvent: 'Evento',
+                luxuryDashDetails: 'Dettagli',
+                luxuryDashQuickReports: 'Report rapidi',
+                luxuryDashQuickReportsSubtitle: 'Esporta i dati reali della serra.',
+                luxuryDashTodayData: 'Dati odierni',
+                luxuryDashWeeklyReport: 'Report settimanale',
+                luxuryDashMonthlyAnalysis: 'Analisi mensile',
+                luxuryDashDownloadCsv: 'Scarica CSV',
+                luxuryDashNotAvailable: 'Non disponibile',
+                luxuryDashHistoricalData: 'Dati storici sensore suolo',
+                luxuryDashHistoricalEmpty: 'Nessun dato storico disponibile nel periodo selezionato.',
+                luxuryDashLoadingHistory: 'Caricamento dati storici...',
+                luxuryDashDateFrom: 'Dal',
+                luxuryDashDateTo: 'Al',
+                luxuryDashApply: 'Applica',
+                luxuryDashUnavailableStatus: 'Non disponibile',
+                luxuryDashDemoPageTitle: 'Demo Live - Serra Taroudant',
+                luxuryDashDemoPageSubtitle: 'Dati reali provenienti dalla serra di banane a Taroudant, Marocco.',
+                luxuryDashMapShort: 'Mappa',
+                luxuryDashMenuAlarmSingular: 'Alert',
+                luxuryDashMenuRecommendations: 'Raccomandazioni',
+                luxuryDashLastUpdateShort: 'Ultimo aggiornamento',
+                luxuryDashViewDetails: 'Vedi dettagli',
+                luxuryDashViewAll: 'Vedi tutte',
+                luxuryDashExcellent: 'Eccellente',
+                luxuryDashToMonitor: 'Da monitorare',
+                luxuryDashAllOnline: 'Tutti online',
+                luxuryDashLastUpdateCard: 'Ultimo aggiornamento',
+                luxuryDashRealtimeData: 'Dati in tempo reale',
+                luxuryDashNoAlert: 'Nessun alert',
+                luxuryDashCurrentConditions: 'Condizioni attuali',
+                luxuryDashAirTemperature: 'Temperatura aria',
+                luxuryDashSolarRadiation: 'Radiazione solare',
+                luxuryDashSoilTemperature: 'Temperatura suolo',
+                luxuryDashSoilPh: 'pH suolo',
+                luxuryDashSoilEc: 'EC suolo',
+                luxuryDashLast7Days: 'Ultimi 7 giorni',
+                luxuryDashAllSensorsOnline: 'Tutti i sensori funzionanti',
+                luxuryDashVerifiedTitle: 'Dati 100% reali e verificati',
+                luxuryDashVerifiedText: 'Sistema di monitoraggio certificato e calibrato per colture di banane.',
+                luxuryDashLearnRayat: 'Scopri come funziona Rayat',
+                demoLive: 'Demo Live'
+            },
+            en: {
+                luxuryDashGreeting: 'Good morning',
+                luxuryDashGreetingSubtitle: 'Here is the latest overview of your greenhouse.',
+                luxuryDashUserName: 'Marco',
+                luxuryDashCompany: 'Verdi Agricultural Company',
+                luxuryDashFarmLocation: 'Banana Greenhouse - Taroudant, Morocco',
+                luxuryDashMenuDashboard: 'Dashboard', luxuryDashMenuGreenhouses: 'Greenhouses', luxuryDashMenuSensors: 'Sensors', luxuryDashMenuIrrigation: 'Irrigation', luxuryDashMenuAlarms: 'Alerts', luxuryDashMenuAnalysis: 'Analysis', luxuryDashMenuReports: 'Reports', luxuryDashMenuHistory: 'History', luxuryDashMenuSettings: 'Settings', luxuryDashSupport: 'Support',
+                luxuryDashPlan: 'Current plan', luxuryDashProfessional: 'Professional', luxuryDashExpiry: 'Expires on 12/06/2026',
+                luxuryDashHealthIndex: 'Health index', luxuryDashSensorsOnline: 'Sensors online', luxuryDashActiveAlarms: 'Active alerts', luxuryDashIrrigationsToday: 'Irrigations today', luxuryDashWaterSaving: 'Water savings', luxuryDashOperating: 'Operational', luxuryDashProgrammed: 'To schedule', luxuryDashNoMeasuredValue: 'Data unavailable', luxuryDashDemoFallback: 'Demonstration data', luxuryDashUpdated: 'Last updated',
+                luxuryDashMapTitle: 'Greenhouse map', luxuryDashSatellite: 'Satellite view', luxuryDashAllSensors: 'All sensors', luxuryDashCropHealth: 'Crop health', luxuryDashFieldInfo: 'Banana Greenhouse - Taroudant, Morocco',
+                luxuryDashRecommendations: 'AI recommendations', luxuryDashIrrigationAdvice: 'Recommended irrigation', luxuryDashIrrigationStable: 'Moisture is in range: maintain the current schedule.', luxuryDashIrrigationReview: 'Moisture requires a review of the next cycle.', luxuryDashHydricRisk: 'Water stress risk', luxuryDashHydricStable: 'No immediate risk detected from available readings.', luxuryDashHydricWarning: 'Check moisture and temperature before the next cycle.', luxuryDashNutritionAdvice: 'Soil nutrition', luxuryDashNutritionStable: 'Nitrogen is within the crop optimal range.', luxuryDashNutritionReview: 'Review the fertilization plan based on nitrogen.', luxuryDashPriorityLow: 'Low priority', luxuryDashPriorityMedium: 'Medium priority', luxuryDashPriorityHigh: 'High priority', luxuryDashSeeRecommendations: 'View all recommendations',
+                luxuryDashSensorStatus: 'Sensor status', luxuryDashSensorDetails: 'View sensor details', luxuryDashTrendTitle: 'Trend over the last 7 days', luxuryDashTrendMetric: 'Moisture', luxuryDashEmptyTrend: 'Historical data will appear here when available.', luxuryDashSoilConditions: 'Current soil conditions', luxuryDashOrganicMatter: 'Organic matter', luxuryDashWeather: 'Local weather', luxuryDashWeatherLive: 'Environmental data from the greenhouse', luxuryDashRelativeHumidity: 'Air humidity', luxuryDashWind: 'Wind',
+                luxuryDashRecentActivities: 'Recent activities', luxuryDashActivityEmpty: 'No active alert in current readings.', luxuryDashEvent: 'Event', luxuryDashDetails: 'Details', luxuryDashQuickReports: 'Quick reports', luxuryDashQuickReportsSubtitle: 'Export real greenhouse data.', luxuryDashTodayData: 'Today data', luxuryDashWeeklyReport: 'Weekly report', luxuryDashMonthlyAnalysis: 'Monthly analysis', luxuryDashDownloadCsv: 'Download CSV', luxuryDashNotAvailable: 'Unavailable', luxuryDashHistoricalData: 'Soil sensor historical data', luxuryDashHistoricalEmpty: 'No historical data for the selected period.', luxuryDashLoadingHistory: 'Loading historical data...', luxuryDashDateFrom: 'From', luxuryDashDateTo: 'To', luxuryDashApply: 'Apply', luxuryDashUnavailableStatus: 'Unavailable', luxuryDashDemoPageTitle: 'Demo Live - Taroudant Greenhouse', luxuryDashDemoPageSubtitle: 'Real data from the banana greenhouse in Taroudant, Morocco.', luxuryDashMapShort: 'Map', luxuryDashMenuAlarmSingular: 'Alert', luxuryDashMenuRecommendations: 'Recommendations', luxuryDashLastUpdateShort: 'Last update', luxuryDashViewDetails: 'View details', luxuryDashViewAll: 'View all', luxuryDashExcellent: 'Excellent', luxuryDashToMonitor: 'To monitor', luxuryDashAllOnline: 'All online', luxuryDashLastUpdateCard: 'Last update', luxuryDashRealtimeData: 'Real-time data', luxuryDashNoAlert: 'No alert', luxuryDashCurrentConditions: 'Current conditions', luxuryDashAirTemperature: 'Air temperature', luxuryDashSolarRadiation: 'Solar radiation', luxuryDashSoilTemperature: 'Soil temperature', luxuryDashSoilPh: 'Soil pH', luxuryDashSoilEc: 'Soil EC', luxuryDashLast7Days: 'Last 7 days', luxuryDashAllSensorsOnline: 'All sensors operational', luxuryDashVerifiedTitle: '100% real and verified data', luxuryDashVerifiedText: 'Certified monitoring system calibrated for banana crops.', luxuryDashLearnRayat: 'Discover how Rayat works', demoLive: 'Demo Live'
+            },
+            fr: {
+                luxuryDashGreeting: 'Bonjour',
+                luxuryDashGreetingSubtitle: 'Voici la vue actualisee de votre serre.',
+                luxuryDashUserName: 'Marco',
+                luxuryDashCompany: 'Entreprise Agricole Verdi',
+                luxuryDashFarmLocation: 'Serre de bananes - Taroudant, Maroc',
+                luxuryDashMenuDashboard: 'Tableau de bord', luxuryDashMenuGreenhouses: 'Serres', luxuryDashMenuSensors: 'Capteurs', luxuryDashMenuIrrigation: 'Irrigation', luxuryDashMenuAlarms: 'Alertes', luxuryDashMenuAnalysis: 'Analyses', luxuryDashMenuReports: 'Rapports', luxuryDashMenuHistory: 'Historique', luxuryDashMenuSettings: 'Parametres', luxuryDashSupport: 'Support',
+                luxuryDashPlan: 'Plan actuel', luxuryDashProfessional: 'Professionnel', luxuryDashExpiry: 'Expire le 12/06/2026',
+                luxuryDashHealthIndex: 'Indice de sante', luxuryDashSensorsOnline: 'Capteurs en ligne', luxuryDashActiveAlarms: 'Alertes actives', luxuryDashIrrigationsToday: 'Irrigations du jour', luxuryDashWaterSaving: 'Economie d eau', luxuryDashOperating: 'Operationnels', luxuryDashProgrammed: 'A planifier', luxuryDashNoMeasuredValue: 'Donnee indisponible', luxuryDashDemoFallback: 'Donnees de demonstration', luxuryDashUpdated: 'Derniere mise a jour',
+                luxuryDashMapTitle: 'Carte de la serre', luxuryDashSatellite: 'Vue satellite', luxuryDashAllSensors: 'Tous les capteurs', luxuryDashCropHealth: 'Sante des cultures', luxuryDashFieldInfo: 'Serre de bananes - Taroudant, Maroc',
+                luxuryDashRecommendations: 'Recommandations IA', luxuryDashIrrigationAdvice: 'Irrigation conseillee', luxuryDashIrrigationStable: 'Humidite dans la plage: conservez le programme actuel.', luxuryDashIrrigationReview: 'L humidite requiert une verification du prochain cycle.', luxuryDashHydricRisk: 'Risque de stress hydrique', luxuryDashHydricStable: 'Aucun risque immediat detecte dans les valeurs disponibles.', luxuryDashHydricWarning: 'Verifiez humidite et temperature avant le prochain tour.', luxuryDashNutritionAdvice: 'Nutrition du sol', luxuryDashNutritionStable: 'L azote est dans la plage optimale.', luxuryDashNutritionReview: 'Evaluez la fertilisation selon le niveau d azote.', luxuryDashPriorityLow: 'Priorite basse', luxuryDashPriorityMedium: 'Priorite moyenne', luxuryDashPriorityHigh: 'Priorite haute', luxuryDashSeeRecommendations: 'Voir toutes les recommandations',
+                luxuryDashSensorStatus: 'Etat des capteurs', luxuryDashSensorDetails: 'Voir les details capteurs', luxuryDashTrendTitle: 'Evolution des 7 derniers jours', luxuryDashTrendMetric: 'Humidite', luxuryDashEmptyTrend: 'Les donnees historiques apparaitront ici des qu elles seront disponibles.', luxuryDashSoilConditions: 'Conditions actuelles du sol', luxuryDashOrganicMatter: 'Matiere organique', luxuryDashWeather: 'Meteo locale', luxuryDashWeatherLive: 'Donnees ambiantes de la serre', luxuryDashRelativeHumidity: 'Humidite air', luxuryDashWind: 'Vent',
+                luxuryDashRecentActivities: 'Activites recentes', luxuryDashActivityEmpty: 'Aucune alerte active dans les mesures actuelles.', luxuryDashEvent: 'Evenement', luxuryDashDetails: 'Details', luxuryDashQuickReports: 'Rapports rapides', luxuryDashQuickReportsSubtitle: 'Exportez les donnees reelles de la serre.', luxuryDashTodayData: 'Donnees du jour', luxuryDashWeeklyReport: 'Rapport hebdomadaire', luxuryDashMonthlyAnalysis: 'Analyse mensuelle', luxuryDashDownloadCsv: 'Telecharger CSV', luxuryDashNotAvailable: 'Indisponible', luxuryDashHistoricalData: 'Historique du capteur de sol', luxuryDashHistoricalEmpty: 'Aucune donnee historique pour cette periode.', luxuryDashLoadingHistory: 'Chargement des donnees historiques...', luxuryDashDateFrom: 'Du', luxuryDashDateTo: 'Au', luxuryDashApply: 'Appliquer', luxuryDashUnavailableStatus: 'Indisponible', luxuryDashDemoPageTitle: 'Demo Live - Serre Taroudant', luxuryDashDemoPageSubtitle: 'Donnees reelles provenant de la serre de bananes a Taroudant, Maroc.', luxuryDashMapShort: 'Carte', luxuryDashMenuAlarmSingular: 'Alerte', luxuryDashMenuRecommendations: 'Recommandations', luxuryDashLastUpdateShort: 'Derniere mise a jour', luxuryDashViewDetails: 'Voir details', luxuryDashViewAll: 'Voir tout', luxuryDashExcellent: 'Excellent', luxuryDashToMonitor: 'A surveiller', luxuryDashAllOnline: 'Tous en ligne', luxuryDashLastUpdateCard: 'Derniere mise a jour', luxuryDashRealtimeData: 'Donnees en temps reel', luxuryDashNoAlert: 'Aucune alerte', luxuryDashCurrentConditions: 'Conditions actuelles', luxuryDashAirTemperature: 'Temperature air', luxuryDashSolarRadiation: 'Rayonnement solaire', luxuryDashSoilTemperature: 'Temperature sol', luxuryDashSoilPh: 'pH sol', luxuryDashSoilEc: 'EC sol', luxuryDashLast7Days: '7 derniers jours', luxuryDashAllSensorsOnline: 'Tous les capteurs fonctionnent', luxuryDashVerifiedTitle: 'Donnees 100% reelles et verifiees', luxuryDashVerifiedText: 'Systeme de monitoring certifie et calibre pour les cultures de bananes.', luxuryDashLearnRayat: 'Decouvrir comment fonctionne Rayat', demoLive: 'Demo Live'
+            },
+            ar: {
+                luxuryDashGreeting: 'صباح الخير',
+                luxuryDashGreetingSubtitle: 'هذه نظرة محدثة على بيتك الزراعي.',
+                luxuryDashUserName: 'ماركو', luxuryDashCompany: 'شركة فيردي الزراعية', luxuryDashFarmLocation: 'دفيئة الموز - تارودانت، المغرب',
+                luxuryDashMenuDashboard: 'لوحة التحكم', luxuryDashMenuGreenhouses: 'الدفيئات', luxuryDashMenuSensors: 'المستشعرات', luxuryDashMenuIrrigation: 'الري', luxuryDashMenuAlarms: 'الإنذارات', luxuryDashMenuAnalysis: 'التحليلات', luxuryDashMenuReports: 'التقارير', luxuryDashMenuHistory: 'السجل', luxuryDashMenuSettings: 'الإعدادات', luxuryDashSupport: 'الدعم',
+                luxuryDashPlan: 'الخطة الحالية', luxuryDashProfessional: 'احترافية', luxuryDashExpiry: 'تنتهي في 12/06/2026',
+                luxuryDashHealthIndex: 'مؤشر الصحة', luxuryDashSensorsOnline: 'المستشعرات المتصلة', luxuryDashActiveAlarms: 'الإنذارات النشطة', luxuryDashIrrigationsToday: 'الريات اليوم', luxuryDashWaterSaving: 'توفير المياه', luxuryDashOperating: 'تعمل', luxuryDashProgrammed: 'تحتاج جدولة', luxuryDashNoMeasuredValue: 'البيانات غير متاحة', luxuryDashDemoFallback: 'بيانات توضيحية', luxuryDashUpdated: 'آخر تحديث',
+                luxuryDashMapTitle: 'خريطة الدفيئة', luxuryDashSatellite: 'عرض القمر الصناعي', luxuryDashAllSensors: 'كل المستشعرات', luxuryDashCropHealth: 'صحة المحصول', luxuryDashFieldInfo: 'دفيئة الموز - تارودانت، المغرب',
+                luxuryDashRecommendations: 'توصيات الذكاء الاصطناعي', luxuryDashIrrigationAdvice: 'الري الموصى به', luxuryDashIrrigationStable: 'الرطوبة ضمن النطاق؛ حافظ على البرنامج الحالي.', luxuryDashIrrigationReview: 'الرطوبة تتطلب مراجعة دورة الري القادمة.', luxuryDashHydricRisk: 'خطر الإجهاد المائي', luxuryDashHydricStable: 'لا يوجد خطر فوري في القراءات المتاحة.', luxuryDashHydricWarning: 'تحقق من الرطوبة والحرارة قبل الدورة القادمة.', luxuryDashNutritionAdvice: 'تغذية التربة', luxuryDashNutritionStable: 'النيتروجين ضمن النطاق الأمثل للمحصول.', luxuryDashNutritionReview: 'راجع خطة التسميد حسب مستوى النيتروجين.', luxuryDashPriorityLow: 'أولوية منخفضة', luxuryDashPriorityMedium: 'أولوية متوسطة', luxuryDashPriorityHigh: 'أولوية عالية', luxuryDashSeeRecommendations: 'عرض كل التوصيات',
+                luxuryDashSensorStatus: 'حالة المستشعرات', luxuryDashSensorDetails: 'عرض تفاصيل المستشعرات', luxuryDashTrendTitle: 'اتجاه آخر 7 أيام', luxuryDashTrendMetric: 'الرطوبة', luxuryDashEmptyTrend: 'ستظهر البيانات التاريخية هنا عند توفرها.', luxuryDashSoilConditions: 'حالة التربة الحالية', luxuryDashOrganicMatter: 'المادة العضوية', luxuryDashWeather: 'الطقس المحلي', luxuryDashWeatherLive: 'بيانات بيئية من الدفيئة', luxuryDashRelativeHumidity: 'رطوبة الهواء', luxuryDashWind: 'الرياح',
+                luxuryDashRecentActivities: 'الأنشطة الأخيرة', luxuryDashActivityEmpty: 'لا توجد إنذارات نشطة في القراءات الحالية.', luxuryDashEvent: 'الحدث', luxuryDashDetails: 'التفاصيل', luxuryDashQuickReports: 'تقارير سريعة', luxuryDashQuickReportsSubtitle: 'صدر بيانات الدفيئة الحقيقية.', luxuryDashTodayData: 'بيانات اليوم', luxuryDashWeeklyReport: 'تقرير أسبوعي', luxuryDashMonthlyAnalysis: 'تحليل شهري', luxuryDashDownloadCsv: 'تحميل CSV', luxuryDashNotAvailable: 'غير متاح', luxuryDashHistoricalData: 'سجل مستشعر التربة', luxuryDashHistoricalEmpty: 'لا توجد بيانات تاريخية للفترة المحددة.', luxuryDashLoadingHistory: 'جار تحميل البيانات التاريخية...', luxuryDashDateFrom: 'من', luxuryDashDateTo: 'إلى', luxuryDashApply: 'تطبيق', luxuryDashUnavailableStatus: 'غير متاح', luxuryDashDemoPageTitle: 'العرض المباشر - دفيئة تارودانت', luxuryDashDemoPageSubtitle: 'بيانات حقيقية من دفيئة الموز في تارودانت، المغرب.', luxuryDashMapShort: 'الخريطة', luxuryDashMenuAlarmSingular: 'إنذار', luxuryDashMenuRecommendations: 'التوصيات', luxuryDashLastUpdateShort: 'آخر تحديث', luxuryDashViewDetails: 'عرض التفاصيل', luxuryDashViewAll: 'عرض الكل', luxuryDashExcellent: 'ممتاز', luxuryDashToMonitor: 'للمراقبة', luxuryDashAllOnline: 'كلها متصلة', luxuryDashLastUpdateCard: 'آخر تحديث', luxuryDashRealtimeData: 'بيانات فورية', luxuryDashNoAlert: 'لا إنذار', luxuryDashCurrentConditions: 'الظروف الحالية', luxuryDashAirTemperature: 'حرارة الهواء', luxuryDashSolarRadiation: 'الإشعاع الشمسي', luxuryDashSoilTemperature: 'حرارة التربة', luxuryDashSoilPh: 'pH التربة', luxuryDashSoilEc: 'EC التربة', luxuryDashLast7Days: 'آخر 7 أيام', luxuryDashAllSensorsOnline: 'كل المستشعرات تعمل', luxuryDashVerifiedTitle: 'بيانات حقيقية وموثقة 100%', luxuryDashVerifiedText: 'نظام مراقبة معتمد ومعاير لمحاصيل الموز.', luxuryDashLearnRayat: 'اكتشف كيف يعمل Rayat', demoLive: 'Demo Live'
+            },
+            zgh: {
+                luxuryDashGreeting: 'ⴰⵣⵓⵍ',
+                luxuryDashGreetingSubtitle: 'ⵜⴰⵎⵓⵖⵍⵉ ⵜⴰⵎⴰⵢⵏⵓⵜ ⵏ ⵜⵉⵙⵉⵔⵜ ⵏⵏⴽ.',
+                luxuryDashUserName: 'Marco', luxuryDashCompany: 'Azienda Agricola Verdi', luxuryDashFarmLocation: 'ⵜⴰⵙⵉⵔⵜ ⵏ ⵜⵉⴳⴰⵢⵢⴰ - ⵜⴰⵔⵓⴷⴰⵏⵜ, ⵍⵎⵖⵔⵉⴱ',
+                luxuryDashMenuDashboard: 'Dashboard', luxuryDashMenuGreenhouses: 'ⵜⵉⵙⵉⵔⵉⵏ', luxuryDashMenuSensors: 'ⵉⵎⵇⵇⴰⵙⵏ', luxuryDashMenuIrrigation: 'ⴰⵙⴳⵎ', luxuryDashMenuAlarms: 'ⵉⵍⵖⴰ', luxuryDashMenuAnalysis: 'ⵜⵙⵍⴹⵉⵜ', luxuryDashMenuReports: 'ⵉⵏⵇⵇⵉⵙⵏ', luxuryDashMenuHistory: 'ⴰⵎⵣⵔⵓⵢ', luxuryDashMenuSettings: 'ⵜⵉⵙⵖⴰⵍ', luxuryDashSupport: 'Support',
+                luxuryDashPlan: 'ⴰⵖⴰⵡⴰⵙ', luxuryDashProfessional: 'Professional', luxuryDashExpiry: '12/06/2026',
+                luxuryDashHealthIndex: 'ⴰⵎⴰⵜⴰⵔ ⵏ ⵜⴷⵓⵙⵉ', luxuryDashSensorsOnline: 'ⵉⵎⵇⵇⴰⵙⵏ ⵉⵍⵍⴰⵏ', luxuryDashActiveAlarms: 'ⵉⵍⵖⴰ ⵉⵔⴳⴳⴰⵏ', luxuryDashIrrigationsToday: 'ⴰⵙⴳⵎ ⵏ ⵡⴰⵙⵙⴰ', luxuryDashWaterSaving: 'ⴰⵙⵏⴳⵎ ⵏ ⵡⴰⵎⴰⵏ', luxuryDashOperating: 'ⵉⵖⵓⴷⴰ', luxuryDashProgrammed: 'ⵉⵅⵚⵚⴰ ⵓⵙⵖⴰⵡⵙ', luxuryDashNoMeasuredValue: 'ⵓⵔ ⵉⵍⵍⵉ ⵓⵙⴼⴽ', luxuryDashDemoFallback: 'ⵉⵙⴼⴽⴰ ⵏ demo', luxuryDashUpdated: 'ⴰⵏⴳⴳⴰⵔⵓ ⴰⵙⴳⴳⴷ',
+                luxuryDashMapTitle: 'ⵜⴰⴼⵍⵡⵉⵜ ⵏ ⵜⵉⵙⵉⵔⵜ', luxuryDashSatellite: 'ⴰⵙⴽⴰⵏ ⴰⵙⴰⵜⵉⵍⵉ', luxuryDashAllSensors: 'ⴰⴽⴽⵯ ⵉⵎⵇⵇⴰⵙⵏ', luxuryDashCropHealth: 'ⵜⴰⴷⵓⵙⵉ ⵏ ⵜⴰⵢⵢⵓⵣⵜ', luxuryDashFieldInfo: 'ⵜⴰⵙⵉⵔⵜ ⵏ ⵜⵉⴳⴰⵢⵢⴰ - ⵜⴰⵔⵓⴷⴰⵏⵜ',
+                luxuryDashRecommendations: 'ⵜⵉⵡⵙⵉⵜⵉⵏ IA', luxuryDashIrrigationAdvice: 'ⴰⵙⴳⵎ ⵉⵜⵜⵓⵙⵎⴰⵏ', luxuryDashIrrigationStable: 'ⵜⴰⵎⵉⴷⵉ ⵜⵖⵓⴷⴰ.', luxuryDashIrrigationReview: 'ⵙⵙⵉⵔⵎ ⴰⵙⴳⵎ ⴷ ⵉⴹⴼⵕⵏ.', luxuryDashHydricRisk: 'ⴰⵎⵉⵀⵉ ⵏ ⵡⴰⵎⴰⵏ', luxuryDashHydricStable: 'ⵓⵔ ⵉⵍⵍⵉ ⵡⴰⵎⵉⵀⵉ.', luxuryDashHydricWarning: 'ⵙⵙⵉⵔⵎ ⵜⴰⵎⵉⴷⵉ ⴷ ⵜⴰⵙⴽⵯⴼⵍⵜ.', luxuryDashNutritionAdvice: 'ⵜⵉⵏⴳⵉ ⵏ ⵓⴽⴰⵍ', luxuryDashNutritionStable: 'ⴰⵣⵓⵜ ⵉⵖⵓⴷⴰ.', luxuryDashNutritionReview: 'ⵙⵙⵉⵔⵎ ⴰⵖⴰⵡⴰⵙ ⵏ ⵜⵉⵏⴳⵉ.', luxuryDashPriorityLow: 'ⵜⴰⵣⵡⴰⵔⵜ ⵜⴰⴼⵍⵍⴰⵢⵜ', luxuryDashPriorityMedium: 'ⵜⴰⵣⵡⴰⵔⵜ ⵜⴰⵏⴰⵎⵎⴰⵙⵜ', luxuryDashPriorityHigh: 'ⵜⴰⵣⵡⴰⵔⵜ ⵜⴰⵎⵇⵇⵔⴰⵏⵜ', luxuryDashSeeRecommendations: 'ⵥⵕ ⴰⴽⴽⵯ ⵜⵉⵡⵙⵉⵜⵉⵏ',
+                luxuryDashSensorStatus: 'ⴰⴷⴷⴰⴷ ⵏ ⵉⵎⵇⵇⴰⵙⵏ', luxuryDashSensorDetails: 'ⵥⵕ ⵉⴼⵙⴰⵢⵏ', luxuryDashTrendTitle: 'ⴰⵙⴼⴰⵔⵉ ⵏ 7 ⵡⵓⵙⵙⴰⵏ', luxuryDashTrendMetric: 'ⵜⴰⵎⵉⴷⵉ', luxuryDashEmptyTrend: 'ⴰⴷ ⴷ ⴱⴰⵏⵏ ⵉⵙⴼⴽⴰ.', luxuryDashSoilConditions: 'ⴰⴷⴷⴰⴷ ⵏ ⵓⴽⴰⵍ', luxuryDashOrganicMatter: 'ⵜⴰⴳⴰⵎⴰ ⵜⴰⵏⴰⵎⵓⵔⵜ', luxuryDashWeather: 'ⴰⵏⵣⵡⵉ', luxuryDashWeatherLive: 'ⵉⵙⴼⴽⴰ ⵏ ⵜⵉⵙⵉⵔⵜ', luxuryDashRelativeHumidity: 'ⵜⴰⵎⵉⴷⵉ ⵏ ⵡⴰⴹⵓ', luxuryDashWind: 'ⴰⴹⵓ',
+                luxuryDashRecentActivities: 'ⵜⵉⵡⵓⵔⵉⵡⵉⵏ ⵜⵉⵎⴰⵢⵏⵓⵜⵉⵏ', luxuryDashActivityEmpty: 'ⵓⵔ ⵉⵍⵍⵉ ⵓⵍⵖⵓ.', luxuryDashEvent: 'ⵜⴰⵎⵙⴰⵍⵜ', luxuryDashDetails: 'ⵉⴼⵙⴰⵢⵏ', luxuryDashQuickReports: 'ⵉⵏⵇⵇⵉⵙⵏ', luxuryDashQuickReportsSubtitle: 'ⵙⵙⵓⴼⵖ ⵉⵙⴼⴽⴰ.', luxuryDashTodayData: 'ⵉⵙⴼⴽⴰ ⵏ ⵡⴰⵙⵙⴰ', luxuryDashWeeklyReport: 'ⴰⵏⵇⵇⵉⵙ ⵏ ⵉⵎⴰⵍⴰⵙⵙ', luxuryDashMonthlyAnalysis: 'ⵜⴰⵙⵍⴹⵉⵜ ⵏ ⵡⴰⵢⵢⵓⵔ', luxuryDashDownloadCsv: 'CSV', luxuryDashNotAvailable: 'ⵓⵔ ⵉⵍⵍⵉ', luxuryDashHistoricalData: 'ⴰⵎⵣⵔⵓⵢ ⵏ ⵓⴽⴰⵍ', luxuryDashHistoricalEmpty: 'ⵓⵔ ⵉⵍⵍⵉⵏ ⵉⵙⴼⴽⴰ.', luxuryDashLoadingHistory: 'ⴰⵍⴷⴰⵢ ⵏ ⵉⵙⴼⴽⴰ...', luxuryDashDateFrom: 'ⵙⴳ', luxuryDashDateTo: 'ⴰⵔ', luxuryDashApply: 'ⵙⵏⴼⵍ', luxuryDashUnavailableStatus: 'ⵓⵔ ⵉⵍⵍⵉ', luxuryDashDemoPageTitle: 'Demo Live - ⵜⴰⵔⵓⴷⴰⵏⵜ', luxuryDashDemoPageSubtitle: 'ⵉⵙⴼⴽⴰ ⵉⵎⵉⵔⴰⵏⵏ ⵙⴳ ⵜⵉⵙⵉⵔⵜ ⵏ ⵜⵉⴳⴰⵢⵢⴰ ⴳ ⵜⴰⵔⵓⴷⴰⵏⵜ.', luxuryDashMapShort: 'ⵜⴰⴼⵍⵡⵉⵜ', luxuryDashMenuAlarmSingular: 'ⴰⵍⴰⵔⵎ', luxuryDashMenuRecommendations: 'ⵜⵉⵡⵙⵉⵜⵉⵏ', luxuryDashLastUpdateShort: 'ⴰⵙⴳⴳⴷ ⴰⵏⴳⴳⴰⵔⵓ', luxuryDashViewDetails: 'ⵥⵕ ⵉⴼⵙⴰⵢⵏ', luxuryDashViewAll: 'ⵥⵕ ⴰⴽⴽⵯ', luxuryDashExcellent: 'ⵉⵖⵓⴷⴰ', luxuryDashToMonitor: 'ⵉⵅⵚⵚⴰ ⵓⵙⵙⵏⵜⵉ', luxuryDashAllOnline: 'ⴰⴽⴽⵯ ⵉⵍⵍⴰ', luxuryDashLastUpdateCard: 'ⴰⵙⴳⴳⴷ ⴰⵏⴳⴳⴰⵔⵓ', luxuryDashRealtimeData: 'ⵉⵙⴼⴽⴰ ⵉⵎⵉⵔⴰⵏⵏ', luxuryDashNoAlert: 'ⵓⵔ ⵉⵍⵍⵉ ⵓⵍⵖⵓ', luxuryDashCurrentConditions: 'ⴰⴷⴷⴰⴷ ⴰⵎⵉⵔⴰⵏ', luxuryDashAirTemperature: 'ⵜⴰⵙⴽⵯⴼⵍⵜ ⵏ ⵡⴰⴹⵓ', luxuryDashSolarRadiation: 'ⴰⵣⵔⴰⵢ ⵏ ⵜⴰⴼⵓⴽⵜ', luxuryDashSoilTemperature: 'ⵜⴰⵙⴽⵯⴼⵍⵜ ⵏ ⵓⴽⴰⵍ', luxuryDashSoilPh: 'pH ⵏ ⵓⴽⴰⵍ', luxuryDashSoilEc: 'EC ⵏ ⵓⴽⴰⵍ', luxuryDashLast7Days: '7 ⵡⵓⵙⵙⴰⵏ', luxuryDashAllSensorsOnline: 'ⴰⴽⴽⵯ ⵉⵎⵇⵇⴰⵙⵏ ⵖⵓⴷⴰⵏ', luxuryDashVerifiedTitle: 'ⵉⵙⴼⴽⴰ 100% ⵉⵎⵉⵔⴰⵏⵏ', luxuryDashVerifiedText: 'ⴰⵎⵙⵙⵓⴷⵙ ⵏ monitoring ⵉⵜⵜⵓⵙⵙⴽⵔ ⵉ ⵜⵉⴳⴰⵢⵢⴰ.', luxuryDashLearnRayat: 'ⵥⵕ ⵎⴰⵎⴽ ⵉⵙⵡⵓⵔⵉ Rayat', demoLive: 'Demo Live'
+            }
+        };
+
+        Object.entries(RAYAT_LUXURY_DASHBOARD_TRANSLATIONS_2026).forEach(([lang, values]) => {
+            translations[lang] = {
+                ...(translations[lang] || {}),
+                ...values
+            };
+        });
+
+        const RAYAT_SENSOR_CARD_MODE_TRANSLATIONS_2026 = {
+            it: {
+                sensorCardModeLabel: 'Modalita visualizzazione card',
+                sensorCardModeVisual: 'Assistita',
+                sensorCardModeTechnical: 'Professionale',
+                sensorCardsSectionTitle: 'Dashboard - Sensori',
+                sensorProfessionalModeTitle: 'Modalita Professionale',
+                sensorProfessionalModeSubtitle: 'Vista rapida e chiara per analisi agronomiche professionali.',
+                sensorAssistedModeTitle: 'Modalita Assistita',
+                sensorAssistedModeSubtitle: 'Range e riferimenti visivi per interpretare ogni parametro.',
+                sensorProfessionalHistoryUnavailable: 'Storico indisponibile',
+                dashboardProfileSettings: 'Impostazioni account',
+                dashboardProfileLanguage: 'Lingua',
+                dashboardProfileExitDemo: 'Esci demo',
+                sensorVisualValue: 'Valore',
+                sensorVisualAction: 'Azione',
+                sensorVisualUnavailableTitle: '{metric} non disponibile',
+                sensorVisualUnavailableAction: 'Verificare connessione e ultimo aggiornamento.',
+                sensorVisualNormalTitle: '{metric} nella zona ideale',
+                sensorVisualNormalAction: 'Continua il monitoraggio.',
+                sensorVisualAttentionTitle: '{metric} da controllare',
+                sensorVisualAttentionAction: 'Controllare oggi e verificare il sensore.',
+                sensorVisualAlertTitle: '{metric} fuori range',
+                sensorVisualAlertAction: 'Intervenire oggi secondo la raccomandazione Rayat.',
+                sensorVisualLowAttentionTitle: '{metric} leggermente basso',
+                sensorVisualLowAlertTitle: '{metric} troppo basso',
+                sensorVisualHighAttentionTitle: '{metric} leggermente alto',
+                sensorVisualHighAlertTitle: '{metric} troppo alto',
+                sensorVisualMoistureLowTitle: 'Terreno troppo secco',
+                sensorVisualMoistureLowAction: 'Irrigare oggi e ricontrollare il valore.',
+                sensorVisualMoistureHighTitle: 'Terreno troppo umido',
+                sensorVisualMoistureHighAction: 'Ridurre irrigazione e controllare drenaggio.'
+            },
+            en: {
+                sensorCardModeLabel: 'Card display mode',
+                sensorCardModeVisual: 'Assisted',
+                sensorCardModeTechnical: 'Professional',
+                sensorCardsSectionTitle: 'Dashboard - Sensors',
+                sensorProfessionalModeTitle: 'Professional Mode',
+                sensorProfessionalModeSubtitle: 'Fast, clear view for professional agronomic analysis.',
+                sensorAssistedModeTitle: 'Assisted Mode',
+                sensorAssistedModeSubtitle: 'Ranges and visual cues to interpret every parameter.',
+                sensorProfessionalHistoryUnavailable: 'History unavailable',
+                dashboardProfileSettings: 'Account settings',
+                dashboardProfileLanguage: 'Language',
+                dashboardProfileExitDemo: 'Exit demo',
+                sensorVisualValue: 'Value',
+                sensorVisualAction: 'Action',
+                sensorVisualUnavailableTitle: '{metric} unavailable',
+                sensorVisualUnavailableAction: 'Check connection and latest update.',
+                sensorVisualNormalTitle: '{metric} in the ideal zone',
+                sensorVisualNormalAction: 'Keep monitoring.',
+                sensorVisualAttentionTitle: '{metric} needs checking',
+                sensorVisualAttentionAction: 'Check today and verify the sensor.',
+                sensorVisualAlertTitle: '{metric} out of range',
+                sensorVisualAlertAction: 'Act today following the Rayat recommendation.',
+                sensorVisualLowAttentionTitle: '{metric} slightly low',
+                sensorVisualLowAlertTitle: '{metric} too low',
+                sensorVisualHighAttentionTitle: '{metric} slightly high',
+                sensorVisualHighAlertTitle: '{metric} too high',
+                sensorVisualMoistureLowTitle: 'Soil is too dry',
+                sensorVisualMoistureLowAction: 'Irrigate today and recheck the value.',
+                sensorVisualMoistureHighTitle: 'Soil is too wet',
+                sensorVisualMoistureHighAction: 'Reduce irrigation and check drainage.'
+            },
+            fr: {
+                sensorCardModeLabel: 'Mode des cartes capteurs',
+                sensorCardModeVisual: 'Assisté',
+                sensorCardModeTechnical: 'Professionnel',
+                sensorCardsSectionTitle: 'Tableau de bord - Capteurs',
+                sensorProfessionalModeTitle: 'Mode Professionnel',
+                sensorProfessionalModeSubtitle: 'Vue rapide et claire pour une analyse agronomique professionnelle.',
+                sensorAssistedModeTitle: 'Mode Assisté',
+                sensorAssistedModeSubtitle: 'Plages et reperes visuels pour interpreter chaque parametre.',
+                sensorProfessionalHistoryUnavailable: 'Historique indisponible',
+                dashboardProfileSettings: 'Parametres du compte',
+                dashboardProfileLanguage: 'Langue',
+                dashboardProfileExitDemo: 'Quitter la demo',
+                sensorVisualValue: 'Valeur',
+                sensorVisualAction: 'Action',
+                sensorVisualUnavailableTitle: '{metric} indisponible',
+                sensorVisualUnavailableAction: 'Verifier la connexion et la derniere mise a jour.',
+                sensorVisualNormalTitle: '{metric} dans la zone ideale',
+                sensorVisualNormalAction: 'Poursuivre le monitoring.',
+                sensorVisualAttentionTitle: '{metric} a surveiller',
+                sensorVisualAttentionAction: 'Controler aujourd hui et verifier le capteur.',
+                sensorVisualAlertTitle: '{metric} hors plage',
+                sensorVisualAlertAction: 'Intervenir aujourd hui selon la recommandation Rayat.',
+                sensorVisualLowAttentionTitle: '{metric} legerement bas',
+                sensorVisualLowAlertTitle: '{metric} trop bas',
+                sensorVisualHighAttentionTitle: '{metric} legerement eleve',
+                sensorVisualHighAlertTitle: '{metric} trop eleve',
+                sensorVisualMoistureLowTitle: 'Sol trop sec',
+                sensorVisualMoistureLowAction: 'Irriguer aujourd hui puis verifier la valeur.',
+                sensorVisualMoistureHighTitle: 'Sol trop humide',
+                sensorVisualMoistureHighAction: 'Reduire l irrigation et controler le drainage.'
+            },
+            ar: {
+                sensorCardModeLabel: 'نمط عرض البطاقات',
+                sensorCardModeVisual: 'مساعد',
+                sensorCardModeTechnical: 'مهني',
+                sensorCardsSectionTitle: 'لوحة التحكم - المستشعرات',
+                sensorProfessionalModeTitle: 'النمط المهني',
+                sensorProfessionalModeSubtitle: 'عرض سريع وواضح للتحليل الزراعي المهني.',
+                sensorAssistedModeTitle: 'النمط المساعد',
+                sensorAssistedModeSubtitle: 'نطاقات ومؤشرات بصرية لفهم كل معيار.',
+                sensorProfessionalHistoryUnavailable: 'السجل غير متاح',
+                dashboardProfileSettings: 'إعدادات الحساب',
+                dashboardProfileLanguage: 'اللغة',
+                dashboardProfileExitDemo: 'الخروج من العرض',
+                sensorVisualValue: 'القيمة',
+                sensorVisualAction: 'الإجراء',
+                sensorVisualUnavailableTitle: '{metric} غير متاح',
+                sensorVisualUnavailableAction: 'تحقق من الاتصال وآخر تحديث.',
+                sensorVisualNormalTitle: '{metric} ضمن المنطقة المثالية',
+                sensorVisualNormalAction: 'استمر في المراقبة.',
+                sensorVisualAttentionTitle: '{metric} يحتاج إلى متابعة',
+                sensorVisualAttentionAction: 'افحص اليوم وتحقق من المستشعر.',
+                sensorVisualAlertTitle: '{metric} خارج النطاق',
+                sensorVisualAlertAction: 'تدخل اليوم حسب توصية Rayat.',
+                sensorVisualLowAttentionTitle: '{metric} منخفض قليلاً',
+                sensorVisualLowAlertTitle: '{metric} منخفض جداً',
+                sensorVisualHighAttentionTitle: '{metric} مرتفع قليلاً',
+                sensorVisualHighAlertTitle: '{metric} مرتفع جداً',
+                sensorVisualMoistureLowTitle: 'التربة جافة جداً',
+                sensorVisualMoistureLowAction: 'اسق اليوم ثم تحقق من القيمة.',
+                sensorVisualMoistureHighTitle: 'التربة رطبة جداً',
+                sensorVisualMoistureHighAction: 'قلل الري وتحقق من التصريف.'
+            },
+            zgh: {
+                sensorCardModeLabel: 'ⴰⵙⴽⴰⵏ ⵏ ⵉⵎⵇⵇⴰⵙⵏ',
+                sensorCardModeVisual: 'ⴰⵙⵙⵉⵙⵜⵉ',
+                sensorCardModeTechnical: 'ⴰⵎⵙⵙⵏⴰⵍ',
+                sensorCardsSectionTitle: 'Dashboard - ⵉⵎⵇⵇⴰⵙⵏ',
+                sensorProfessionalModeTitle: 'ⴰⵙⴽⴰⵏ ⴰⵎⵙⵙⵏⴰⵍ',
+                sensorProfessionalModeSubtitle: 'ⴰⵙⴽⴰⵏ ⴰⴼⵙⵙⴰⵙ ⵉ ⵜⵙⵓⵔⵉ ⵜⴰⴼⵍⴰⵃⵜ.',
+                sensorAssistedModeTitle: 'ⴰⵙⴽⴰⵏ ⴰⵙⵙⵉⵙⵜⵉ',
+                sensorAssistedModeSubtitle: 'ⵉⵣⵍⴰⵢⵏ ⴷ ⵜⵉⵎⵍⵉⵍⵉⵏ ⵉ ⵓⵙⵙⵏⵜⵉ.',
+                sensorProfessionalHistoryUnavailable: 'Historique indisponible',
+                dashboardProfileSettings: 'ⵜⵉⵙⵖⴰⵍ ⵏ ⵓⵎⵉⴹⴰⵏ',
+                dashboardProfileLanguage: 'ⵜⵓⵜⵍⴰⵢⵜ',
+                dashboardProfileExitDemo: 'ⴼⴼⵓⵖ ⵙⴳ demo',
+                sensorVisualValue: 'ⴰⵣⴰⵍ',
+                sensorVisualAction: 'ⵜⵉⴳⴰⵡⵜ',
+                sensorVisualUnavailableTitle: '{metric} ⵓⵔ ⵉⵍⵍⵉ',
+                sensorVisualUnavailableAction: 'ⵙⵙⵉⵔⵎ ⴰⵙⵙⵓⴷⵙ ⴷ ⴰⵙⴳⴳⴷ.',
+                sensorVisualNormalTitle: '{metric} ⵉⵖⵓⴷⴰ',
+                sensorVisualNormalAction: 'ⵙⵙⵓⵍ ⴰⵙⵙⵏⵜⵉ.',
+                sensorVisualAttentionTitle: '{metric} ⵉⵅⵚⵚⴰ ⵓⵙⵙⵏⵜⵉ',
+                sensorVisualAttentionAction: 'ⵙⵙⵉⵔⵎ ⴰⵙⵙⴰ ⴷ ⴰⵎⵇⵇⴰⵙ.',
+                sensorVisualAlertTitle: '{metric} ⵉⴼⴼⵖ ⴰⵣⵍⴰⵢ',
+                sensorVisualAlertAction: 'ⵙⵡⵓⵔⵉ ⴰⵙⵙⴰ ⵙ ⵜⵓⵙⵙⵏⴰ Rayat.',
+                sensorVisualLowAttentionTitle: '{metric} ⵉⴷⵔⵓⵙ',
+                sensorVisualLowAlertTitle: '{metric} ⵉⴷⵔⵓⵙ ⴱⴰⵀⵔⴰ',
+                sensorVisualHighAttentionTitle: '{metric} ⵉⵙⵎⵓⵏ',
+                sensorVisualHighAlertTitle: '{metric} ⵉⵙⵎⵓⵏ ⴱⴰⵀⵔⴰ',
+                sensorVisualMoistureLowTitle: 'ⴰⴽⴰⵍ ⵉⵇⵇⵓⵔ',
+                sensorVisualMoistureLowAction: 'ⵙⴳⵎ ⴰⵙⵙⴰ ⴷ ⵙⵙⵉⵔⵎ ⴰⵣⴰⵍ.',
+                sensorVisualMoistureHighTitle: 'ⴰⴽⴰⵍ ⵉⵎⵉⴷⵉ ⴱⴰⵀⵔⴰ',
+                sensorVisualMoistureHighAction: 'ⵙⵎⵓⵏ ⴰⵙⴳⵎ ⴷ ⵙⵙⵉⵔⵎ ⴰⵙⵙⴰⵡⴰⵍ.'
+            }
+        };
+
+        Object.entries(RAYAT_SENSOR_CARD_MODE_TRANSLATIONS_2026).forEach(([lang, values]) => {
+            translations[lang] = {
+                ...(translations[lang] || {}),
+                ...values
+            };
+        });
+
         function t(key) {
             let val = translations[currentLang]?.[key];
             if (!val && currentLang === 'ber') {
@@ -2684,25 +4877,152 @@
             logout();
         }
 
-        // RAYAT FIX - checkbox remember me + desktop scroll
-        function syncBodyScrollLock() {
-            const shouldLockScroll = ((isMobileMenuOpen && window.innerWidth <= 768) || isSubscriptionModalOpen);
-            document.documentElement.classList.toggle('rayat-scroll-locked', shouldLockScroll);
-            document.body.classList.toggle('rayat-scroll-locked', shouldLockScroll);
-            document.body.classList.toggle('rayat-menu-open', shouldLockScroll);
-
-            if (shouldLockScroll) {
-                document.documentElement.style.overflow = 'hidden';
-                document.documentElement.style.setProperty('overscroll-behavior', 'none');
-                document.body.style.overflow = 'hidden';
-                document.body.style.setProperty('overscroll-behavior', 'none');
-                return;
+        function isElementActuallyVisible(element) {
+            if (!element) return false;
+            const style = window.getComputedStyle(element);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.pointerEvents === 'none') {
+                return false;
             }
 
-            document.documentElement.style.removeProperty('overflow');
-            document.documentElement.style.removeProperty('overscroll-behavior');
-            document.body.style.removeProperty('overflow');
-            document.body.style.removeProperty('overscroll-behavior');
+            const rect = element.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+        }
+
+        function isViewportAtMost(maxWidth) {
+            return Boolean(
+                window.matchMedia?.(`(max-width: ${maxWidth}px)`).matches
+                || window.innerWidth <= maxWidth
+            );
+        }
+
+        function getVisibleScrollLockReasons() {
+            const reasons = [];
+            const mobileOverlay = document.getElementById('mobile-menu-overlay');
+            const dashboardSidebarBackdrop = document.querySelector('.rayat-luxury-dashboard-sidebar-backdrop');
+            const subscriptionModal = document.getElementById('subscription-expired-modal');
+            const alertSettingsModal = document.querySelector('.rayat-modal-card')?.closest('.fixed.inset-0');
+
+            if (
+                isViewportAtMost(768)
+                && mobileOverlay
+                && mobileOverlay.classList.contains('is-open')
+                && !mobileOverlay.classList.contains('hidden')
+                && isElementActuallyVisible(mobileOverlay)
+            ) {
+                reasons.push('mobile-menu');
+            }
+
+            if (
+                isViewportAtMost(900)
+                && dashboardSidebarBackdrop
+                && dashboardSidebarBackdrop.classList.contains('is-open')
+                && isElementActuallyVisible(dashboardSidebarBackdrop)
+            ) {
+                reasons.push('dashboard-sidebar');
+            }
+
+            if (
+                subscriptionModal
+                && !subscriptionModal.classList.contains('hidden')
+                && isElementActuallyVisible(subscriptionModal)
+            ) {
+                reasons.push('subscription-modal');
+            }
+
+            if (showSettings && isElementActuallyVisible(alertSettingsModal)) {
+                reasons.push('settings-modal');
+            }
+
+            return reasons;
+        }
+
+        function clearStaleScrollLockState() {
+            const mobileOverlay = document.getElementById('mobile-menu-overlay');
+            const mobilePanel = document.getElementById('mobile-menu-panel');
+            const mobileButton = document.getElementById('mobile-menu-button');
+            const dashboardSidebarBackdrop = document.querySelector('.rayat-luxury-dashboard-sidebar-backdrop');
+            const dashboardSidebar = document.querySelector('.rayat-luxury-dashboard-sidebar');
+            const dashboardSidebarButton = document.querySelector('.rayat-luxury-dashboard-mobile-toggle');
+            const subscriptionModal = document.getElementById('subscription-expired-modal');
+            const subscriptionModalIsVisible = Boolean(
+                subscriptionModal
+                && !subscriptionModal.classList.contains('hidden')
+                && isElementActuallyVisible(subscriptionModal)
+            );
+            const alertSettingsModal = document.querySelector('.rayat-modal-card')?.closest('.fixed.inset-0');
+            const overlayIsReallyOpen = Boolean(
+                mobileOverlay
+                && mobileOverlay.classList.contains('is-open')
+                && !mobileOverlay.classList.contains('hidden')
+                && isElementActuallyVisible(mobileOverlay)
+            );
+            const dashboardSidebarIsReallyOpen = Boolean(
+                dashboardSidebarBackdrop
+                && dashboardSidebarBackdrop.classList.contains('is-open')
+                && isElementActuallyVisible(dashboardSidebarBackdrop)
+            );
+
+            if (!overlayIsReallyOpen) {
+                isMobileMenuOpen = false;
+                mobileOverlay?.classList.add('hidden');
+                mobileOverlay?.classList.remove('is-open');
+                mobilePanel?.classList.remove('is-open');
+                mobileButton?.setAttribute('aria-expanded', 'false');
+            }
+
+            if (!dashboardSidebarIsReallyOpen) {
+                isLuxuryDashboardSidebarOpen = false;
+                dashboardSidebarBackdrop?.classList.remove('is-open');
+                dashboardSidebar?.classList.remove('is-open');
+                dashboardSidebarButton?.setAttribute('aria-expanded', 'false');
+            }
+
+            if (!subscriptionModalIsVisible) {
+                isSubscriptionModalOpen = false;
+            }
+
+            if (showSettings && !isElementActuallyVisible(alertSettingsModal)) {
+                showSettings = false;
+            }
+
+            [document.documentElement, document.body].forEach((node) => {
+                node.classList.remove('rayat-scroll-locked', 'rayat-menu-open', 'menu-open', 'modal-open', 'no-scroll', 'lock-scroll');
+                node.style.removeProperty('overflow');
+                node.style.removeProperty('overflow-y');
+                node.style.removeProperty('position');
+                node.style.removeProperty('top');
+                node.style.removeProperty('width');
+                node.style.removeProperty('height');
+                node.style.removeProperty('overscroll-behavior');
+                node.style.removeProperty('touch-action');
+                node.removeAttribute('data-scroll-lock-reason');
+            });
+        }
+
+        function syncPageScrollLock() {
+            const lockReasons = getVisibleScrollLockReasons();
+            const shouldLockScroll = lockReasons.length > 0;
+
+            if (!shouldLockScroll) {
+                clearStaleScrollLockState();
+                return false;
+            }
+
+            const reason = lockReasons.join(' ');
+            [document.documentElement, document.body].forEach((node) => {
+                node.classList.add('rayat-scroll-locked');
+                node.setAttribute('data-scroll-lock-reason', reason);
+                node.style.overflow = 'hidden';
+                node.style.setProperty('overscroll-behavior', 'none');
+                node.style.setProperty('touch-action', 'none');
+            });
+            document.body.classList.toggle('rayat-menu-open', lockReasons.includes('mobile-menu'));
+            return true;
+        }
+
+        // Backward-compatible wrapper for existing call sites.
+        function syncBodyScrollLock() {
+            return syncPageScrollLock();
         }
 
         // RAYAT FIX - mobile app ready optimization
@@ -2799,7 +5119,7 @@
                 button.setAttribute('aria-expanded', String(isMobileMenuOpen));
             }
 
-            syncBodyScrollLock();
+            syncPageScrollLock();
         }
 
         function navigateFromMobileMenu(view) {
@@ -2923,6 +5243,7 @@
         }
 
         function getNavigationEventName(view) {
+            view = normalizePublicDashboardView(view);
             if (view === 'login') return 'Login Click';
             if (view === 'contatti') return 'Contact Click';
             if (view === 'demo') return 'Demo Request Click';
@@ -2934,13 +5255,37 @@
         }
 
         function setViewWithTracking(view, options = {}) {
-            trackNavigationEvent(view);
-            setView(view, options);
+            const normalizedView = normalizePublicDashboardView(view);
+            trackNavigationEvent(normalizedView);
+            setView(normalizedView, options);
+        }
+
+        function setSensorCardMode(mode) {
+            const nextMode = SENSOR_CARD_VIEW_MODES.has(mode) ? mode : 'technical';
+            currentSensorCardMode = nextMode;
+            isLuxuryDashboardProfileMenuOpen = false;
+            localStorage.setItem(SENSOR_CARD_MODE_STORAGE_KEY, nextMode);
+            render();
+        }
+
+        function navigateToRayatHomeSection(sectionId) {
+            const scrollToSection = () => {
+                const section = document.getElementById(sectionId);
+                if (!section) return false;
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return true;
+            };
+
+            if (scrollToSection()) return;
+
+            setView('home');
+            requestAnimationFrame(scrollToSection);
         }
 
         function setLanguage(lang) {
             currentLang = lang;
             localStorage.setItem('rayat_lang', lang);
+            isLuxuryDashboardProfileMenuOpen = false;
             document.getElementById('lang-menu')?.classList.add('hidden');
             closeProfileMenu();
             render();
@@ -3184,12 +5529,13 @@
             return changed; // RAYAT-FIX
         }
 
-        async function fetchGatewayStatusPayload(requestScope) { // RAYAT-FIX
+        async function fetchGatewayStatusPayload(requestScope, tokenOverride = null) { // RAYAT-FIX
             const isPrivateScope = requestScope === 'private'; // RAYAT-FIX
             const endpoint = isPrivateScope ? CONFIG.PRIVATE_GATEWAY_STATUS_URL : CONFIG.PUBLIC_GATEWAY_STATUS_URL; // RAYAT-FIX
+            const privateToken = tokenOverride || authToken; // RAYAT-FIX
             const response = await fetch(`${endpoint}?t=${Date.now()}`, { // RAYAT-FIX
                 cache: 'no-store', // RAYAT-FIX
-                headers: isPrivateScope ? { 'Authorization': `Bearer ${authToken}` } : undefined // RAYAT-FIX
+                headers: isPrivateScope && privateToken ? { 'Authorization': `Bearer ${privateToken}` } : undefined // RAYAT-FIX
             }); // RAYAT-FIX
             if (!response.ok) { // RAYAT-FIX
                 throw new Error(`HTTP ${response.status}`); // RAYAT-FIX
@@ -3241,6 +5587,19 @@
                 data,
                 monitoring: normalizeMonitoringConfig(monitoring)
             }));
+        }
+
+        function isPrivateSensorPayloadRow(row = {}) {
+            const deviceId = String(row.device_id || row.deviceId || row.gateway_id || row.gatewayId || '').trim();
+            const topic = String(row.topic || row.mqtt_topic || row.mqttTopic || '').trim();
+            return (deviceId && PRIVATE_SENSOR_DEVICE_IDS.has(deviceId))
+                || (topic && PRIVATE_SENSOR_TOPIC_PREFIXES.some((prefix) => topic.startsWith(prefix)));
+        }
+
+        function filterPublicSensorPayloadRows(data) {
+            return Array.isArray(data)
+                ? data.filter((row) => !isPrivateSensorPayloadRow(row))
+                : data;
         }
 
         function resolveSensorOnlineStatus(reading) {
@@ -3806,7 +6165,7 @@
         }
 
         async function syncDashboardAlarmEvents() {
-            if (!isAuthenticated() || !isCustomerRole(currentRole) || currentView !== 'demo') {
+            if (!isAuthenticated() || !isCustomerRole(currentRole) || currentView !== 'demo' || !hasCustomerPermission('acknowledge_alerts')) {
                 return;
             }
 
@@ -3879,10 +6238,11 @@
         // --- Historical Data ---
 
         let filterState = {
-            period: '24h',
+            period: '7d',
             customStart: null,
             customEnd: null
         };
+        let historyTablePage = 1;
         let historyState = {
             loading: false,
             error: false,
@@ -4043,6 +6403,8 @@
                 start.setHours(start.getHours() - 24);
             } else if (filterState.period === '7d') {
                 start.setDate(start.getDate() - 7);
+            } else if (filterState.period === '90d') {
+                start.setDate(start.getDate() - 90);
             } else {
                 start.setDate(start.getDate() - 30);
             }
@@ -4059,6 +6421,8 @@
                 params.set('days', '7');
             } else if (filterState.period === '30d') {
                 params.set('days', '30');
+            } else if (filterState.period === '90d') {
+                params.set('days', '90');
             } else if (filterState.period === 'custom' && filterState.customStart && filterState.customEnd) {
                 params.set('start', filterState.customStart.toISOString());
                 params.set('end', filterState.customEnd.toISOString());
@@ -4072,9 +6436,10 @@
             if (!shouldLoadHistoryDataForView(targetView)) {
                 return false;
             }
+            const privateSensorAuthToken = getPrivateSensorAuthToken();
 
             const requestKey = [
-                isAuthenticated() && isCustomerRole(currentRole) ? 'private' : 'public',
+                privateSensorAuthToken ? 'private' : 'public',
                 selectedSensor,
                 buildHistoryQueryParams().toString()
             ].join(':');
@@ -4094,9 +6459,9 @@
                 try {
                     let response;
 
-                    if (isAuthenticated() && isCustomerRole(currentRole)) {
+                    if (privateSensorAuthToken) {
                         response = await fetch(`${CONFIG.API_BASE_URL}/sensors/${selectedSensor}/history?${params.toString()}`, {
-                            headers: { 'Authorization': `Bearer ${authToken}` },
+                            headers: { 'Authorization': `Bearer ${privateSensorAuthToken}` },
                             cache: 'no-store'
                         });
                     } else {
@@ -4157,7 +6522,20 @@
         }
 
         async function setFilterPeriod(period) {
+            if (!['24h', '7d', '30d', '90d', 'custom'].includes(period)) {
+                return;
+            }
+
+            if (period === 'custom' && !(filterState.customStart && filterState.customEnd)) {
+                const endDate = new Date();
+                const startDate = new Date();
+                startDate.setDate(startDate.getDate() - 7);
+                filterState.customStart = startDate;
+                filterState.customEnd = endDate;
+            }
+
             filterState.period = period;
+            historyTablePage = 1;
             await loadHistoryData();
         }
 
@@ -4187,7 +6565,18 @@
             filterState.period = 'custom';
             filterState.customStart = startDate;
             filterState.customEnd = endDate;
+            historyTablePage = 1;
             await loadHistoryData();
+        }
+
+        function setHistoryTablePage(page) {
+            const nextPage = Number(page);
+            if (!Number.isFinite(nextPage) || nextPage < 1) {
+                return;
+            }
+
+            historyTablePage = Math.floor(nextPage);
+            render();
         }
 
         function getFilteredHistory() {
@@ -4210,6 +6599,10 @@
         }
 
         function exportCSV() {
+            if (isAuthenticated() && isCustomerRole(currentRole) && !hasCustomerPermission('export_csv')) {
+                return;
+            }
+
             const data = getFilteredHistory();
             if (!data.length) {
                 return;
@@ -4317,7 +6710,7 @@
                         syncStoredAdminSessionIntoState();
                         goToAdminArea();
                     } else {
-                        setView('demo');
+                        setView(isBarakahPerliteCustomer(user) ? 'perlite-track' : 'demo');
                     }
                 } else {
                     const errorEl = document.getElementById('error');
@@ -4455,6 +6848,7 @@
         }
 
         function setView(view, options = {}) {
+            view = normalizePublicDashboardView(view);
             closeProfileMenu();
 
             if (view === 'profilo') {
@@ -4469,13 +6863,22 @@
                 }
             }
 
+            if (view === 'perlite-track' && !canAccessPerliteTrack()) {
+                if (hasPrivilegedAdminShortcut()) {
+                    goToAdminArea();
+                } else {
+                    setView('login', { replace: true, path: '/login' });
+                }
+                return;
+            }
+
             if (view !== 'profilo') {
                 userProfileNotice = '';
             }
 
             const nextPath = options.path || getPathForView(view);
             isMobileMenuOpen = false;
-            syncBodyScrollLock();
+            syncPageScrollLock();
 
             // Mobile UX: Update history for back button handling
             if (currentView !== view || window.location.pathname !== nextPath) {
@@ -4483,7 +6886,7 @@
                 history[historyMethod]({ view: view }, '', nextPath);
             }
             currentView = view;
-            if (view !== 'demo') {
+            if (view !== 'demo' && view !== 'perlite-track') {
                 hideSubscriptionExpiredModal();
             }
             render();
@@ -4547,9 +6950,8 @@
                 return false;
             }
 
-            const requestScope = !isAuthenticated()
-                ? 'public'
-                : (isCustomerRole(currentRole) ? 'private' : 'skip');
+            const privateSensorAuthToken = getPrivateSensorAuthToken();
+            const requestScope = privateSensorAuthToken ? 'private' : 'public';
 
             if (requestScope === 'skip') {
                 hideSubscriptionExpiredModal();
@@ -4581,7 +6983,7 @@
                         if (sensorResponse.status === 'fulfilled' && sensorResponse.value.ok) { // RAYAT-FIX
                             const result = await sensorResponse.value.json(); // RAYAT-FIX
                             if (result.success && Array.isArray(result.data)) { // RAYAT-FIX
-                                const data = result.data; // RAYAT-FIX
+                                const data = filterPublicSensorPayloadRows(result.data); // RAYAT-FIX
                                 const monitoring = applyMonitoringConfig(result.monitoring); // RAYAT-FIX
                                 writeSensorCache(PUBLIC_SENSOR_CACHE_KEY, data, monitoring); // RAYAT-FIX
                                 const didRender = updateSensorData(data, true); // RAYAT-FIX
@@ -4600,7 +7002,7 @@
                         const hadGatewayState = Boolean(gatewayStatusSignature); // RAYAT-FIX
                         resetGatewayStatusState(); // RAYAT-FIX
                         applyMonitoringConfig(cached.monitoring); // RAYAT-FIX
-                        const didRender = updateSensorData(cached.data, true); // RAYAT-FIX
+                        const didRender = updateSensorData(filterPublicSensorPayloadRows(cached.data), true); // RAYAT-FIX
                         dataError = false; // RAYAT-FIX
                         setOfflineBannerVisibility(true, t('usingCache')); // RAYAT-FIX
                         if (!didRender && hadGatewayState) { // RAYAT-FIX
@@ -4631,8 +7033,8 @@
 
                 try {
                     const [sensorResponse, gatewayStatusResult] = await Promise.allSettled([ // RAYAT-FIX
-                        fetch(`${CONFIG.API_BASE_URL}/sensors/latest`, { headers: { 'Authorization': `Bearer ${authToken}` } }), // RAYAT-FIX
-                        fetchGatewayStatusPayload('private') // RAYAT-FIX
+                        fetch(`${CONFIG.API_BASE_URL}/sensors/latest`, { headers: { 'Authorization': `Bearer ${privateSensorAuthToken}` } }), // RAYAT-FIX
+                        fetchGatewayStatusPayload('private', privateSensorAuthToken) // RAYAT-FIX
                     ]); // RAYAT-FIX
                     const gatewayStatusChanged = gatewayStatusResult.status === 'fulfilled' // RAYAT-FIX
                         ? applyGatewayStatusResponse(gatewayStatusResult.value) // RAYAT-FIX
@@ -4775,7 +7177,13 @@
 
         function updateSensorData(apiData, fromCache = false) {
             if (!apiData || !Array.isArray(apiData)) return;
-            const normalizedApiData = normalizeSoilApiPayloadRows(apiData, { includeTimestamp: true });
+            const scopedApiData = (isAuthenticated() || hasPrivilegedAdminShortcut())
+                ? apiData
+                : filterPublicSensorPayloadRows(apiData);
+            const normalizedApiData = normalizeSoilApiPayloadRows(scopedApiData, { includeTimestamp: true });
+            if (typeof captureLuxuryHomeLiveSamples === 'function') {
+                captureLuxuryHomeLiveSamples(normalizedApiData);
+            }
             latestAssignedSensors = buildProfileSensorSnapshot(normalizedApiData);
             const nextPayloadSignature = buildSensorPayloadSignature(normalizedApiData);
 
@@ -4866,6 +7274,9 @@
         }
 
         function toggleSettings() {
+            if (!hasCustomerPermission('modify_settings')) {
+                return;
+            }
             showSettings = !showSettings;
             render();
         }
@@ -4877,6 +7288,9 @@
 
         function saveSettings(e) {
             e.preventDefault();
+            if (!hasCustomerPermission('modify_settings')) {
+                return;
+            }
             alertSettings.energia.maxConsumption = parseFloat(document.getElementById('set-energy').value);
             alertSettings.acqua.minLevel = parseFloat(document.getElementById('set-water').value);
             alertSettings.terreno.minMoisture = parseFloat(document.getElementById('set-soil').value);
@@ -4938,7 +7352,7 @@
                         </form>
             `;
         }
-        
+
         function showSubscriptionExpiredModal() {
             if (!isAuthenticated() || !isCustomerRole(currentRole) || currentView !== 'demo' || !subscriptionUiState.expired || subscriptionUiState.dismissed) {
                 return;
@@ -4949,8 +7363,8 @@
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
                 isSubscriptionModalOpen = true;
-                syncBodyScrollLock();
-                
+                syncPageScrollLock();
+
                 // Hide main app visual noise
                 const skel = document.getElementById('view-skeleton');
                 if (skel) skel.style.display = 'none';
@@ -4965,7 +7379,7 @@
             }
 
             isSubscriptionModalOpen = false;
-            syncBodyScrollLock();
+            syncPageScrollLock();
             const skel = document.getElementById('view-skeleton');
             if (skel) skel.style.display = '';
         }
@@ -5059,13 +7473,14 @@
             const hasVisibleAccountState = canAccessProfile || hasAdminAccessShortcut;
             const fieldNavigationLink = hasVisibleAccountState
                 ? { id: 'my-field', label: t('myFieldNav'), action: 'openPrimaryFieldExperienceFromNavigation()' }
-                : { id: 'demo', view: 'demo', label: t('demo'), tracked: true };
+                : null;
             const primaryLinks = [
-                { id: 'home', view: 'home', label: t('home') },
-                { id: 'chi-siamo', view: 'chi-siamo', label: t('aboutUs') },
-                { id: 'servizi', view: 'servizi', label: t('services') },
-                fieldNavigationLink,
-                { id: 'contatti', view: 'contatti', label: t('contactTitle'), tracked: true }
+                { id: 'home', view: 'home', label: t('luxDefNavHome') },
+                { id: 'solutions', label: t('luxDefNavSolutions'), action: "navigateToRayatHomeSection('rayat-solutions')" },
+                { id: 'demo-live', label: t('luxDefNavDemo'), action: "navigateToRayatHomeSection('rayat-demo-live')" },
+                { id: 'how', label: t('luxDefNavHow'), action: "navigateToRayatHomeSection('rayat-how')" },
+                { id: 'chi-siamo', view: 'chi-siamo', label: t('luxDefNavAbout') },
+                ...(fieldNavigationLink ? [fieldNavigationLink] : []),
             ];
             /* PATCH-01 — start */
             const loginNavigationLink = !hasVisibleAccountState
@@ -5247,134 +7662,3116 @@
                 </div>`;
         }
 
-        function renderHomePage() {
+        function renderLuxuryDashboardIcon(kind) {
+            const icons = {
+                water: '<path d="M12 3.5s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11Z" stroke="currentColor" stroke-width="1.5"></path><path d="M9 15.2c.6 1.4 1.7 2.1 3.2 2.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>',
+                temperature: '<path d="M10 14.8V5.5a2 2 0 1 1 4 0v9.3a4 4 0 1 1-4 0Z" stroke="currentColor" stroke-width="1.5"></path><path d="M12 8v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>',
+                leaf: '<path d="M19.5 4.5C11.8 4.8 6 8.7 6 14.2c0 3 2.1 5.3 5.2 5.3 5.5 0 8.3-6.4 8.3-15Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M5 20c2.4-5.1 6.4-8.4 11-10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>',
+                alert: '<path d="M12 4.5 20 19H4L12 4.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M12 9.5v4.2M12 16.8h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>',
+                sensor: '<path d="M12 4v5m0 6v5M4 12h5m6 0h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"></circle>',
+                report: '<path d="M7 4h7l3 3v13H7V4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M14 4v4h4M9.5 12h5M9.5 15.5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>',
+                trend: '<path d="M4 18 9 12.5l4 3.2L20 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path><path d="M4 20h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>',
+                settings: '<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"></circle><path d="M12 4v2M12 18v2M4 12h2M18 12h2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M17.7 6.3l-1.4 1.4M7.7 16.3l-1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>'
+            };
+
+            return `<svg class="rayat-luxury-home-dashboard-tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">${icons[kind] || icons.sensor}</svg>`;
+        }
+
+        function getLuxuryDashboardSoilReadings() {
+            const fallbackValues = {
+                moisture: 62,
+                temperature: 28.5,
+                ec: 1.2,
+                pH: 6.3,
+                nitrogen: 180,
+                phosphorus: 45,
+                potassium: 260
+            };
+
+            return RAYAT_DEMO_SENSOR_METRICS.map((definition) => {
+                const metric = sensorData.terreno?.details?.find((detail) => detail.key === definition.key);
+                const normalizedValue = normalizeMetricValue('soil', definition.key, metric?.value);
+                const value = Number.isFinite(normalizedValue) ? normalizedValue : fallbackValues[definition.key];
+                const range = getRangeForMetric('soil', definition.key);
+                const state = getMetricState(value, range);
+
+                return {
+                    ...definition,
+                    value,
+                    displayValue: formatMetricValue(value),
+                    unit: getMetricUnit('soil', definition.key, metric?.unit || definition.unit),
+                    state
+                };
+            });
+        }
+
+        function captureLuxuryHomeLiveSamples(rows) {
+            rows.forEach((row) => {
+                const definition = RAYAT_DEMO_SENSOR_METRICS.find((metric) => (
+                    metric.subtype === row.subtype || metric.objectKeys.includes(row.subtype)
+                ));
+                if (!definition) return;
+
+                const value = normalizeMetricValue('soil', definition.key, row.value);
+                const timestamp = new Date(row.timestamp || Date.now()).getTime();
+                if (!Number.isFinite(value) || !Number.isFinite(timestamp)) return;
+
+                const samples = luxuryHomeLiveSamples[definition.key] || [];
+                const previous = samples[samples.length - 1];
+                if (previous && previous.timestamp === timestamp && previous.value === value) return;
+
+                luxuryHomeLiveSamples[definition.key] = samples.concat({ timestamp, value }).slice(-32);
+            });
+        }
+
+        function getLuxuryHomeSensorRealSeries(key) {
+            const collectedSamples = luxuryHomeLiveSamples[key] || [];
+            if (collectedSamples.length >= 2 || !historyState.usesLiveData) {
+                return collectedSamples.map((sample) => sample.value);
+            }
+
+            const metric = { group: 'soil', key };
+            return globalHistory.slice(-32)
+                .map((row) => getLuxuryDashboardAnalyticsValue(row, metric))
+                .filter((value) => Number.isFinite(value));
+        }
+
+        function renderLuxuryHomeSensorEvidence(reading) {
+            const range = getRangeForMetric('soil', reading.key);
+            const bounds = range ? getGaugeBounds('soil', reading.key, range) : { min: 0, max: 100 };
+            const values = getLuxuryHomeSensorRealSeries(reading.key);
+            const width = 198;
+            const height = 190;
+            const chartLeft = 29;
+            const chartRight = 191;
+            const chartTop = 15;
+            const chartBottom = 145;
+            const normalizedValues = values.map((value) => (
+                Math.max(0, Math.min(100, getMarkerPercent(value, bounds.min, bounds.max)))
+            ));
+            const currentPosition = Math.max(0, Math.min(100, getMarkerPercent(reading.value, bounds.min, bounds.max)));
+            const hasSeries = normalizedValues.length >= 2;
+            const activeValues = hasSeries ? normalizedValues : [currentPosition];
+            const toX = (index) => chartLeft + (
+                hasSeries ? (index / (activeValues.length - 1)) * (chartRight - chartLeft) : chartRight - chartLeft
+            );
+            const toY = (value) => chartBottom - ((value / 100) * (chartBottom - chartTop));
+            const linePath = hasSeries
+                ? activeValues.map((value, index) => `${index === 0 ? 'M' : 'L'}${toX(index).toFixed(1)} ${toY(value).toFixed(1)}`).join(' ')
+                : '';
+            const firstX = hasSeries ? toX(0) : chartLeft;
+            const lastX = hasSeries ? toX(activeValues.length - 1) : chartRight;
+            const lastY = toY(activeValues[activeValues.length - 1]);
+            const areaPath = `${linePath} L${lastX.toFixed(1)} ${chartBottom} L${firstX.toFixed(1)} ${chartBottom} Z`;
+            const gradientId = `rayat-luxury-live-fill-${reading.key.toLowerCase()}`;
+
             return `
-                ${renderHeader(!!user)}
-                
-                <section class="rayat-hero">
-                    <div class="rayat-hero-orb rayat-hero-orb--one"></div>
-                    <div class="rayat-hero-orb rayat-hero-orb--two"></div>
-                    <div class="container mx-auto px-4">
-                        <div class="rayat-hero-shell">
-                            <div class="rayat-hero-kicker">${t('heroEyebrow')}</div>
-                            <!-- RAYAT FIX - forza il titolo hero su tre righe controllate -->
-                            <h1 class="rayat-hero-title rayat-fade-up">
-                                <span class="rayat-hero-title-line rayat-hero-title-line--primary">${t('heroTitleLine1')}</span>
-                                <span class="rayat-hero-title-line rayat-hero-title-line--secondary">${t('heroTitleLine2')}</span>
-                                <span class="rayat-hero-title-line rayat-hero-title-line--accent rayat-hero-accent">${t('heroTitleAccent')}</span>
-                            </h1>
-                            <p class="rayat-hero-subtitle rayat-fade-in">${t('heroPlatformSub')}</p>
-                            <div class="rayat-mobile-actions flex gap-4 justify-center">
-                                <button onclick="setViewWithTracking('demo')" class="bg-orange-500 hover:bg-orange-600 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-orange-950/20">
-                                ${t('tryDemo')}
-                                </button>
-                                <button onclick="setView('servizi')" class="bg-white text-green-800 px-8 py-4 rounded-2xl text-lg font-semibold transition transform hover:scale-105 min-h-[56px] shadow-xl shadow-green-950/10">
-                                ${t('discoverServices')}
-                                </button>
+                <div class="rayat-luxury-live-chart-frame">
+                    <svg class="rayat-luxury-live-professional-chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="${gradientId}" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="0%" stop-color="#4a7c59" stop-opacity="0.19"></stop>
+                                <stop offset="100%" stop-color="#4a7c59" stop-opacity="0.015"></stop>
+                            </linearGradient>
+                        </defs>
+                        ${[100, 75, 50, 25, 0].map((tick) => `
+                            <text class="rayat-luxury-live-chart-axis" x="0" y="${(toY(tick) + 3).toFixed(1)}">${tick}</text>
+                            <path class="rayat-luxury-live-chart-grid" d="M${chartLeft} ${toY(tick).toFixed(1)}H${chartRight}"></path>
+                        `).join('')}
+                        ${hasSeries ? `
+                            <path class="rayat-luxury-live-chart-area" d="${areaPath}" fill="url(#${gradientId})"></path>
+                            <path class="rayat-luxury-live-chart-line" d="${linePath}"></path>
+                        ` : `
+                            <path class="rayat-luxury-live-chart-awaiting" d="M${chartLeft} ${lastY.toFixed(1)}H${chartRight}"></path>
+                        `}
+                        <circle class="rayat-luxury-live-chart-point" cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="2.7"></circle>
+                        <text class="rayat-luxury-live-chart-time" x="${chartLeft}" y="177">00:00</text>
+                        <text class="rayat-luxury-live-chart-time" x="${((chartLeft + chartRight) / 2).toFixed(1)}" y="177" text-anchor="middle">12:00</text>
+                        <text class="rayat-luxury-live-chart-time" x="${chartRight}" y="177" text-anchor="end">24:00</text>
+                    </svg>
+                    ${hasSeries ? '' : `<span class="rayat-luxury-live-chart-pending">${t('luxLiveChartCollecting')}</span>`}
+                </div>
+            `;
+        }
+
+        function getLuxuryDashboardTimestamp() {
+            const status = getDemoSectionStatusMeta('terreno');
+            return {
+                ...status,
+                timestamp: status.timestamp === '--' ? t('luxDashboardNow') : status.timestamp
+            };
+        }
+
+        function renderLuxuryDashboardTabHeader(titleKey, subtitleKey, controls = '') {
+            return `
+                <header class="rayat-luxury-home-dashboard-tab-header">
+                    <div>
+                        <h2>${t(titleKey)}</h2>
+                        <p>${t(subtitleKey)}</p>
+                    </div>
+                    ${controls}
+                </header>
+            `;
+        }
+
+        function getLuxuryDashboardAnalyticsMetrics() {
+            const soilLabels = {
+                moisture: 'luxDashboardTrendMoisture',
+                temperature: 'luxDashboardAnalyticsSoilTemperature',
+                ec: 'luxDashboardAnalyticsElectricalConductivity',
+                pH: 'luxDashboardAnalyticsPh',
+                nitrogen: 'luxDashboardAnalyticsNitrogen',
+                phosphorus: 'luxDashboardAnalyticsPhosphorus',
+                potassium: 'luxDashboardAnalyticsPotassium'
+            };
+            const climateLabels = {
+                temperature: 'luxDashboardAnalyticsAirTemperature',
+                humidity: 'luxDashboardAnalyticsAirHumidity',
+                co2: 'luxDashboardAnalyticsCo2',
+                windSpeed: 'luxDashboardAnalyticsWindSpeed'
+            };
+            const soilMetrics = getLuxuryDashboardSoilReadings().map((reading) => ({
+                id: `soil:${reading.key}`,
+                group: 'soil',
+                key: reading.key,
+                labelKey: soilLabels[reading.key] || reading.labelKey,
+                sourceKey: 'luxDashboardAnalyticsSoilSensor',
+                reading
+            }));
+            const climateMetrics = (sensorData.clima?.details || []).map((detail) => {
+                const value = normalizeMetricValue('climate', detail.key, detail.value);
+                const range = getRangeForMetric('climate', detail.key);
+                const unit = getMetricUnit('climate', detail.key, detail.unit || '');
+
+                return {
+                    id: `climate:${detail.key}`,
+                    group: 'climate',
+                    key: detail.key,
+                    labelKey: climateLabels[detail.key] || detail.label,
+                    sourceKey: 'luxDashboardAnalyticsClimateSensor',
+                    reading: {
+                        value,
+                        displayValue: Number.isFinite(value) ? formatMetricValue(value) : '--',
+                        unit,
+                        state: getMetricState(value, range)
+                    }
+                };
+            });
+
+            return soilMetrics.concat(climateMetrics);
+        }
+
+        function getLuxuryDashboardAnalyticsValue(row, metric) {
+            const historyFields = {
+                soil: {
+                    moisture: 'terreno',
+                    temperature: 'temperature',
+                    ec: 'ec',
+                    pH: 'pH',
+                    nitrogen: 'nitrogen',
+                    phosphorus: 'phosphorus',
+                    potassium: 'potassium'
+                },
+                climate: {
+                    temperature: 'climaTemp',
+                    humidity: 'humidity',
+                    co2: 'co2',
+                    windSpeed: 'windSpeed'
+                }
+            };
+            const historyField = historyFields[metric.group]?.[metric.key];
+
+            return historyField ? normalizeMetricValue(metric.group, metric.key, row[historyField]) : null;
+        }
+
+        function getLuxuryDashboardAnalyticsSeries(metric) {
+            const periodMillis = {
+                '24h': 24 * 60 * 60 * 1000,
+                '7d': 7 * 24 * 60 * 60 * 1000,
+                '30d': 30 * 24 * 60 * 60 * 1000
+            }[currentLuxuryDashboardAnalyticsPeriod] || (7 * 24 * 60 * 60 * 1000);
+            const availableRows = globalHistory.map((row) => ({
+                date: row.date instanceof Date ? row.date : new Date(row.date),
+                value: getLuxuryDashboardAnalyticsValue(row, metric)
+            })).filter((row) => Number.isFinite(row.value) && !Number.isNaN(row.date.getTime()))
+                .sort((left, right) => left.date - right.date);
+            const lastTimestamp = availableRows.length ? availableRows[availableRows.length - 1].date.getTime() : Date.now();
+            const filteredRows = availableRows.filter((row) => row.date.getTime() >= lastTimestamp - periodMillis);
+            const sourceRows = filteredRows.length ? filteredRows : availableRows.slice(-1);
+
+            if (!sourceRows.length && Number.isFinite(metric.reading.value)) {
+                return [{ date: new Date(), value: metric.reading.value }];
+            }
+
+            if (!sourceRows.length) {
+                return [];
+            }
+
+            const maximumSamples = 48;
+            if (sourceRows.length <= maximumSamples) {
+                return sourceRows;
+            }
+
+            return Array.from({ length: maximumSamples }, (_, index) => {
+                const sourceIndex = Math.round((index / (maximumSamples - 1)) * (sourceRows.length - 1));
+                return sourceRows[sourceIndex];
+            });
+        }
+
+        function formatLuxuryDashboardAnalyticsValue(value, metric) {
+            if (!Number.isFinite(value)) {
+                return '--';
+            }
+
+            return `${formatMetricValue(value)}${metric.reading.unit ? ` ${metric.reading.unit}` : ''}`;
+        }
+
+        function formatLuxuryDashboardAnalyticsDate(date) {
+            const locales = {
+                it: 'it-IT',
+                en: 'en-GB',
+                fr: 'fr-FR',
+                ar: 'ar-MA',
+                tz: 'fr-MA',
+                zgh: 'fr-MA',
+                ber: 'fr-MA'
+            };
+            const options = currentLuxuryDashboardAnalyticsPeriod === '24h'
+                ? { hour: '2-digit', minute: '2-digit' }
+                : { day: 'numeric', month: 'short' };
+
+            return new Intl.DateTimeFormat(locales[currentLang] || 'fr-FR', options).format(date);
+        }
+
+        function getLuxuryDashboardAnalyticsSummary(metric, series) {
+            if (!series.length) {
+                return {
+                    latest: metric.reading.value,
+                    average: metric.reading.value,
+                    minimum: metric.reading.value,
+                    maximum: metric.reading.value,
+                    change: null,
+                    status: metric.reading.state
+                };
+            }
+
+            const values = series.map((row) => row.value);
+            const latest = values[values.length - 1];
+            const change = values.length > 1 ? latest - values[0] : null;
+            return {
+                latest,
+                average: values.reduce((sum, value) => sum + value, 0) / values.length,
+                minimum: Math.min(...values),
+                maximum: Math.max(...values),
+                change,
+                status: getMetricState(latest, getRangeForMetric(metric.group, metric.key))
+            };
+        }
+
+        function renderLuxuryDashboardAnalyticsChart(metric, series) {
+            const chart = { width: 680, height: 188, left: 52, right: 662, top: 18, bottom: 150 };
+            if (!series.length) {
+                return '';
+            }
+
+            const optimalRange = getRangeForMetric(metric.group, metric.key);
+            const chartValues = series.map((row) => row.value);
+            const limitValues = optimalRange
+                ? chartValues.concat([optimalRange.min, optimalRange.max])
+                : chartValues;
+            const lowerValue = Math.min(...limitValues);
+            const upperValue = Math.max(...limitValues);
+            const rawSpan = upperValue - lowerValue || Math.max(Math.abs(upperValue) * 0.1, 1);
+            const minimum = Math.max(metric.key === 'moisture' ? 0 : -Infinity, lowerValue - (rawSpan * 0.16));
+            const maximum = upperValue + (rawSpan * 0.16);
+            const valueSpan = maximum - minimum || 1;
+            const plotWidth = chart.right - chart.left;
+            const plotHeight = chart.bottom - chart.top;
+            const toX = (index) => chart.left + ((index / Math.max(series.length - 1, 1)) * plotWidth);
+            const toY = (value) => chart.bottom - (((value - minimum) / valueSpan) * plotHeight);
+            const points = series.map((row, index) => ({
+                x: toX(index),
+                y: toY(row.value),
+                date: row.date
+            }));
+            const linePath = points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
+            const areaPath = points.length > 1
+                ? `${linePath} L${points[points.length - 1].x.toFixed(1)} ${chart.bottom} L${points[0].x.toFixed(1)} ${chart.bottom} Z`
+                : '';
+            const ticks = Array.from({ length: 4 }, (_, index) => {
+                const value = maximum - ((valueSpan / 3) * index);
+                const y = toY(value);
+                return `<g><path d="M${chart.left} ${y.toFixed(1)}H${chart.right}" class="rayat-luxury-home-dashboard-analytics-grid-line"></path><text x="${chart.left - 9}" y="${(y + 3).toFixed(1)}" class="rayat-luxury-home-dashboard-analytics-axis-label">${formatMetricValue(value)}</text></g>`;
+            }).join('');
+            const labelIndexes = [...new Set([0, Math.floor((series.length - 1) / 2), series.length - 1])];
+            const timeLabels = labelIndexes.map((index) => {
+                const anchor = index === 0 ? 'start' : (index === series.length - 1 ? 'end' : 'middle');
+                return `<text x="${points[index].x.toFixed(1)}" y="${chart.height - 9}" text-anchor="${anchor}" class="rayat-luxury-home-dashboard-analytics-axis-label">${formatLuxuryDashboardAnalyticsDate(points[index].date)}</text>`;
+            }).join('');
+            const rangeTop = optimalRange ? toY(optimalRange.max) : 0;
+            const rangeHeight = optimalRange ? Math.max(2, toY(optimalRange.min) - rangeTop) : 0;
+            const gradientId = `rayat-luxury-home-dashboard-chart-fill-${metric.id.replace(':', '-')}`;
+            const lastPoint = points[points.length - 1];
+
+            return `
+                <svg class="rayat-luxury-home-dashboard-analytics-chart" viewBox="0 0 ${chart.width} ${chart.height}" role="img" aria-label="${t(metric.labelKey)}">
+                    <defs>
+                        <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#2d6a4f" stop-opacity="0.16"></stop>
+                            <stop offset="100%" stop-color="#2d6a4f" stop-opacity="0"></stop>
+                        </linearGradient>
+                    </defs>
+                    ${optimalRange ? `<rect x="${chart.left}" y="${rangeTop.toFixed(1)}" width="${plotWidth}" height="${rangeHeight.toFixed(1)}" class="rayat-luxury-home-dashboard-analytics-range"></rect>` : ''}
+                    ${ticks}
+                    ${areaPath ? `<path d="${areaPath}" fill="url(#${gradientId})"></path>` : ''}
+                    ${points.length > 1 ? `<path d="${linePath}" class="rayat-luxury-home-dashboard-analytics-line"></path>` : ''}
+                    <circle cx="${lastPoint.x.toFixed(1)}" cy="${lastPoint.y.toFixed(1)}" r="6" class="rayat-luxury-home-dashboard-analytics-point-ring"></circle>
+                    <circle cx="${lastPoint.x.toFixed(1)}" cy="${lastPoint.y.toFixed(1)}" r="3.25" class="rayat-luxury-home-dashboard-analytics-point"></circle>
+                    ${timeLabels}
+                </svg>
+            `;
+        }
+
+        function renderLuxuryOverviewTab() {
+            const temperature = getLuxuryDashboardSoilReadings().find((item) => item.key === 'temperature');
+            const kpis = [
+                { icon: 'water', labelKey: 'luxKpiWaterLabel', value: t('luxKpiWaterValue'), status: t('luxKpiWaterStatus'), spark: 'M2 31 C7 28 12 28 17 29 C22 30 25 27 30 28 C35 29 38 25 43 27 C48 29 51 20 56 18' },
+                { icon: 'leaf', labelKey: 'luxKpiHealthLabel', value: t('luxKpiHealthValue'), status: t('luxKpiHealthStatus'), spark: 'M2 28 C8 25 13 24 18 26 C23 28 27 30 32 28 C38 25 43 27 48 24 C52 22 55 17 58 16' },
+                { icon: 'water', labelKey: 'luxKpiIrrigationLabel', value: t('luxKpiIrrigationValue'), status: t('luxKpiIrrigationStatus'), spark: 'M2 30 C8 26 14 25 20 27 C26 29 31 24 36 25 C43 26 47 22 52 17 C55 14 57 11 58 8' },
+                { icon: 'temperature', labelKey: 'luxKpiTempLabel', value: `${temperature.displayValue}${temperature.unit}`, status: temperature.state.label, spark: 'M2 24 C7 21 13 20 19 23 C25 26 30 24 36 21 C42 18 47 26 52 22 C55 20 57 18 58 16' }
+            ];
+            const recommendations = [
+                { icon: 'water', titleKey: 'luxAiRow1Title', textKey: 'luxAiRow1Text' },
+                { icon: 'alert', titleKey: 'luxAiRow2Title', textKey: 'luxAiRow2Text' },
+                { icon: 'leaf', titleKey: 'luxAiRow3Title', textKey: 'luxAiRow3Text' }
+            ];
+            const controls = `
+                <div class="rayat-luxury-home-dashboard-tab-toolbar">
+                    <span class="rayat-luxury-home-dashboard-chip">${t('luxDashboardPeriod')}</span>
+                    <button type="button" onclick="exportLuxuryDashboardCsv()" class="rayat-luxury-home-dashboard-command">${t('luxDashboardExport')}</button>
+                </div>
+            `;
+
+            return `
+                <div class="rayat-luxury-home-dashboard-tab-view">
+                    ${renderLuxuryDashboardTabHeader('luxDashboardOverviewTitle', 'luxDashboardOverviewSubtitle', controls)}
+                    <div class="rayat-luxury-kpi-grid">
+                        ${kpis.map((card) => `
+                            <article class="rayat-luxury-kpi-card">
+                                <div class="rayat-luxury-kpi-topline">
+                                    <span class="rayat-luxury-kpi-icon">${renderLuxuryDashboardIcon(card.icon)}</span>
+                                    <span class="rayat-luxury-kpi-label">${t(card.labelKey)}</span>
+                                </div>
+                                <strong class="rayat-luxury-kpi-value">${card.value}</strong>
+                                <span class="rayat-luxury-kpi-status">${card.status}</span>
+                                <svg class="rayat-luxury-kpi-sparkline" viewBox="0 0 60 34" fill="none" aria-hidden="true"><path d="${card.spark}" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>
+                            </article>
+                        `).join('')}
+                    </div>
+                    <div class="rayat-luxury-home-dashboard-lower">
+                        <div class="rayat-luxury-map-panel">
+                            <div class="rayat-luxury-map-header">
+                                <h3>${t('luxMapTitle')}</h3>
+                                <span class="rayat-luxury-home-dashboard-chip">${t('luxMapFilter')}</span>
+                            </div>
+                            <div id="home-dashboard-map-preview" class="rayat-luxury-map-preview">
+                                <svg class="rayat-luxury-map-svg" viewBox="0 0 720 260" fill="none" aria-hidden="true">
+                                    <path d="M0 32C110 18 160 62 260 40C390 12 480 28 720 6M0 116C128 88 202 142 318 108C450 70 575 105 720 84M0 204C130 168 240 212 360 178C486 142 584 182 720 152" stroke="#e5e7eb"></path>
+                                    <path d="M142 28 250 44 294 104 210 160 120 82Z" fill="rgba(45,106,79,.12)" stroke="#4a7c59"></path>
+                                    <path d="M332 46 462 28 540 86 458 146 346 122Z" fill="rgba(74,124,89,.13)" stroke="#4a7c59"></path>
+                                    <path d="M482 158 614 112 690 178 604 238 504 222Z" fill="rgba(184,150,12,.11)" stroke="#b8960c"></path>
+                                    <circle cx="202" cy="84" r="6" fill="#4a7c59"></circle><circle cx="450" cy="82" r="6" fill="#4a7c59"></circle><circle cx="594" cy="176" r="7" fill="#b8960c"></circle>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="rayat-luxury-ai-panel">
+                            <div class="rayat-luxury-ai-header"><h3>${t('luxAiTitle')}</h3><span class="rayat-luxury-ai-badge">${t('luxAiBadge')}</span></div>
+                            <div class="rayat-luxury-ai-list">
+                                ${recommendations.map((item) => `
+                                    <article class="rayat-luxury-ai-row">
+                                        <span class="rayat-luxury-ai-row-icon">${renderLuxuryDashboardIcon(item.icon)}</span>
+                                        <span class="rayat-luxury-ai-row-copy"><strong>${t(item.titleKey)}</strong><span>${t(item.textKey)}</span></span>
+                                    </article>
+                                `).join('')}
                             </div>
                         </div>
                     </div>
-                </section>
+                </div>
+            `;
+        }
 
-                ${renderHomeTechnologySection()}
-                ${renderHomeLiveSensorsSection()}
-                <section class="py-16 bg-gradient-to-b from-white to-green-50" id="chi-siamo-section">
-                    <div class="container mx-auto px-4">
-                        <h3 class="text-4xl font-bold text-center mb-4 text-green-800">${t('aboutUs')}</h3>
-                        <p class="text-xl text-center text-gray-600 mb-12">${t('ourReality')}</p>
-                        
-                        <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl p-8 md:p-12 mb-12">
-                            <div class="space-y-8">
-                                <div class="border-l-4 border-green-600 pl-6">
-                                    <h4 class="text-2xl font-bold mb-3 text-green-700"><span style="filter: sepia(100%) hue-rotate(70deg) saturate(500%) brightness(0.7);">🌾</span> ${t('ourReality')}</h4>
-                                    <p class="text-lg text-gray-700 leading-relaxed">${t('ourRealityDesc')}</p>
+        function renderLuxuryParcelsTab() {
+            const status = getLuxuryDashboardTimestamp();
+            const parcels = ['luxDashboardParcelOne', 'luxDashboardParcelNorth', 'luxDashboardParcelGreenhouse'];
+            return `
+                <div class="rayat-luxury-home-dashboard-tab-view">
+                    ${renderLuxuryDashboardTabHeader('luxDashboardParcelsTitle', 'luxDashboardParcelsSubtitle')}
+                    <div class="rayat-luxury-home-dashboard-parcel-grid">
+                        ${parcels.map((nameKey) => `
+                            <article class="rayat-luxury-home-dashboard-parcel-card">
+                                <div class="rayat-luxury-home-dashboard-card-head">
+                                    <h3>${t(nameKey)}</h3>
+                                    <span class="rayat-luxury-home-dashboard-status ${status.className}">${t('luxDashboardOperational')}</span>
                                 </div>
-                                <div class="border-l-4 border-blue-600 pl-6">
-                                    <h4 class="text-2xl font-bold mb-3 text-blue-700">🎯 ${t('ourMission')}</h4>
-                                    <p class="text-lg text-gray-700 leading-relaxed">${t('ourMissionDesc')}</p>
+                                <dl class="rayat-luxury-home-dashboard-detail-list">
+                                    <div><dt>${t('luxDashboardCropType')}</dt><dd>${getSelectedCropLabel()}</dd></div>
+                                    <div><dt>${t('luxDashboardLinkedSensors')}</dt><dd>${t('luxDashboardSensorsConnected')}</dd></div>
+                                    <div><dt>${t('luxDashboardLastUpdate')}</dt><dd>${status.timestamp}</dd></div>
+                                </dl>
+                            </article>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderLuxurySensorsTab() {
+            const readings = getLuxuryDashboardSoilReadings();
+            const connection = getLuxuryDashboardTimestamp();
+            return `
+                <div class="rayat-luxury-home-dashboard-tab-view">
+                    ${renderLuxuryDashboardTabHeader('luxDashboardSensorsTitle', 'luxDashboardSensorsSubtitle', `
+                        <span class="rayat-luxury-home-dashboard-status ${connection.className}">${connection.className === 'is-online' ? t('luxDashboardOnline') : t('luxDashboardOffline')}</span>
+                    `)}
+                    <div class="rayat-luxury-home-dashboard-sensor-grid">
+                        ${readings.map((reading) => `
+                            <article class="rayat-luxury-home-dashboard-sensor-card">
+                                <div class="rayat-luxury-home-dashboard-card-head">
+                                    <span class="rayat-luxury-home-dashboard-sensor-icon">${renderLuxuryDashboardIcon(reading.key === 'temperature' ? 'temperature' : (reading.key === 'moisture' ? 'water' : 'sensor'))}</span>
+                                    <span class="rayat-luxury-home-dashboard-pill rayat-luxury-home-dashboard-pill--${reading.state.level}">${reading.state.label}</span>
                                 </div>
-                                <div class="border-l-4 border-orange-600 pl-6">
-                                    <h4 class="text-2xl font-bold mb-3 text-orange-700">🤝 ${t('ourDuty')}</h4>
-                                    <p class="text-lg text-gray-700 leading-relaxed">${t('ourDutyDesc')}</p>
-                                    <ul class="mt-4 space-y-3 text-gray-700">
-                                        <li><strong>✓ ${t('support247')}</strong></li>
-                                        <li><strong>✓ ${t('training')}</strong></li>
-                                        <li><strong>✓ ${t('transparency')}</strong></li>
-                                        <li><strong>✓ ${t('customSolutions')}</strong></li>
-                                        <li><strong>✓ ${t('qualityGuaranteed')}</strong></li>
-                                    </ul>
+                                <p class="rayat-luxury-home-dashboard-overline">${t(reading.labelKey)}</p>
+                                <strong class="rayat-luxury-home-dashboard-reading">${reading.displayValue}<small>${reading.unit}</small></strong>
+                                <span class="rayat-luxury-home-dashboard-reading-time">${t('luxDashboardLastUpdate')}: ${connection.timestamp}</span>
+                            </article>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderLuxuryIrrigationTab() {
+            const moisture = getLuxuryDashboardSoilReadings().find((item) => item.key === 'moisture');
+            return `
+                <div class="rayat-luxury-home-dashboard-tab-view">
+                    ${renderLuxuryDashboardTabHeader('luxDashboardIrrigationTitle', 'luxDashboardIrrigationSubtitle')}
+                    <article class="rayat-luxury-home-dashboard-recommendation">
+                        <span class="rayat-luxury-home-dashboard-recommendation-icon">${renderLuxuryDashboardIcon('water')}</span>
+                        <div>
+                            <span>${t('luxDashboardRecommendation')}</span>
+                            <h3>${t('luxAiRow1Title')}</h3>
+                            <p>${t('luxDashboardTrendMoisture')}: ${moisture.displayValue} ${moisture.unit}</p>
+                        </div>
+                    </article>
+                    <div class="rayat-luxury-home-dashboard-stat-grid">
+                        <article><span>${t('luxDashboardNextIrrigation')}</span><strong>${t('luxDashboardScheduled')}</strong></article>
+                        <article><span>${t('luxDashboardDuration')}</span><strong>${t('luxDashboardMinutes')}</strong></article>
+                        <article><span>${t('luxDashboardWaterSaving')}</span><strong>${t('luxKpiWaterValue')}</strong></article>
+                    </div>
+                    <article class="rayat-luxury-home-dashboard-placeholder">
+                        <h3>${t('luxDashboardHistory')}</h3>
+                        <p>${t('luxDashboardPlaceholder')}</p>
+                    </article>
+                </div>
+            `;
+        }
+
+        function renderLuxuryAlertsTab() {
+            const alerts = buildDashboardAlertSnapshot().filter((item) => item.level !== 'normal').slice(0, 6);
+            return `
+                <div class="rayat-luxury-home-dashboard-tab-view">
+                    ${renderLuxuryDashboardTabHeader('luxDashboardAlertsTitle', 'luxDashboardAlertsSubtitle')}
+                    ${alerts.length ? `
+                        <div class="rayat-luxury-home-dashboard-alert-list">
+                            ${alerts.map((alert) => `
+                                <article class="rayat-luxury-home-dashboard-alert-row">
+                                    <span class="rayat-luxury-home-dashboard-pill rayat-luxury-home-dashboard-pill--${alert.level}">${getAlertBadgeLabel(alert.level)}</span>
+                                    <div><strong>${alert.label}</strong><span>${alert.sensorLabel}</span></div>
+                                    <div><small>${t('luxDashboardRecommendedAction')}</small><span>${alert.description || t('luxDashboardActionAdjust')}</span></div>
+                                </article>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <article class="rayat-luxury-home-dashboard-empty">
+                            ${renderLuxuryDashboardIcon('leaf')}
+                            <h3>${t('luxDashboardNoAlerts')}</h3>
+                            <p>${t('luxDashboardNoAlertsText')}</p>
+                        </article>
+                    `}
+                </div>
+            `;
+        }
+
+        function setLuxuryDashboardAnalyticsPeriod(period) {
+            currentLuxuryDashboardAnalyticsPeriod = ['24h', '7d', '30d'].includes(period) ? period : '7d';
+            const container = document.getElementById('rayat-luxury-home-dashboard-content');
+            if (container && currentLuxuryDashboardTab === 'analytics') {
+                container.innerHTML = renderLuxuryAnalyticsTab();
+                setTimeout(() => initLuxuryDashboardAnalyticsMetricRail(true), 0);
+            }
+        }
+
+        function setLuxuryDashboardAnalyticsMetric(metricId) {
+            const metrics = getLuxuryDashboardAnalyticsMetrics();
+            currentLuxuryDashboardAnalyticsMetric = metrics.some((metric) => metric.id === metricId)
+                ? metricId
+                : metrics[0]?.id || 'soil:moisture';
+            const container = document.getElementById('rayat-luxury-home-dashboard-content');
+            if (container && currentLuxuryDashboardTab === 'analytics') {
+                container.innerHTML = renderLuxuryAnalyticsTab();
+                setTimeout(() => initLuxuryDashboardAnalyticsMetricRail(true), 0);
+            }
+        }
+
+        function updateLuxuryDashboardAnalyticsMetricRailButtons() {
+            const rail = document.getElementById('rayat-luxury-home-dashboard-metric-rail');
+            const previousButton = document.querySelector('[data-luxury-dashboard-metric-direction="previous"]');
+            const nextButton = document.querySelector('[data-luxury-dashboard-metric-direction="next"]');
+
+            if (!(rail && previousButton && nextButton)) {
+                return;
+            }
+
+            const maxScroll = Math.max(0, rail.scrollWidth - rail.clientWidth);
+            previousButton.disabled = rail.scrollLeft <= 2;
+            nextButton.disabled = rail.scrollLeft >= maxScroll - 2;
+        }
+
+        function initLuxuryDashboardAnalyticsMetricRail(alignActive = false) {
+            const rail = document.getElementById('rayat-luxury-home-dashboard-metric-rail');
+            const activeMetric = rail?.querySelector('.rayat-luxury-home-dashboard-metric-option.is-active');
+
+            if (!rail) {
+                return;
+            }
+
+            if (rail.dataset.scrollBound !== '1') {
+                rail.dataset.scrollBound = '1';
+                rail.addEventListener('scroll', updateLuxuryDashboardAnalyticsMetricRailButtons, { passive: true });
+            }
+
+            if (alignActive && activeMetric) {
+                const activeCenter = activeMetric.offsetLeft + (activeMetric.offsetWidth / 2);
+                const desiredScroll = activeCenter - (rail.clientWidth / 2);
+                rail.scrollTo({ left: Math.max(0, desiredScroll), behavior: 'smooth' });
+            }
+
+            updateLuxuryDashboardAnalyticsMetricRailButtons();
+            setTimeout(updateLuxuryDashboardAnalyticsMetricRailButtons, 260);
+        }
+
+        function scrollLuxuryDashboardAnalyticsMetrics(direction) {
+            const rail = document.getElementById('rayat-luxury-home-dashboard-metric-rail');
+
+            if (!rail) {
+                return;
+            }
+
+            rail.scrollBy({
+                left: direction * Math.max(rail.clientWidth * 0.82, 180),
+                behavior: 'smooth'
+            });
+            setTimeout(updateLuxuryDashboardAnalyticsMetricRailButtons, 280);
+        }
+
+        function renderLuxuryAnalyticsTab() {
+            const metrics = getLuxuryDashboardAnalyticsMetrics().map((metric) => {
+                const series = getLuxuryDashboardAnalyticsSeries(metric);
+                return {
+                    ...metric,
+                    series,
+                    summary: getLuxuryDashboardAnalyticsSummary(metric, series)
+                };
+            });
+            const selectedMetric = metrics.find((metric) => metric.id === currentLuxuryDashboardAnalyticsMetric) || metrics[0];
+            const series = selectedMetric.series;
+            const summary = selectedMetric.summary;
+            const formattedChange = Number.isFinite(summary.change)
+                ? `${summary.change > 0 ? '+' : ''}${formatLuxuryDashboardAnalyticsValue(summary.change, selectedMetric)}`
+                : '--';
+            const controls = `
+                <div class="rayat-luxury-home-dashboard-segmented">
+                    ${['24h', '7d', '30d'].map((period) => `
+                        <button type="button" aria-pressed="${currentLuxuryDashboardAnalyticsPeriod === period}" class="${currentLuxuryDashboardAnalyticsPeriod === period ? 'is-active' : ''}" onclick="setLuxuryDashboardAnalyticsPeriod('${period}')">${t(`luxDashboardPeriod${period}`)}</button>
+                    `).join('')}
+                </div>
+            `;
+
+            return `
+                <div class="rayat-luxury-home-dashboard-tab-view">
+                    ${renderLuxuryDashboardTabHeader('luxDashboardAnalyticsTitle', 'luxDashboardAnalyticsSubtitle', controls)}
+                    <div class="rayat-luxury-home-dashboard-analytics-workspace">
+                        <div class="rayat-luxury-home-dashboard-metric-carousel">
+                            <button
+                                type="button"
+                                data-luxury-dashboard-metric-direction="previous"
+                                class="rayat-luxury-home-dashboard-metric-arrow rayat-luxury-home-dashboard-metric-arrow--previous"
+                                onclick="scrollLuxuryDashboardAnalyticsMetrics(-1)"
+                                aria-label="${t('luxDashboardAnalyticsPrevious')}"
+                            >
+                                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m12.5 4.5-5.5 5.5 5.5 5.5"></path></svg>
+                            </button>
+                            <div id="rayat-luxury-home-dashboard-metric-rail" class="rayat-luxury-home-dashboard-metric-switcher" aria-label="${t('luxDashboardAnalyticsTitle')}">
+                                ${metrics.map((metric) => `
+                                    <button
+                                        type="button"
+                                        data-luxury-dashboard-metric="${metric.id}"
+                                        aria-pressed="${selectedMetric.id === metric.id}"
+                                        class="rayat-luxury-home-dashboard-metric-option ${selectedMetric.id === metric.id ? 'is-active' : ''}"
+                                        onclick="setLuxuryDashboardAnalyticsMetric('${metric.id}')"
+                                    >
+                                        <span class="rayat-luxury-home-dashboard-metric-source">${t(metric.sourceKey)}</span>
+                                        <span class="rayat-luxury-home-dashboard-metric-title">${t(metric.labelKey)}</span>
+                                        <span class="rayat-luxury-home-dashboard-metric-footer">
+                                            <strong class="rayat-luxury-home-dashboard-metric-value">${formatLuxuryDashboardAnalyticsValue(metric.summary.latest, metric)}</strong>
+                                            <small class="rayat-luxury-home-dashboard-metric-state rayat-luxury-home-dashboard-metric-state--${metric.summary.status.level}">${metric.summary.status.label}</small>
+                                        </span>
+                                    </button>
+                                `).join('')}
+                            </div>
+                            <button
+                                type="button"
+                                data-luxury-dashboard-metric-direction="next"
+                                class="rayat-luxury-home-dashboard-metric-arrow rayat-luxury-home-dashboard-metric-arrow--next"
+                                onclick="scrollLuxuryDashboardAnalyticsMetrics(1)"
+                                aria-label="${t('luxDashboardAnalyticsNext')}"
+                            >
+                                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m7.5 4.5 5.5 5.5-5.5 5.5"></path></svg>
+                            </button>
+                        </div>
+                        <article class="rayat-luxury-home-dashboard-analytics-panel">
+                            <div class="rayat-luxury-home-dashboard-analytics-panel-head">
+                                <div class="rayat-luxury-home-dashboard-analytics-current">
+                                    <span>${t('luxDashboardAnalyticsLatest')}</span>
+                                    <strong>${formatLuxuryDashboardAnalyticsValue(summary.latest, selectedMetric)}</strong>
                                 </div>
-                                <div class="bg-gradient-to-r from-green-600 to-green-800 text-white p-6 rounded-xl text-center">
-                                    <p class="text-xl font-semibold mb-2">💚 ${t('ourCommitment')}</p>
-                                    <p class="text-lg">${t('ourCommitmentDesc')}</p>
+                                <div class="rayat-luxury-home-dashboard-analytics-meta">
+                                    <span class="rayat-luxury-home-dashboard-pill rayat-luxury-home-dashboard-pill--${summary.status.level}">${summary.status.label}</span>
+                                    <span class="rayat-luxury-home-dashboard-analytics-samples">${series.length} ${t('luxDashboardAnalyticsReadings')}</span>
                                 </div>
                             </div>
-                        </div>
+                            <div class="rayat-luxury-home-dashboard-analytics-plot">
+                                <span class="rayat-luxury-home-dashboard-analytics-range-label">${t('luxDashboardAnalyticsOptimalBand')}</span>
+                                ${renderLuxuryDashboardAnalyticsChart(selectedMetric, series)}
+                                ${series.length < 2 ? `<p class="rayat-luxury-home-dashboard-analytics-waiting">${t('luxDashboardAnalyticsWaiting')}</p>` : ''}
+                            </div>
+                            <div class="rayat-luxury-home-dashboard-analytics-stat-row">
+                                <div class="rayat-luxury-home-dashboard-analytics-stat"><span>${t('luxDashboardAnalyticsAverage')}</span><strong>${formatLuxuryDashboardAnalyticsValue(summary.average, selectedMetric)}</strong></div>
+                                <div class="rayat-luxury-home-dashboard-analytics-stat"><span>${t('luxDashboardAnalyticsMinimum')}</span><strong>${formatLuxuryDashboardAnalyticsValue(summary.minimum, selectedMetric)}</strong></div>
+                                <div class="rayat-luxury-home-dashboard-analytics-stat"><span>${t('luxDashboardAnalyticsMaximum')}</span><strong>${formatLuxuryDashboardAnalyticsValue(summary.maximum, selectedMetric)}</strong></div>
+                                <div class="rayat-luxury-home-dashboard-analytics-stat"><span>${t('luxDashboardAnalyticsChange')}</span><strong class="${summary.change > 0 ? 'is-positive' : (summary.change < 0 ? 'is-negative' : '')}">${formattedChange}</strong></div>
+                            </div>
+                        </article>
                     </div>
-                </section>
+                </div>
+            `;
+        }
 
-                <!-- Live Map Section (Moved below Chi Siamo) -->
-                <section class="py-12 bg-gray-50 border-b">
-                    <div class="container mx-auto px-4">
-                        <div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-6">
+        function exportLuxuryDashboardCsv() {
+            const previousSensor = selectedSensor;
+            selectedSensor = 'terreno';
+            if (!globalHistory.length) {
+                generateSimulationData();
+            }
+            exportCSV();
+            selectedSensor = previousSensor;
+        }
+
+        function renderLuxuryReportsTab() {
+            return `
+                <div class="rayat-luxury-home-dashboard-tab-view">
+                    ${renderLuxuryDashboardTabHeader('luxDashboardReportsTitle', 'luxDashboardReportsSubtitle')}
+                    <div class="rayat-luxury-home-dashboard-report-actions">
+                        <button type="button" class="rayat-luxury-home-dashboard-action-card" onclick="exportLuxuryDashboardCsv()">
+                            ${renderLuxuryDashboardIcon('report')}
+                            <strong>${t('luxDashboardCsvExport')}</strong>
+                        </button>
+                        <article class="rayat-luxury-home-dashboard-action-card is-disabled">
+                            ${renderLuxuryDashboardIcon('report')}
+                            <strong>${t('luxDashboardPdfReport')}</strong>
+                            <span>${t('luxDashboardPdfPlaceholder')}</span>
+                        </article>
+                    </div>
+                    <section class="rayat-luxury-home-dashboard-report-list">
+                        <h3>${t('luxDashboardRecentReports')}</h3>
+                        <article><strong>${t('luxDashboardReportWeekly')}</strong><span>${t('luxDashboardPeriod')}</span></article>
+                        <article><strong>${t('luxDashboardReportIrrigation')}</strong><span>${t('luxDashboardPeriod')}</span></article>
+                    </section>
+                </div>
+            `;
+        }
+
+        function setLuxuryDashboardCrop(value) {
+            userCropSelection.value = CROP_OPTIONS.some((option) => option.value === value) ? value : DEFAULT_CROP_VALUE;
+            if (userCropSelection.value !== 'autre') {
+                userCropSelection.custom = '';
+            }
+            waterSettings.crop = userCropSelection.value;
+            persistCropSelection();
+            setLuxuryDashboardTab('settings');
+        }
+
+        function toggleLuxuryDashboardNotifications() {
+            luxuryDashboardNotificationsEnabled = !luxuryDashboardNotificationsEnabled;
+            const container = document.getElementById('rayat-luxury-home-dashboard-content');
+            if (container && currentLuxuryDashboardTab === 'settings') {
+                container.innerHTML = renderLuxurySettingsTab();
+            }
+        }
+
+        function renderLuxurySettingsTab() {
+            const thresholdMetrics = getLuxuryDashboardSoilReadings().slice(0, 4);
+            return `
+                <div class="rayat-luxury-home-dashboard-tab-view">
+                    ${renderLuxuryDashboardTabHeader('luxDashboardSettingsTitle', 'luxDashboardSettingsSubtitle')}
+                    <div class="rayat-luxury-home-dashboard-settings-grid">
+                        <label class="rayat-luxury-home-dashboard-field">
+                            <span>${t('luxDashboardCropSelection')}</span>
+                            <select onchange="setLuxuryDashboardCrop(this.value)">
+                                ${CROP_OPTIONS.map((option) => `<option value="${option.value}" ${userCropSelection.value === option.value ? 'selected' : ''}>${t(option.labelKey)}</option>`).join('')}
+                            </select>
+                        </label>
+                        <section class="rayat-luxury-home-dashboard-setting-card">
+                            <span>${t('luxDashboardLanguage')}</span>
+                            <strong>${String(currentLang).toUpperCase()}</strong>
+                        </section>
+                        <button type="button" class="rayat-luxury-home-dashboard-setting-card rayat-luxury-home-dashboard-toggle ${luxuryDashboardNotificationsEnabled ? 'is-on' : ''}" onclick="toggleLuxuryDashboardNotifications()">
+                            <span>${t('luxDashboardNotifications')}</span>
+                            <strong>${luxuryDashboardNotificationsEnabled ? t('luxDashboardNotificationsEnabled') : t('luxDashboardNotificationsDisabled')}</strong>
+                        </button>
+                    </div>
+                    <section class="rayat-luxury-home-dashboard-thresholds">
+                        <h3>${t('luxDashboardThresholds')}</h3>
+                        ${thresholdMetrics.map((metric) => `
+                            <article>
+                                <span>${t(metric.labelKey)}</span>
+                                <strong>${buildOptimalRangeLabel(getRangeForMetric('soil', metric.key), 'range')}</strong>
+                            </article>
+                        `).join('')}
+                    </section>
+                </div>
+            `;
+        }
+
+        function renderLuxuryDashboardTabContent(tab) {
+            switch (tab) {
+                case 'overview':
+                    return renderLuxuryOverviewTab();
+                case 'parcels':
+                    return renderLuxuryParcelsTab();
+                case 'sensors':
+                    return renderLuxurySensorsTab();
+                case 'irrigation':
+                    return renderLuxuryIrrigationTab();
+                case 'alerts':
+                    return renderLuxuryAlertsTab();
+                case 'analytics':
+                    return renderLuxuryAnalyticsTab();
+                case 'reports':
+                    return renderLuxuryReportsTab();
+                case 'settings':
+                    return renderLuxurySettingsTab();
+                default:
+                    return renderLuxuryOverviewTab();
+            }
+        }
+
+        function setLuxuryDashboardTab(tab) {
+            const validTab = ['overview', 'parcels', 'sensors', 'irrigation', 'alerts', 'analytics', 'reports', 'settings'].includes(tab)
+                ? tab
+                : 'overview';
+            currentLuxuryDashboardTab = validTab;
+            const container = document.getElementById('rayat-luxury-home-dashboard-content');
+            if (container) {
+                container.innerHTML = renderLuxuryDashboardTabContent(validTab);
+            }
+
+            document.querySelectorAll('.rayat-luxury-home-dashboard-nav-item')
+                .forEach((button) => button.classList.remove('is-active', 'rayat-luxury-home-dashboard-nav-item--active'));
+
+            const activeBtn = document.querySelector(`[data-luxury-tab="${validTab}"]`);
+            if (activeBtn) {
+                activeBtn.classList.add('is-active', 'rayat-luxury-home-dashboard-nav-item--active');
+            }
+
+            if (validTab === 'analytics') {
+                setTimeout(() => initLuxuryDashboardAnalyticsMetricRail(true), 0);
+            }
+        }
+
+        const RAYAT_DEFINITIVE_HOME_TRANSLATIONS = {
+            it: {
+                luxDefNavHome: 'Home',
+                luxDefNavPlatform: 'La piattaforma',
+                luxDefNavDemo: 'Demo live',
+                luxDefNavHow: 'Come funziona',
+                luxDefNavSolutions: 'Soluzioni',
+                luxDefNavAbout: 'Chi siamo',
+                luxDefHeroEyebrow: 'Agricoltura intelligente',
+                luxDefHeroTitle: 'L’intelligenza al servizio delle tue colture.',
+                luxDefHeroAccent: 'colture.',
+                luxDefHeroText: 'Rayat trasforma i dati della tua azienda agricola in decisioni precise per ottimizzare l’acqua, anticipare i rischi e migliorare i rendimenti.',
+                luxDefHeroPrimary: 'Scopri la demo live',
+                luxDefHeroSecondary: 'Richiedi una demo',
+                luxDefRealtime: 'Dati in tempo reale',
+                luxDefSmartDecisions: 'Decisioni intelligenti',
+                luxDefWebMobile: 'Accesso web e mobile',
+                luxDefSecure: 'Sicuro e affidabile',
+                luxDefOnline: 'Online',
+                luxDefOffline: 'Offline',
+                luxDefHeroFarm: 'Serra di banane - Taroudant',
+                luxDefUpdated: 'Dati aggiornati: Oggi, 11:52',
+                luxDefCropStatusLabel: 'Stato coltura',
+                luxDefOptimal: 'Ottimale',
+                luxDefGood: 'Buona',
+                luxDefDemoEyebrow: 'Demo live',
+                luxDefDemoTitle: 'Serra di banane Taroudant',
+                luxDefDemoText: 'Una serra reale collegata alla piattaforma Rayat, monitorata 24/7.',
+                luxDefContinuous: 'Monitoraggio continuo',
+                luxDefLiveData: 'Dati in tempo reale',
+                luxDefHistorical: 'Storico e analisi',
+                luxDefSmartAlerts: 'Avvisi intelligenti',
+                luxDefViewDemo: 'Visualizza demo live',
+                luxDefMapCardTitle: 'Serra di banane - Taroudant',
+                luxDefMapArea: 'Superficie: 1 ha',
+                luxDefViewDetails: 'Visualizza dettagli',
+                luxDefHowEyebrow: 'Processo Rayat',
+                luxDefHowTitle: 'Tecnologia semplice, valore reale.',
+                luxDefStepSensorsTitle: 'Sensori',
+                luxDefStepSensorsText: 'Monitorano parametri ambientali e del suolo.',
+                luxDefStepRouterTitle: 'Router Rayat',
+                luxDefStepRouterText: 'Trasmette i dati in modo sicuro e continuo.',
+                luxDefStepCloudTitle: 'Cloud Rayat',
+                luxDefStepCloudText: 'I dati vengono archiviati, analizzati e protetti.',
+                luxDefStepDashboardTitle: 'Dashboard live',
+                luxDefStepDashboardText: 'Visualizza tutto in tempo reale, ovunque tu sia.',
+                luxDefStepAiTitle: 'Consigli IA',
+                luxDefStepAiText: 'Ricevi suggerimenti intelligenti e pratici per le tue colture.',
+                luxDefPlatformEyebrow: 'La piattaforma Rayat',
+                luxDefPlatformTitle: 'Tutto sotto controllo.',
+                luxDefPlatformTitleFull: 'Tutto sotto controllo, in un’unica dashboard.',
+                luxDefPlatformText: 'Un’unica piattaforma per monitorare, analizzare e gestire la tua azienda agricola.',
+                luxDefPlatformDashboard: 'Dashboard intuitiva',
+                luxDefPlatformMap: 'Mappa parcelle',
+                luxDefPlatformAnalytics: 'Analisi avanzate',
+                luxDefPlatformAlerts: 'Avvisi in tempo reale',
+                luxDefPlatformReports: 'Storico e report',
+                luxDefPlatformMulti: 'Gestione multi-azienda',
+                luxDefRealtimePanel: 'Dati in tempo reale',
+                luxDefPlatformMainParams: 'Andamento principali parametri',
+                luxDefPlatformMapTitle: 'Mappa parcelle',
+                luxDefPlatformRecentAlerts: 'Ultimi avvisi',
+                luxDefPlatformAlertMoisture: 'Umidità del suolo bassa',
+                luxDefPlatformAlertIrrigation: 'Irrigazione programmata',
+                luxDefPlatformAlertNormal: 'Tutti i parametri nella norma',
+                luxDefPlatformViewAlerts: 'Vedi tutti gli avvisi',
+                luxDefPlatformFarmLabel: 'Azienda Demo',
+                luxDefPlatformLocation: 'Taroudant, Marocco',
+                luxDefAllParameters: 'Vedi tutti i parametri',
+                luxDefSolutionsEyebrow: 'Soluzioni per ogni coltura',
+                luxDefSolutionsTitle: 'Dalla serra alla piena terra.',
+                luxDefSolutionsText: 'Tecnologia adattiva per ogni coltura, in ogni ambiente.',
+                luxDefGreenhouses: 'Serre',
+                luxDefBananas: 'Banane',
+                luxDefCitrus: 'Agrumi',
+                luxDefVegetables: 'Ortaggi',
+                luxDefFarms: 'Aziende agricole',
+                luxDefMobileEyebrow: 'App mobile',
+                luxDefMobileTitle: 'Il tuo campo, sempre in tasca.',
+                luxDefMobileText: 'Monitora e gestisci la tua azienda agricola direttamente dal tuo smartphone, ovunque tu sia.',
+                luxDefWaterSaving: 'Risparmio idrico',
+                luxDefProductivity: 'Aumento produttività',
+                luxDefMonitoring: 'Monitoraggio continuo',
+                luxDefCompanies: 'Aziende che si fidano di noi',
+                luxDefSatisfaction: 'Soddisfazione clienti',
+                luxDefWaterSavingText: 'Meno sprechi, più sostenibilità.',
+                luxDefProductivityText: 'Dati e insights per colture più performanti.',
+                luxDefMonitoringText: 'I tuoi campi sotto controllo, sempre.',
+                luxDefCompaniesText: 'Agricoltori e aziende che scelgono Rayat ogni giorno.',
+                luxDefSatisfactionText: 'Tecnologia affidabile, risultati concreti.',
+                luxDefFooterText: 'Soluzioni intelligenti per un’agricoltura più efficiente, sostenibile e produttiva.',
+                luxDefFooterHomeDesc: 'Torna alla home',
+                luxDefFooterSolutionsDesc: 'Le nostre soluzioni per ogni coltura',
+                luxDefFooterDemoDesc: 'Dati reali dalla serra di Taroudant',
+                luxDefFooterHowDesc: 'Scopri come funziona Rayat',
+                luxDefFooterAboutDesc: 'La nostra storia e la nostra missione',
+                luxDefFooterWhatsapp: 'WhatsApp',
+                luxDefFooterWhatsappNumber: '+212 6 00 00 00 00',
+                luxDefFooterEmail: 'Email',
+                luxDefFooterEmailAddress: 'contact@rayat.ma',
+                luxDefFooterDemoRequest: 'Richiedi una demo',
+                luxDefFooterDemoRequestText: 'Prenota una dimostrazione',
+                luxDefFooterPlatform: 'La piattaforma',
+                luxDefFooterDemo: 'Demo live',
+                luxDefFooterHow: 'Come funziona',
+                luxDefFooterCopyright: '© 2026 Rayat Smart Monitoring. Tutti i diritti riservati.',
+                luxDefDashMenuDashboard: 'Dashboard',
+                luxDefDashMenuParcels: 'Parcelle',
+                luxDefDashMenuMap: 'Mappa',
+                luxDefDashMenuSensors: 'Sensori',
+                luxDefDashMenuAlerts: 'Avvisi',
+                luxDefDashMenuAnalytics: 'Analisi',
+                luxDefDashMenuReports: 'Report',
+                luxDefDashMenuSettings: 'Impostazioni',
+                luxDefOverview: 'Panoramica',
+                luxDefToday: 'Oggi',
+                luxDefPhoneHome: 'Home',
+                luxDefPhoneMap: 'Mappa',
+                luxDefPhoneAlerts: 'Avvisi',
+                luxDefPhoneArea: 'Area',
+                luxDefFooterApp: 'App Mobile',
+                luxDefFooterSensors: 'Sensori',
+                luxDefFooterAnalytics: 'Analisi',
+                luxDefFooterSecurity: 'Sicurezza',
+                luxDefFooterGreenhouse: 'Serra Taroudant',
+                luxDefFooterRealtime: 'Dati in tempo reale',
+                luxDefFooterHistory: 'Storico',
+                luxDefFooterAlerts: 'Avvisi',
+                luxDefFooterTechnology: 'Tecnologia',
+                luxDefFooterIntegration: 'Integrazione',
+                luxDefFooterProcess: 'Processo',
+                luxDefFooterStory: 'La nostra storia',
+                luxDefFooterMission: 'Missione',
+                luxDefFooterContact: 'Contatti',
+                luxDefPrivacy: 'Privacy Policy',
+                luxDefCookie: 'Cookie Policy'
+            },
+            en: {
+                luxDefNavHome: 'Home',
+                luxDefNavPlatform: 'Platform',
+                luxDefNavDemo: 'Live demo',
+                luxDefNavHow: 'How it works',
+                luxDefNavSolutions: 'Solutions',
+                luxDefNavAbout: 'About',
+                luxDefHeroEyebrow: 'Smart agriculture',
+                luxDefHeroTitle: 'Intelligence serving your crops.',
+                luxDefHeroAccent: 'crops.',
+                luxDefHeroText: 'Rayat turns your farm data into precise decisions to optimize water, anticipate risks, and improve yields.',
+                luxDefHeroPrimary: 'Discover the live demo',
+                luxDefHeroSecondary: 'Request a demo',
+                luxDefRealtime: 'Real-time data',
+                luxDefSmartDecisions: 'Smart decisions',
+                luxDefWebMobile: 'Web and mobile access',
+                luxDefSecure: 'Secure and reliable',
+                luxDefOnline: 'Online',
+                luxDefOffline: 'Offline',
+                luxDefHeroFarm: 'Banana greenhouse - Taroudant',
+                luxDefUpdated: 'Data updated: Today, 11:52',
+                luxDefCropStatusLabel: 'Crop status',
+                luxDefOptimal: 'Optimal',
+                luxDefGood: 'Good',
+                luxDefDemoEyebrow: 'Live demo',
+                luxDefDemoTitle: 'Taroudant banana greenhouse',
+                luxDefDemoText: 'A real greenhouse connected to the Rayat platform and monitored 24/7.',
+                luxDefContinuous: 'Continuous monitoring',
+                luxDefLiveData: 'Real-time data',
+                luxDefHistorical: 'History and analytics',
+                luxDefSmartAlerts: 'Smart alerts',
+                luxDefViewDemo: 'View live demo',
+                luxDefMapCardTitle: 'Banana greenhouse - Taroudant',
+                luxDefMapArea: 'Area: 1 ha',
+                luxDefViewDetails: 'View details',
+                luxDefHowEyebrow: 'Rayat process',
+                luxDefHowTitle: 'Simple technology, real value.',
+                luxDefStepSensorsTitle: 'Sensors',
+                luxDefStepSensorsText: 'Monitor soil and environmental parameters.',
+                luxDefStepRouterTitle: 'Rayat router',
+                luxDefStepRouterText: 'Transmits data securely and continuously.',
+                luxDefStepCloudTitle: 'Rayat cloud',
+                luxDefStepCloudText: 'Data is stored, analyzed, and protected.',
+                luxDefStepDashboardTitle: 'Live dashboard',
+                luxDefStepDashboardText: 'See everything in real time, wherever you are.',
+                luxDefStepAiTitle: 'AI advice',
+                luxDefStepAiText: 'Receive intelligent, practical suggestions for your crops.',
+                luxDefPlatformEyebrow: 'The Rayat platform',
+                luxDefPlatformTitle: 'Everything under control.',
+                luxDefPlatformTitleFull: 'Everything under control, in one dashboard.',
+                luxDefPlatformText: 'One platform to monitor, analyze, and manage your agricultural business.',
+                luxDefPlatformDashboard: 'Intuitive dashboard',
+                luxDefPlatformMap: 'Field map',
+                luxDefPlatformAnalytics: 'Advanced analytics',
+                luxDefPlatformAlerts: 'Real-time alerts',
+                luxDefPlatformReports: 'History and reports',
+                luxDefPlatformMulti: 'Multi-farm management',
+                luxDefRealtimePanel: 'Real-time data',
+                luxDefPlatformMainParams: 'Main parameter trends',
+                luxDefPlatformMapTitle: 'Field map',
+                luxDefPlatformRecentAlerts: 'Latest alerts',
+                luxDefPlatformAlertMoisture: 'Low soil moisture',
+                luxDefPlatformAlertIrrigation: 'Irrigation scheduled',
+                luxDefPlatformAlertNormal: 'All parameters normal',
+                luxDefPlatformViewAlerts: 'View all alerts',
+                luxDefPlatformFarmLabel: 'Demo farm',
+                luxDefPlatformLocation: 'Taroudant, Morocco',
+                luxDefAllParameters: 'View all parameters',
+                luxDefSolutionsEyebrow: 'Solutions for every crop',
+                luxDefSolutionsTitle: 'From greenhouse to open field.',
+                luxDefSolutionsText: 'Adaptive technology for every crop, in every environment.',
+                luxDefGreenhouses: 'Greenhouses',
+                luxDefBananas: 'Bananas',
+                luxDefCitrus: 'Citrus',
+                luxDefVegetables: 'Vegetables',
+                luxDefFarms: 'Farms',
+                luxDefMobileEyebrow: 'Mobile app',
+                luxDefMobileTitle: 'Your field, always in your pocket.',
+                luxDefMobileText: 'Monitor and manage your farm directly from your smartphone, wherever you are.',
+                luxDefWaterSaving: 'Water savings',
+                luxDefProductivity: 'Productivity increase',
+                luxDefMonitoring: 'Continuous monitoring',
+                luxDefCompanies: 'Companies trust us',
+                luxDefSatisfaction: 'Customer satisfaction',
+                luxDefWaterSavingText: 'Less waste, more sustainability.',
+                luxDefProductivityText: 'Data and insights for higher-performing crops.',
+                luxDefMonitoringText: 'Your fields under control, always.',
+                luxDefCompaniesText: 'Farmers and companies choosing Rayat every day.',
+                luxDefSatisfactionText: 'Reliable technology, concrete results.',
+                luxDefFooterText: 'Smart solutions for more efficient, sustainable, and productive agriculture.',
+                luxDefFooterHomeDesc: 'Return to home',
+                luxDefFooterSolutionsDesc: 'Our solutions for every crop',
+                luxDefFooterDemoDesc: 'Real data from the Taroudant greenhouse',
+                luxDefFooterHowDesc: 'Discover how Rayat works',
+                luxDefFooterAboutDesc: 'Our story and our mission',
+                luxDefFooterWhatsapp: 'WhatsApp',
+                luxDefFooterWhatsappNumber: '+212 6 00 00 00 00',
+                luxDefFooterEmail: 'Email',
+                luxDefFooterEmailAddress: 'contact@rayat.ma',
+                luxDefFooterDemoRequest: 'Request a demo',
+                luxDefFooterDemoRequestText: 'Book a demonstration',
+                luxDefFooterPlatform: 'Platform',
+                luxDefFooterDemo: 'Live demo',
+                luxDefFooterHow: 'How it works',
+                luxDefFooterCopyright: '© 2026 Rayat Smart Monitoring. All rights reserved.',
+                luxDefDashMenuDashboard: 'Dashboard',
+                luxDefDashMenuParcels: 'Fields',
+                luxDefDashMenuMap: 'Map',
+                luxDefDashMenuSensors: 'Sensors',
+                luxDefDashMenuAlerts: 'Alerts',
+                luxDefDashMenuAnalytics: 'Analytics',
+                luxDefDashMenuReports: 'Reports',
+                luxDefDashMenuSettings: 'Settings',
+                luxDefOverview: 'Overview',
+                luxDefToday: 'Today',
+                luxDefPhoneHome: 'Home',
+                luxDefPhoneMap: 'Map',
+                luxDefPhoneAlerts: 'Alerts',
+                luxDefPhoneArea: 'Area',
+                luxDefFooterApp: 'Mobile app',
+                luxDefFooterSensors: 'Sensors',
+                luxDefFooterAnalytics: 'Analytics',
+                luxDefFooterSecurity: 'Security',
+                luxDefFooterGreenhouse: 'Taroudant greenhouse',
+                luxDefFooterRealtime: 'Real-time data',
+                luxDefFooterHistory: 'History',
+                luxDefFooterAlerts: 'Alerts',
+                luxDefFooterTechnology: 'Technology',
+                luxDefFooterIntegration: 'Integration',
+                luxDefFooterProcess: 'Process',
+                luxDefFooterStory: 'Our story',
+                luxDefFooterMission: 'Mission',
+                luxDefFooterContact: 'Contact',
+                luxDefPrivacy: 'Privacy Policy',
+                luxDefCookie: 'Cookie Policy'
+            },
+            fr: {
+                luxDefNavHome: 'Accueil',
+                luxDefNavPlatform: 'La plateforme',
+                luxDefNavDemo: 'Démo live',
+                luxDefNavHow: 'Comment ça marche',
+                luxDefNavSolutions: 'Solutions',
+                luxDefNavAbout: 'À propos',
+                luxDefHeroEyebrow: 'Agriculture intelligente',
+                luxDefHeroTitle: 'L’intelligence au service de vos cultures.',
+                luxDefHeroAccent: 'cultures.',
+                luxDefHeroText: 'Rayat transforme les données de votre exploitation agricole en décisions précises pour optimiser l’eau, anticiper les risques et améliorer les rendements.',
+                luxDefHeroPrimary: 'Découvrir la démo live',
+                luxDefHeroSecondary: 'Demander une démo',
+                luxDefRealtime: 'Données en temps réel',
+                luxDefSmartDecisions: 'Décisions intelligentes',
+                luxDefWebMobile: 'Accès web et mobile',
+                luxDefSecure: 'Sûr et fiable',
+                luxDefOnline: 'En ligne',
+                luxDefOffline: 'Hors ligne',
+                luxDefHeroFarm: 'Serre de bananes - Taroudant',
+                luxDefUpdated: 'Données mises à jour : aujourd’hui, 11:52',
+                luxDefCropStatusLabel: 'État de la culture',
+                luxDefOptimal: 'Optimal',
+                luxDefGood: 'Bon',
+                luxDefDemoEyebrow: 'Démo live',
+                luxDefDemoTitle: 'Serre de bananes Taroudant',
+                luxDefDemoText: 'Une serre réelle connectée à la plateforme Rayat, surveillée 24/7.',
+                luxDefContinuous: 'Surveillance continue',
+                luxDefLiveData: 'Données en temps réel',
+                luxDefHistorical: 'Historique et analyses',
+                luxDefSmartAlerts: 'Alertes intelligentes',
+                luxDefViewDemo: 'Voir la démo live',
+                luxDefMapCardTitle: 'Serre de bananes - Taroudant',
+                luxDefMapArea: 'Superficie : 1 ha',
+                luxDefViewDetails: 'Voir les détails',
+                luxDefHowEyebrow: 'Processus Rayat',
+                luxDefHowTitle: 'Technologie simple, valeur réelle.',
+                luxDefStepSensorsTitle: 'Capteurs',
+                luxDefStepSensorsText: 'Surveillent les paramètres du sol et de l’environnement.',
+                luxDefStepRouterTitle: 'Routeur Rayat',
+                luxDefStepRouterText: 'Transmet les données de façon sûre et continue.',
+                luxDefStepCloudTitle: 'Cloud Rayat',
+                luxDefStepCloudText: 'Les données sont stockées, analysées et protégées.',
+                luxDefStepDashboardTitle: 'Tableau de bord live',
+                luxDefStepDashboardText: 'Visualisez tout en temps réel, où que vous soyez.',
+                luxDefStepAiTitle: 'Conseils IA',
+                luxDefStepAiText: 'Recevez des suggestions intelligentes et pratiques pour vos cultures.',
+                luxDefPlatformEyebrow: 'La plateforme Rayat',
+                luxDefPlatformTitle: 'Tout sous contrôle.',
+                luxDefPlatformTitleFull: 'Tout sous contrôle, dans un seul tableau de bord.',
+                luxDefPlatformText: 'Une plateforme unique pour surveiller, analyser et gérer votre exploitation agricole.',
+                luxDefPlatformDashboard: 'Tableau de bord intuitif',
+                luxDefPlatformMap: 'Carte des parcelles',
+                luxDefPlatformAnalytics: 'Analyses avancées',
+                luxDefPlatformAlerts: 'Alertes en temps réel',
+                luxDefPlatformReports: 'Historique et rapports',
+                luxDefPlatformMulti: 'Gestion multi-exploitation',
+                luxDefRealtimePanel: 'Données en temps réel',
+                luxDefPlatformMainParams: 'Évolution des principaux paramètres',
+                luxDefPlatformMapTitle: 'Carte des parcelles',
+                luxDefPlatformRecentAlerts: 'Dernières alertes',
+                luxDefPlatformAlertMoisture: 'Humidité du sol basse',
+                luxDefPlatformAlertIrrigation: 'Irrigation programmée',
+                luxDefPlatformAlertNormal: 'Tous les paramètres sont normaux',
+                luxDefPlatformViewAlerts: 'Voir toutes les alertes',
+                luxDefPlatformFarmLabel: 'Ferme démo',
+                luxDefPlatformLocation: 'Taroudant, Maroc',
+                luxDefAllParameters: 'Voir tous les paramètres',
+                luxDefSolutionsEyebrow: 'Solutions pour chaque culture',
+                luxDefSolutionsTitle: 'De la serre à la pleine terre.',
+                luxDefSolutionsText: 'Technologie adaptative pour chaque culture, dans chaque environnement.',
+                luxDefGreenhouses: 'Serres',
+                luxDefBananas: 'Bananes',
+                luxDefCitrus: 'Agrumes',
+                luxDefVegetables: 'Maraîchage',
+                luxDefFarms: 'Exploitations agricoles',
+                luxDefMobileEyebrow: 'App mobile',
+                luxDefMobileTitle: 'Votre champ, toujours dans votre poche.',
+                luxDefMobileText: 'Surveillez et gérez votre exploitation directement depuis votre smartphone, où que vous soyez.',
+                luxDefWaterSaving: 'Économie d’eau',
+                luxDefProductivity: 'Productivité accrue',
+                luxDefMonitoring: 'Surveillance continue',
+                luxDefCompanies: 'Entreprises nous font confiance',
+                luxDefSatisfaction: 'Satisfaction client',
+                luxDefWaterSavingText: 'Moins de gaspillage, plus de durabilité.',
+                luxDefProductivityText: 'Données et insights pour des cultures plus performantes.',
+                luxDefMonitoringText: 'Vos champs sous contrôle, toujours.',
+                luxDefCompaniesText: 'Agriculteurs et entreprises choisissent Rayat chaque jour.',
+                luxDefSatisfactionText: 'Technologie fiable, résultats concrets.',
+                luxDefFooterText: 'Des solutions intelligentes pour une agriculture plus efficace, durable et productive.',
+                luxDefFooterHomeDesc: 'Retour à l’accueil',
+                luxDefFooterSolutionsDesc: 'Nos solutions pour chaque culture',
+                luxDefFooterDemoDesc: 'Données réelles de la serre de Taroudant',
+                luxDefFooterHowDesc: 'Découvrez comment fonctionne Rayat',
+                luxDefFooterAboutDesc: 'Notre histoire et notre mission',
+                luxDefFooterWhatsapp: 'WhatsApp',
+                luxDefFooterWhatsappNumber: '+212 6 00 00 00 00',
+                luxDefFooterEmail: 'Email',
+                luxDefFooterEmailAddress: 'contact@rayat.ma',
+                luxDefFooterDemoRequest: 'Demander une démo',
+                luxDefFooterDemoRequestText: 'Réserver une démonstration',
+                luxDefFooterPlatform: 'La plateforme',
+                luxDefFooterDemo: 'Démo live',
+                luxDefFooterHow: 'Comment ça marche',
+                luxDefFooterCopyright: '© 2026 Rayat Smart Monitoring. Tous droits réservés.',
+                luxDefDashMenuDashboard: 'Tableau de bord',
+                luxDefDashMenuParcels: 'Parcelles',
+                luxDefDashMenuMap: 'Carte',
+                luxDefDashMenuSensors: 'Capteurs',
+                luxDefDashMenuAlerts: 'Alertes',
+                luxDefDashMenuAnalytics: 'Analyses',
+                luxDefDashMenuReports: 'Rapports',
+                luxDefDashMenuSettings: 'Paramètres',
+                luxDefOverview: 'Vue d’ensemble',
+                luxDefToday: 'Aujourd’hui',
+                luxDefPhoneHome: 'Accueil',
+                luxDefPhoneMap: 'Carte',
+                luxDefPhoneAlerts: 'Alertes',
+                luxDefPhoneArea: 'Zone',
+                luxDefFooterApp: 'App mobile',
+                luxDefFooterSensors: 'Capteurs',
+                luxDefFooterAnalytics: 'Analyses',
+                luxDefFooterSecurity: 'Sécurité',
+                luxDefFooterGreenhouse: 'Serre Taroudant',
+                luxDefFooterRealtime: 'Données en temps réel',
+                luxDefFooterHistory: 'Historique',
+                luxDefFooterAlerts: 'Alertes',
+                luxDefFooterTechnology: 'Technologie',
+                luxDefFooterIntegration: 'Intégration',
+                luxDefFooterProcess: 'Processus',
+                luxDefFooterStory: 'Notre histoire',
+                luxDefFooterMission: 'Mission',
+                luxDefFooterContact: 'Contact',
+                luxDefPrivacy: 'Politique de confidentialité',
+                luxDefCookie: 'Politique cookies'
+            },
+            ar: {
+                luxDefNavHome: 'الرئيسية',
+                luxDefNavPlatform: 'المنصة',
+                luxDefNavDemo: 'عرض مباشر',
+                luxDefNavHow: 'كيف يعمل',
+                luxDefNavSolutions: 'الحلول',
+                luxDefNavAbout: 'من نحن',
+                luxDefHeroEyebrow: 'زراعة ذكية',
+                luxDefHeroTitle: 'ذكاء في خدمة محاصيلك.',
+                luxDefHeroAccent: 'محاصيلك.',
+                luxDefHeroText: 'تحول Rayat بيانات مزرعتك إلى قرارات دقيقة لتحسين المياه، توقع المخاطر، وزيادة المردودية.',
+                luxDefHeroPrimary: 'استكشف العرض المباشر',
+                luxDefHeroSecondary: 'اطلب عرضا',
+                luxDefRealtime: 'بيانات فورية',
+                luxDefSmartDecisions: 'قرارات ذكية',
+                luxDefWebMobile: 'وصول عبر الويب والجوال',
+                luxDefSecure: 'آمن وموثوق',
+                luxDefOnline: 'متصل',
+                luxDefOffline: 'غير متصل',
+                luxDefHeroFarm: 'دفيئة الموز - تارودانت',
+                luxDefUpdated: 'تم تحديث البيانات: اليوم، 11:52',
+                luxDefCropStatusLabel: 'حالة المحصول',
+                luxDefOptimal: 'مثالي',
+                luxDefGood: 'جيد',
+                luxDefDemoEyebrow: 'عرض مباشر',
+                luxDefDemoTitle: 'دفيئة موز تارودانت',
+                luxDefDemoText: 'دفيئة حقيقية متصلة بمنصة Rayat وتتم مراقبتها على مدار الساعة.',
+                luxDefContinuous: 'مراقبة مستمرة',
+                luxDefLiveData: 'بيانات فورية',
+                luxDefHistorical: 'السجل والتحليلات',
+                luxDefSmartAlerts: 'تنبيهات ذكية',
+                luxDefViewDemo: 'مشاهدة العرض المباشر',
+                luxDefMapCardTitle: 'دفيئة الموز - تارودانت',
+                luxDefMapArea: 'المساحة: 1 هكتار',
+                luxDefViewDetails: 'عرض التفاصيل',
+                luxDefHowEyebrow: 'عملية Rayat',
+                luxDefHowTitle: 'تقنية بسيطة، قيمة حقيقية.',
+                luxDefStepSensorsTitle: 'الحساسات',
+                luxDefStepSensorsText: 'تراقب معايير التربة والبيئة.',
+                luxDefStepRouterTitle: 'راوتر Rayat',
+                luxDefStepRouterText: 'يرسل البيانات بشكل آمن ومستمر.',
+                luxDefStepCloudTitle: 'سحابة Rayat',
+                luxDefStepCloudText: 'يتم تخزين البيانات وتحليلها وحمايتها.',
+                luxDefStepDashboardTitle: 'لوحة مباشرة',
+                luxDefStepDashboardText: 'شاهد كل شيء في الوقت الحقيقي أينما كنت.',
+                luxDefStepAiTitle: 'نصائح IA',
+                luxDefStepAiText: 'احصل على اقتراحات ذكية وعملية لمحاصيلك.',
+                luxDefPlatformEyebrow: 'منصة Rayat',
+                luxDefPlatformTitle: 'كل شيء تحت السيطرة.',
+                luxDefPlatformTitleFull: 'كل شيء تحت السيطرة في لوحة واحدة.',
+                luxDefPlatformText: 'منصة واحدة لمراقبة وتحليل وإدارة نشاطك الزراعي.',
+                luxDefPlatformDashboard: 'لوحة سهلة',
+                luxDefPlatformMap: 'خريطة القطع',
+                luxDefPlatformAnalytics: 'تحليلات متقدمة',
+                luxDefPlatformAlerts: 'تنبيهات فورية',
+                luxDefPlatformReports: 'سجل وتقارير',
+                luxDefPlatformMulti: 'إدارة عدة مزارع',
+                luxDefRealtimePanel: 'بيانات فورية',
+                luxDefPlatformMainParams: 'تطور المؤشرات الرئيسية',
+                luxDefPlatformMapTitle: 'خريطة القطع',
+                luxDefPlatformRecentAlerts: 'آخر التنبيهات',
+                luxDefPlatformAlertMoisture: 'رطوبة التربة منخفضة',
+                luxDefPlatformAlertIrrigation: 'تمت جدولة الري',
+                luxDefPlatformAlertNormal: 'كل المؤشرات طبيعية',
+                luxDefPlatformViewAlerts: 'عرض كل التنبيهات',
+                luxDefPlatformFarmLabel: 'مزرعة تجريبية',
+                luxDefPlatformLocation: 'تارودانت، المغرب',
+                luxDefAllParameters: 'عرض كل المعايير',
+                luxDefSolutionsEyebrow: 'حلول لكل محصول',
+                luxDefSolutionsTitle: 'من الدفيئة إلى الحقل المفتوح.',
+                luxDefSolutionsText: 'تقنية متكيفة لكل محصول وفي كل بيئة.',
+                luxDefGreenhouses: 'الدفيئات',
+                luxDefBananas: 'الموز',
+                luxDefCitrus: 'الحمضيات',
+                luxDefVegetables: 'الخضروات',
+                luxDefFarms: 'المزارع',
+                luxDefMobileEyebrow: 'تطبيق الجوال',
+                luxDefMobileTitle: 'حقلك دائما في جيبك.',
+                luxDefMobileText: 'راقب وأدر مزرعتك مباشرة من هاتفك الذكي أينما كنت.',
+                luxDefWaterSaving: 'توفير المياه',
+                luxDefProductivity: 'زيادة الإنتاجية',
+                luxDefMonitoring: 'مراقبة مستمرة',
+                luxDefCompanies: 'شركات تثق بنا',
+                luxDefSatisfaction: 'رضا العملاء',
+                luxDefWaterSavingText: 'هدر أقل واستدامة أكبر.',
+                luxDefProductivityText: 'بيانات ورؤى لمحاصيل أكثر أداء.',
+                luxDefMonitoringText: 'حقولك تحت السيطرة دائما.',
+                luxDefCompaniesText: 'مزارعون وشركات يختارون Rayat كل يوم.',
+                luxDefSatisfactionText: 'تقنية موثوقة ونتائج ملموسة.',
+                luxDefFooterText: 'حلول ذكية لزراعة أكثر كفاءة واستدامة وإنتاجية.',
+                luxDefFooterHomeDesc: 'العودة إلى الرئيسية',
+                luxDefFooterSolutionsDesc: 'حلولنا لكل محصول',
+                luxDefFooterDemoDesc: 'بيانات حقيقية من دفيئة تارودانت',
+                luxDefFooterHowDesc: 'اكتشف كيف تعمل Rayat',
+                luxDefFooterAboutDesc: 'قصتنا ومهمتنا',
+                luxDefFooterWhatsapp: 'واتساب',
+                luxDefFooterWhatsappNumber: '+212 6 00 00 00 00',
+                luxDefFooterEmail: 'البريد الإلكتروني',
+                luxDefFooterEmailAddress: 'contact@rayat.ma',
+                luxDefFooterDemoRequest: 'اطلب عرضا',
+                luxDefFooterDemoRequestText: 'احجز عرضا توضيحيا',
+                luxDefFooterPlatform: 'المنصة',
+                luxDefFooterDemo: 'عرض مباشر',
+                luxDefFooterHow: 'كيف يعمل',
+                luxDefFooterCopyright: '© 2026 Rayat Smart Monitoring. جميع الحقوق محفوظة.',
+                luxDefDashMenuDashboard: 'لوحة التحكم',
+                luxDefDashMenuParcels: 'القطع',
+                luxDefDashMenuMap: 'الخريطة',
+                luxDefDashMenuSensors: 'الحساسات',
+                luxDefDashMenuAlerts: 'التنبيهات',
+                luxDefDashMenuAnalytics: 'التحليلات',
+                luxDefDashMenuReports: 'التقارير',
+                luxDefDashMenuSettings: 'الإعدادات',
+                luxDefOverview: 'نظرة عامة',
+                luxDefToday: 'اليوم',
+                luxDefPhoneHome: 'الرئيسية',
+                luxDefPhoneMap: 'الخريطة',
+                luxDefPhoneAlerts: 'تنبيهات',
+                luxDefPhoneArea: 'المنطقة',
+                luxDefFooterApp: 'تطبيق الجوال',
+                luxDefFooterSensors: 'الحساسات',
+                luxDefFooterAnalytics: 'التحليلات',
+                luxDefFooterSecurity: 'الأمان',
+                luxDefFooterGreenhouse: 'دفيئة تارودانت',
+                luxDefFooterRealtime: 'بيانات فورية',
+                luxDefFooterHistory: 'السجل',
+                luxDefFooterAlerts: 'التنبيهات',
+                luxDefFooterTechnology: 'التقنية',
+                luxDefFooterIntegration: 'التكامل',
+                luxDefFooterProcess: 'العملية',
+                luxDefFooterStory: 'قصتنا',
+                luxDefFooterMission: 'المهمة',
+                luxDefFooterContact: 'اتصال',
+                luxDefPrivacy: 'سياسة الخصوصية',
+                luxDefCookie: 'سياسة ملفات الارتباط'
+            },
+            zgh: {
+                luxDefNavHome: 'ⴰⵙⵏⵓⴱⴳ',
+                luxDefNavPlatform: 'ⵜⴰⵙⵏⴰ',
+                luxDefNavDemo: 'ⴷⵉⵎⵓ ⵍⴰⵢⴼ',
+                luxDefNavHow: 'ⵎⴰⵎⴽ ⵜⵙⵡⵓⵔⵉ',
+                luxDefNavSolutions: 'ⵜⵉⴼⵔⴰⵜⵉⵏ',
+                luxDefNavAbout: 'ⵖⴼ ⵏⵏⵖ',
+                luxDefHeroEyebrow: 'ⵜⴰⴼⵍⴰⵃⵜ ⵜⴰⵎⴰⵙⵙⴰⵏⵜ',
+                luxDefHeroTitle: 'ⵜⴰⵎⵓⵙⵙⵏⵉ ⴳ ⵜⵉⵙⵙⵉ ⵏ ⵉⴳⵎⴰⵎⵏ ⵏⵏⴽ.',
+                luxDefHeroAccent: 'ⵏⵏⴽ.',
+                luxDefHeroText: 'Rayat ⵜⵙⵙⵎⵓⵜⵜⵓⵢ ⵉⵙⴼⴽⴰ ⵏ ⵜⴼⵍⴰⵃⵜ ⵏⵏⴽ ⵙ ⵜⵉⵖⵜⴰⵙⵉⵏ ⵉⵎⵖⵓⴷⴰⵏ ⵉ ⵓⵙⴼⵙⵉ ⵏ ⵡⴰⵎⴰⵏ ⴷ ⵓⵙⵎⵓⵔⵙ ⵏ ⵉⵎⵓⴽⵔⵉⵙⵏ.',
+                luxDefHeroPrimary: 'ⵥⵕ ⴷⵉⵎⵓ ⵍⴰⵢⴼ',
+                luxDefHeroSecondary: 'ⵙⵙⵓⵜⵔ ⴷⵉⵎⵓ',
+                luxDefRealtime: 'ⵉⵙⴼⴽⴰ ⴳ ⵡⴰⴽⵓⴷ',
+                luxDefSmartDecisions: 'ⵜⵉⵖⵜⴰⵙⵉⵏ ⵜⵉⵎⴰⵙⵙⴰⵏⵉⵏ',
+                luxDefWebMobile: 'ⴰⵏⴽⵛⵓⵎ ⵡⵉⴱ ⴷ ⵎⵓⴱⴰⵢⵍ',
+                luxDefSecure: 'ⴰⵎⵏⴰⵢ ⴷ ⴰⵎⴰⵣⵣⴰⵍ',
+                luxDefOnline: 'ⵉⵇⵇⵏ',
+                luxDefOffline: 'ⵓⵔ ⵉⵇⵇⵏ',
+                luxDefHeroFarm: 'ⵜⴰⵙⵔⴳⴰ ⵏ ⵜⵉⴳⴰⵢⵢⴰ - ⵜⴰⵔⵓⴷⴰⵏⵜ',
+                luxDefUpdated: 'ⵉⵙⴼⴽⴰ ⵜⵜⵓⵙⵏⴼⵍⵏ: ⴰⵙⵙⴰ, 11:52',
+                luxDefCropStatusLabel: 'ⴰⴷⴷⴰⴷ ⵏ ⵜⵉⵔⵣⵉ',
+                luxDefOptimal: 'ⴰⵎⵓⵔⵙ',
+                luxDefGood: 'ⵉⵖⵓⴷⴰ',
+                luxDefDemoEyebrow: 'ⴷⵉⵎⵓ ⵍⴰⵢⴼ',
+                luxDefDemoTitle: 'ⵜⴰⵙⵔⴳⴰ ⵏ ⵜⵉⴳⴰⵢⵢⴰ ⵜⴰⵔⵓⴷⴰⵏⵜ',
+                luxDefDemoText: 'ⵜⴰⵙⵔⴳⴰ ⵜⴰⵎⵙⵙⵉⵍⵜ ⵜⵇⵇⵏ ⵖⵔ ⵜⴰⵙⵏⴰ Rayat, ⵜⵜⵓⴹⴼⴰⵕ 24/7.',
+                luxDefContinuous: 'ⴰⴹⴼⴰⵕ ⵓⵔ ⵉⵃⴱⵉⵙ',
+                luxDefLiveData: 'ⵉⵙⴼⴽⴰ ⴳ ⵡⴰⴽⵓⴷ',
+                luxDefHistorical: 'ⴰⵎⵣⵔⵓⵢ ⴷ ⵜⵙⵍⴹⵜ',
+                luxDefSmartAlerts: 'ⵉⵍⵖⴰ ⵉⵎⴰⵙⵙⴰⵏⵏ',
+                luxDefViewDemo: 'ⵥⵕ ⴷⵉⵎⵓ ⵍⴰⵢⴼ',
+                luxDefMapCardTitle: 'ⵜⴰⵙⵔⴳⴰ ⵏ ⵜⵉⴳⴰⵢⵢⴰ - ⵜⴰⵔⵓⴷⴰⵏⵜ',
+                luxDefMapArea: 'ⵜⴰⵎⵏⴰⴹⵜ: 1 ha',
+                luxDefViewDetails: 'ⵥⵕ ⵜⴰⵍⵇⵇⴰⵢⵜ',
+                luxDefHowEyebrow: 'ⴰⴽⴰⵍⴰ Rayat',
+                luxDefHowTitle: 'ⵜⵉⴽⵏⵓⵍⵓⵊⵉⵜ ⵜⴰⵙⵎⵔⴰⵔⵜ, ⴰⵣⴰⵍ ⴰⵎⵙⵙⵉⵍ.',
+                luxDefStepSensorsTitle: 'ⵉⵎⴰⵙⵙⵏ',
+                luxDefStepSensorsText: 'ⵜⵜⵙⵙⵏⵏ ⵉⵙⴼⴽⴰ ⵏ ⵡⴰⴽⴰⵍ ⴷ ⵜⵡⵏⵏⴰⴹⵜ.',
+                luxDefStepRouterTitle: 'ⵔⵓⵜⵔ Rayat',
+                luxDefStepRouterText: 'ⵉⵜⵜⴰⵣⵏ ⵉⵙⴼⴽⴰ ⵙ ⵍⴰⵎⴰⵏ.',
+                luxDefStepCloudTitle: 'ⴽⵍⴰⵡⴷ Rayat',
+                luxDefStepCloudText: 'ⵉⵙⴼⴽⴰ ⵜⵜⵓⵃⵟⵟⴰⵏ, ⵜⵜⵓⵙⵍⴹⵏ, ⵜⵜⵓⵃⴹⴰⵏ.',
+                luxDefStepDashboardTitle: 'ⵜⴰⴱⵍⵓⵜ ⵍⴰⵢⴼ',
+                luxDefStepDashboardText: 'ⵥⵕ ⴽⵓⵍⵍⵓ ⴳ ⵡⴰⴽⵓⴷ, ⵎⴰⵏⵉ ⵜⵍⵍⵉⴷ.',
+                luxDefStepAiTitle: 'ⵜⵉⵡⵉⵙⵉⵡⵉⵏ IA',
+                luxDefStepAiText: 'ⴰⵡⵉ ⵜⵉⵡⵉⵙⵉⵡⵉⵏ ⵜⵉⵎⴰⵙⵙⴰⵏⵉⵏ ⵉ ⵜⴽⵍⵉⵡⵉⵏ ⵏⵏⴽ.',
+                luxDefPlatformEyebrow: 'ⵜⴰⵙⵏⴰ Rayat',
+                luxDefPlatformTitle: 'ⴽⵓⵍⵍⵓ ⴷⴷⴰⵡ ⵓⵙⴼⵔⴽ.',
+                luxDefPlatformTitleFull: 'ⴽⵓⵍⵍⵓ ⴷⴷⴰⵡ ⵓⵙⴼⵔⴽ ⴳ ⵢⴰⵜ ⵜⴰⴱⵍⵓⵜ.',
+                luxDefPlatformText: 'ⵢⴰⵜ ⵜⴰⵙⵏⴰ ⵉ ⵓⴹⴼⴰⵕ, ⵜⴰⵙⵍⴹⵜ ⴷ ⵓⵙⴼⵔⴽ ⵏ ⵜⴼⵍⴰⵃⵜ ⵏⵏⴽ.',
+                luxDefPlatformDashboard: 'ⵜⴰⴱⵍⵓⵜ ⵜⴰⵙⵎⵔⴰⵔⵜ',
+                luxDefPlatformMap: 'ⵜⴰⴽⴰⵕⴹⴰ ⵏ ⵜⵎⵣⵉⵣⵡⴰ',
+                luxDefPlatformAnalytics: 'ⵜⵉⵙⵍⴹⵉⵏ ⵜⵉⵎⵖⵓⴷⴰⵏ',
+                luxDefPlatformAlerts: 'ⵉⵍⵖⴰ ⴳ ⵡⴰⴽⵓⴷ',
+                luxDefPlatformReports: 'ⴰⵎⵣⵔⵓⵢ ⴷ ⵉⵎⵇⵇⵉⵎⵏ',
+                luxDefPlatformMulti: 'ⴰⵙⴼⵔⴽ ⵏ ⵓⴳⴳⴰⵔ ⵏ ⵜⴼⵍⴰⵃⵜ',
+                luxDefRealtimePanel: 'ⵉⵙⴼⴽⴰ ⴳ ⵡⴰⴽⵓⴷ',
+                luxDefPlatformMainParams: 'ⴰⵎⵓⵙⵙⵓ ⵏ ⵉⵎⵥⵍⴰⵢⵏ',
+                luxDefPlatformMapTitle: 'ⵜⴰⴽⴰⵕⴹⴰ ⵏ ⵜⵎⵣⵉⵣⵡⴰ',
+                luxDefPlatformRecentAlerts: 'ⵉⵍⵖⴰ ⵉⵎⴳⴳⵓⵔⴰ',
+                luxDefPlatformAlertMoisture: 'ⵜⵉⵙⵓⵙⵉ ⵏ ⵡⴰⴽⴰⵍ ⵜⵏⵇⵇⵙ',
+                luxDefPlatformAlertIrrigation: 'ⴰⵙⵙⵓ ⵉⵜⵜⵓⵙⵖⵉⵡⵙ',
+                luxDefPlatformAlertNormal: 'ⴽⵓⵍⵍⵓ ⵉⵎⵥⵍⴰⵢⵏ ⴳ ⵓⵎⵓⵔⵙ',
+                luxDefPlatformViewAlerts: 'ⵥⵕ ⴽⵓⵍⵍⵓ ⵉⵍⵖⴰ',
+                luxDefPlatformFarmLabel: 'ⵜⴰⴼⵍⴰⵃⵜ ⴷⵉⵎⵓ',
+                luxDefPlatformLocation: 'ⵜⴰⵔⵓⴷⴰⵏⵜ, ⵍⵎⵖⵔⵉⴱ',
+                luxDefAllParameters: 'ⵥⵕ ⴽⵓⵍⵍⵓ ⵉⵎⵥⵍⴰⵢⵏ',
+                luxDefSolutionsEyebrow: 'ⵜⵉⴼⵔⴰⵜⵉⵏ ⵉ ⴽⵓⵍⵍⵓ ⵜⵉⵔⵣⵉ',
+                luxDefSolutionsTitle: 'ⵙⴳ ⵜⵙⵔⴳⴰ ⴰⵔ ⵡⴰⴽⴰⵍ.',
+                luxDefSolutionsText: 'ⵜⵉⴽⵏⵓⵍⵓⵊⵉⵜ ⵜⵜⵎⵙⴰⵙⴰ ⵉ ⴽⵓⵍⵍⵓ ⵜⵉⵔⵣⵉ.',
+                luxDefGreenhouses: 'ⵜⵉⵙⵔⴳⵉⵡⵉⵏ',
+                luxDefBananas: 'ⵜⵉⴳⴰⵢⵢⴰ',
+                luxDefCitrus: 'ⵍⵃⴰⵎⴹ',
+                luxDefVegetables: 'ⵉⴼⵔⴰⵙ',
+                luxDefFarms: 'ⵜⵉⴼⵍⴰⵃⵉⵏ',
+                luxDefMobileEyebrow: 'ⴰⵙⵏⵙ ⵎⵓⴱⴰⵢⵍ',
+                luxDefMobileTitle: 'ⴰⴳⵔ ⵏⵏⴽ ⴷⴰⵢⵎⴰ ⴳ ⵜⵉⵙⵙⵉ ⵏⵏⴽ.',
+                luxDefMobileText: 'ⴹⴼⴰⵕ ⴷ ⵙⴼⵔⴽ ⵜⴼⵍⴰⵃⵜ ⵏⵏⴽ ⵙⴳ ⵙⵎⴰⵔⵜⴼⵓⵏ, ⵎⴰⵏⵉ ⵜⵍⵍⵉⴷ.',
+                luxDefWaterSaving: 'ⴰⵙⵏⵊⵎ ⵏ ⵡⴰⵎⴰⵏ',
+                luxDefProductivity: 'ⴰⵙⵏⴼⵍ ⵏ ⵜⵎⵓⵔⴰ',
+                luxDefMonitoring: 'ⴰⴹⴼⴰⵕ ⵓⵔ ⵉⵃⴱⵉⵙ',
+                luxDefCompanies: 'ⵜⵉⵎⵙⵙⵓⵔⵉⵏ ⵜⵜⴰⵎⵏⵏⵜ ⴳⵏⵖ',
+                luxDefSatisfaction: 'ⴰⵔⴹⴰ ⵏ ⵉⵎⵙⵙⵎⵔⴰⵙⵏ',
+                luxDefWaterSavingText: 'ⴽⵔⴰ ⵏ ⵓⵙⴼⵙⴷ, ⴰⵎⵣⵓⵏ ⵉⴳⴳⵓⵜⵏ.',
+                luxDefProductivityText: 'ⵉⵙⴼⴽⴰ ⴷ ⵜⵉⵙⵍⴹⵉⵏ ⵉ ⵜⵉⵔⵣⴰ ⵉⴳⴳⵓⵜⵏ.',
+                luxDefMonitoringText: 'ⵉⴳⵔⴰⵏ ⵏⵏⴽ ⴷⴷⴰⵡ ⵓⴹⴼⴰⵕ, ⴷⴰⵢⵎⴰ.',
+                luxDefCompaniesText: 'ⵉⴼⵍⴰⵃⵏ ⴷ ⵜⵎⵙⵙⵓⵔⵉⵏ ⵜⵜⴰⵎⵏⵏ ⴳ Rayat.',
+                luxDefSatisfactionText: 'ⵜⵉⴽⵏⵓⵍⵓⵊⵉⵜ ⵜⴰⵎⵏⵜ, ⵉⴳⵎⴰⴹ ⵉⵥⴹⴰⵕⵏ.',
+                luxDefFooterText: 'ⵜⵉⴼⵔⴰⵜⵉⵏ ⵜⵉⵎⴰⵙⵙⴰⵏⵉⵏ ⵉ ⵜⴼⵍⴰⵃⵜ ⵜⴰⵎⴰⵔⵉⵔⵜ.',
+                luxDefFooterHomeDesc: 'ⵓⵖⴰⵍ ⵖⵔ ⴰⵙⵏⵓⴱⴳ',
+                luxDefFooterSolutionsDesc: 'ⵜⵉⴼⵔⴰⵜⵉⵏ ⵏⵏⵖ ⵉ ⴽⵓⵍⵍⵓ ⵜⵉⵔⵣⵉ',
+                luxDefFooterDemoDesc: 'ⵉⵙⴼⴽⴰ ⵉⵎⵙⵙⵉⵍⵏ ⵙⴳ ⵜⵙⵔⴳⴰ ⵏ ⵜⴰⵔⵓⴷⴰⵏⵜ',
+                luxDefFooterHowDesc: 'ⵥⵕ ⵎⴰⵎⴽ ⵜⵙⵡⵓⵔⵉ Rayat',
+                luxDefFooterAboutDesc: 'ⴰⵎⵣⵔⵓⵢ ⵏⵏⵖ ⴷ ⵜⵎⵙⵙⵉⵍⵜ ⵏⵏⵖ',
+                luxDefFooterWhatsapp: 'WhatsApp',
+                luxDefFooterWhatsappNumber: '+212 6 00 00 00 00',
+                luxDefFooterEmail: 'Email',
+                luxDefFooterEmailAddress: 'contact@rayat.ma',
+                luxDefFooterDemoRequest: 'ⵙⵙⵓⵜⵔ ⴷⵉⵎⵓ',
+                luxDefFooterDemoRequestText: 'ⵙⵖⵉⵡⵙ ⴰⵙⵎⵍⵍⵉ',
+                luxDefFooterPlatform: 'ⵜⴰⵙⵏⴰ',
+                luxDefFooterDemo: 'ⴷⵉⵎⵓ ⵍⴰⵢⴼ',
+                luxDefFooterHow: 'ⵎⴰⵎⴽ ⵜⵙⵡⵓⵔⵉ',
+                luxDefFooterCopyright: '© 2026 Rayat Smart Monitoring. ⴽⵓⵍⵍⵓ ⵉⵣⵔⴼⴰⵏ ⵜⵜⵓⵃⴹⴰⵏ.',
+                luxDefDashMenuDashboard: 'ⵜⴰⴱⵍⵓⵜ',
+                luxDefDashMenuParcels: 'ⵜⵉⵎⵣⵉⵣⵡⴰ',
+                luxDefDashMenuMap: 'ⵜⴰⴽⴰⵕⴹⴰ',
+                luxDefDashMenuSensors: 'ⵉⵎⴰⵙⵙⵏ',
+                luxDefDashMenuAlerts: 'ⵉⵍⵖⴰ',
+                luxDefDashMenuAnalytics: 'ⵜⵉⵙⵍⴹⵉⵏ',
+                luxDefDashMenuReports: 'ⵉⵎⵇⵇⵉⵎⵏ',
+                luxDefDashMenuSettings: 'ⵉⵙⵖⵡⴰⵏ',
+                luxDefOverview: 'ⴰⵎⵓⵙⵙⵓ',
+                luxDefToday: 'ⴰⵙⵙⴰ',
+                luxDefPhoneHome: 'ⴰⵙⵏⵓⴱⴳ',
+                luxDefPhoneMap: 'ⵜⴰⴽⴰⵕⴹⴰ',
+                luxDefPhoneAlerts: 'ⵉⵍⵖⴰ',
+                luxDefPhoneArea: 'ⵜⴰⵎⵏⴰⴹⵜ',
+                luxDefFooterApp: 'ⴰⵙⵏⵙ ⵎⵓⴱⴰⵢⵍ',
+                luxDefFooterSensors: 'ⵉⵎⴰⵙⵙⵏ',
+                luxDefFooterAnalytics: 'ⵜⵉⵙⵍⴹⵉⵏ',
+                luxDefFooterSecurity: 'ⵍⴰⵎⴰⵏ',
+                luxDefFooterGreenhouse: 'ⵜⴰⵙⵔⴳⴰ ⵜⴰⵔⵓⴷⴰⵏⵜ',
+                luxDefFooterRealtime: 'ⵉⵙⴼⴽⴰ ⴳ ⵡⴰⴽⵓⴷ',
+                luxDefFooterHistory: 'ⴰⵎⵣⵔⵓⵢ',
+                luxDefFooterAlerts: 'ⵉⵍⵖⴰ',
+                luxDefFooterTechnology: 'ⵜⵉⴽⵏⵓⵍⵓⵊⵉⵜ',
+                luxDefFooterIntegration: 'ⴰⵙⴷⵓⵙ',
+                luxDefFooterProcess: 'ⴰⴽⴰⵍⴰ',
+                luxDefFooterStory: 'ⵜⴰⵎⴰⵢⵏⵓⵜ ⵏⵏⵖ',
+                luxDefFooterMission: 'ⵜⴰⵡⵓⵔⵉ',
+                luxDefFooterContact: 'ⴰⵏⵢⴰⵍⴽⴰⵎ',
+                luxDefPrivacy: 'Privacy Policy',
+                luxDefCookie: 'Cookie Policy'
+            }
+        };
+
+        ['it', 'en', 'fr', 'ar', 'tz', 'zgh'].forEach((lang) => {
+            translations[lang] = {
+                ...(translations[lang] || {}),
+                ...(RAYAT_DEFINITIVE_HOME_TRANSLATIONS[lang === 'tz' ? 'zgh' : lang] || RAYAT_DEFINITIVE_HOME_TRANSLATIONS.fr)
+            };
+        });
+
+        function renderRayatDefinitiveIcon(name) {
+            const icons = {
+                clock: '<circle cx="12" cy="12" r="8"></circle><path d="M12 7.5V12l3 2"></path>',
+                brain: '<path d="M9 4.8a3.2 3.2 0 0 0-3 3.4A3.6 3.6 0 0 0 4.5 15c0 2.3 1.6 4 3.7 4 .8 1.2 2 2 3.8 2s3-.8 3.8-2c2.1 0 3.7-1.7 3.7-4A3.6 3.6 0 0 0 18 8.2a3.2 3.2 0 0 0-6-1.5A3.2 3.2 0 0 0 9 4.8Z"></path><path d="M12 6.7V21M8.2 10.4c1.8.1 3 .9 3.8 2.4M15.8 10.4c-1.8.1-3 .9-3.8 2.4"></path>',
+                screen: '<rect x="4" y="6" width="16" height="11" rx="1.8"></rect><path d="M9 20h6M12 17v3"></path>',
+                shield: '<path d="M12 3.8 19 6.5v5.3c0 4.2-2.8 7.4-7 8.9-4.2-1.5-7-4.7-7-8.9V6.5l7-2.7Z"></path><path d="m9.2 12 2 2 4.2-4.4"></path>',
+                drop: '<path d="M12 3.8s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11Z"></path><path d="M9.2 15.4c.6 1.3 1.6 2 3 2"></path>',
+                temp: '<path d="M10 14.7V5.8a2 2 0 1 1 4 0v8.9a4 4 0 1 1-4 0Z"></path><path d="M12 8v8"></path>',
+                bolt: '<path d="m13 2.8-7 11h5l-1 7.4 7.2-11h-5L13 2.8Z"></path>',
+                leaf: '<path d="M19.5 4.8C11.5 5 6 8.8 6 14.2c0 3 2 5.2 5.2 5.2 5.4 0 8.3-6.3 8.3-14.6Z"></path><path d="M5 20c2.4-5.2 6.4-8.4 11-10.5"></path>',
+                sensor: '<path d="M12 4v5M12 15v5M4 12h5M15 12h5"></path><circle cx="12" cy="12" r="3"></circle>',
+                router: '<rect x="5" y="10" width="14" height="7" rx="2"></rect><path d="M8 14h.01M12 14h.01M16 14h.01M9 10V7M15 10V7"></path>',
+                cloud: '<path d="M7.5 18H17a4 4 0 0 0 .4-8 5.5 5.5 0 0 0-10.5 1.8A3.2 3.2 0 0 0 7.5 18Z"></path><path d="M12 10v5m0 0-2-2m2 2 2-2"></path>',
+                chart: '<path d="M4 18h16"></path><path d="m6 15 4-4 3 2.5L18 7"></path>',
+                list: '<rect x="6" y="4" width="12" height="16" rx="2"></rect><path d="M9 9h6M9 13h6M9 17h4"></path>',
+                advice: '<path d="M6.2 17.8a7.2 7.2 0 1 1 3.2 2.1L5 20.8l1.2-3Z"></path><path d="M14.8 8.3c-3.7.1-6 2-6 4.5 0 1.4.9 2.4 2.4 2.4 2.5 0 3.8-3 3.6-6.9Z"></path><path d="M8.5 16.3c1.1-2.4 2.8-3.9 5-4.9"></path>',
+                map: '<path d="M4 6.2 9.5 4l5 2 5.5-2.2v14l-5.5 2.2-5-2L4 20.2v-14Z"></path><path d="M9.5 4v14M14.5 6v14"></path>',
+                bell: '<path d="M18 15.5H6l1.3-1.7V10a4.7 4.7 0 0 1 9.4 0v3.8L18 15.5Z"></path><path d="M10 18a2.2 2.2 0 0 0 4 0"></path>',
+                greenhouse: '<path d="M4 20h16M6 20V10l6-6 6 6v10M12 4v16M7 11h10"></path>',
+                rows: '<path d="M5 18c4-4 10-4 14 0M4 14c5-4 11-4 16 0M3 10c6-4 12-4 18 0"></path>',
+                users: '<circle cx="9" cy="9" r="3"></circle><circle cx="16.5" cy="10" r="2.5"></circle><path d="M4 20c0-4 2.2-6.5 5-6.5s5 2.5 5 6.5M14 15c3.6-.4 6 1.6 6 5"></path>',
+                whatsapp: '<path d="M20 11.8a8 8 0 0 1-11.7 7.1L4 20l1.2-4.1A8 8 0 1 1 20 11.8Z"></path><path d="M9.1 8.4c.2-.5.4-.6.8-.6h.5c.2 0 .4.1.5.4l.7 1.6c.1.3.1.5-.1.7l-.4.5c-.1.2-.2.3-.1.5.4.8 1.1 1.5 2 2 .2.1.4.1.5-.1l.6-.7c.2-.2.4-.2.7-.1l1.5.7c.3.1.4.3.4.6 0 .7-.3 1.2-.8 1.5-.5.4-1.6.5-3.3-.3-1.9-.9-3.6-2.5-4.4-4.4-.6-1.3-.3-2.1.1-2.6Z"></path>',
+                mail: '<rect x="4" y="6" width="16" height="12" rx="1.8"></rect><path d="m5 7.5 7 5.4 7-5.4"></path>',
+                calendar: '<rect x="5" y="5.5" width="14" height="14" rx="2"></rect><path d="M8 3.8v4M16 3.8v4M5 10h14M8.5 13.5h.01M12 13.5h.01M15.5 13.5h.01M8.5 17h.01M12 17h.01"></path>',
+                lock: '<path d="M7 10V8a5 5 0 0 1 10 0v2"></path><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M12 14v2.5"></path>',
+                cookie: '<path d="M19 12.8A7.2 7.2 0 1 1 11.2 5c.1 1.4 1.2 2.5 2.6 2.5.2 1.3 1.3 2.3 2.7 2.3.1 1.4 1.1 2.5 2.5 3Z"></path><path d="M8.5 11.2h.01M11.2 15.5h.01M14.5 13.7h.01"></path>'
+            };
+            return `<svg class="rayat-definitive-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">${icons[name] || icons.leaf}</svg>`;
+        }
+
+        function renderRayatDefinitiveHomePage() {
+            const BRAND_LOGO_GREEN = '/assets/logo/logo-green.svg';
+            const HERO_LOGO_IMAGE = '/assets/img/rayat-definitive-hero.svg';
+            const DEMO_MAP_IMAGE = '/assets/images/image333.png';
+            const PLATFORM_MAP_IMAGE = '/assets/images/image2222.png';
+            const FOOTER_GOLD_LOGO_IMAGE = '/assets/images/footer/rayat-logo-gold-exact-transparent.png';
+            const arrowIcon = '<svg class="rayat-definitive-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11"></path><path d="m11 5 5 5-5 5"></path></svg>';
+            const heroTitle = t('luxDefHeroTitle');
+            const heroAccent = t('luxDefHeroAccent');
+            const heroTitleHtml = heroAccent && heroTitle.includes(heroAccent)
+                ? heroTitle.replace(heroAccent, `<span>${heroAccent}</span>`)
+                : heroTitle;
+            const readings = getLuxuryDashboardSoilReadings();
+            const readingByKey = Object.fromEntries(readings.map((reading) => [reading.key, reading]));
+            const getReading = (key, fallback) => {
+                const reading = readingByKey[key];
+                if (!reading) return fallback;
+                return `${reading.displayValue}${reading.unit && key !== 'pH' ? ` ${reading.unit}` : ''}`;
+            };
+            const heroStatusState = String(window.RAYAT_HERO_STATUS || window.rayatHeroStatus || 'online').toLowerCase() === 'offline' ? 'offline' : 'online';
+            const heroStatusLabel = heroStatusState === 'offline' ? t('luxDefOffline') : t('luxDefOnline');
+            const navItems = [
+                { label: t('luxDefNavHome'), action: "setView('home')" },
+                { label: t('luxDefNavSolutions'), action: "navigateToRayatHomeSection('rayat-solutions')" },
+                { label: t('luxDefNavDemo'), action: "setViewWithTracking('demo')" },
+                { label: t('luxDefNavHow'), action: "navigateToRayatHomeSection('rayat-how')" },
+                { label: t('luxDefNavAbout'), action: "setView('chi-siamo')" }
+            ];
+            const languageOptions = [
+                { lang: 'it', code: 'IT', label: t('luxLangIt') },
+                { lang: 'fr', code: 'FR', label: t('luxLangFr') },
+                { lang: 'en', code: 'EN', label: t('luxLangEn') },
+                { lang: 'ar', code: 'AR', label: t('luxLangAr') },
+                { lang: 'zgh', code: 'ZGH', label: t('luxLangTz') }
+            ];
+            const activeLanguage = languageOptions.find((option) => option.lang === currentLang || (currentLang === 'tz' && option.lang === 'zgh')) || languageOptions[1];
+            const heroFeatures = [
+                { icon: 'clock', label: t('luxDefRealtime') },
+                { icon: 'brain', label: t('luxDefSmartDecisions') },
+                { icon: 'screen', label: t('luxDefWebMobile') },
+                { icon: 'shield', label: t('luxDefSecure') }
+            ];
+            const heroMetrics = [
+                { icon: 'drop', label: t('luxMetricHumidityLabel'), value: getReading('moisture', t('luxMetricHumidityValue')), status: t('luxMetricHumidityStatus') },
+                { icon: 'temp', label: t('luxMetricTemperatureLabel'), value: getReading('temperature', t('luxMetricTemperatureValue')), status: t('luxMetricTemperatureStatus') },
+                { icon: 'bolt', label: 'EC', value: getReading('ec', t('luxPhoneEcValue')), status: t('luxDefGood') },
+                { icon: 'leaf', label: t('luxDefCropStatusLabel'), value: t('luxDefOptimal'), status: t('luxDefGood') }
+            ];
+            const demoBullets = [
+                { icon: 'sensor', label: t('luxDefContinuous') },
+                { icon: 'sensor', label: t('luxDefLiveData') },
+                { icon: 'chart', label: t('luxDefHistorical') },
+                { icon: 'shield', label: t('luxDefSmartAlerts') }
+            ];
+            const howSteps = [
+                { icon: 'leaf', title: t('luxDefStepSensorsTitle'), text: t('luxDefStepSensorsText') },
+                { icon: 'router', title: t('luxDefStepRouterTitle'), text: t('luxDefStepRouterText') },
+                { icon: 'cloud', title: t('luxDefStepCloudTitle'), text: t('luxDefStepCloudText') },
+                { icon: 'chart', title: t('luxDefStepDashboardTitle'), text: t('luxDefStepDashboardText') },
+                { icon: 'advice', title: t('luxDefStepAiTitle'), text: t('luxDefStepAiText') }
+            ];
+            const platformBullets = [
+                { icon: 'chart', label: t('luxDefPlatformDashboard') },
+                { icon: 'map', label: t('luxDefPlatformMap') },
+                { icon: 'sensor', label: t('luxDefRealtime') },
+                { icon: 'bell', label: t('luxDefSmartAlerts') },
+                { icon: 'list', label: t('luxDefPlatformReports') }
+            ];
+            const solutionCards = [
+                { image: '/assets/images/solutions/greenhouses.png', label: t('luxDefGreenhouses'), modifier: 'greenhouses' },
+                { image: '/assets/images/solutions/bananas.png', label: t('luxDefBananas'), modifier: 'banana' },
+                { image: '/assets/images/solutions/citrus.png', label: t('luxDefCitrus'), modifier: 'citrus' },
+                { image: '/assets/images/solutions/vegetables.png', label: t('luxDefVegetables'), modifier: 'vegetables' },
+                { image: '/assets/images/solutions/farms.png', label: t('luxDefFarms'), modifier: 'fields' }
+            ];
+            const statCards = [
+                { icon: 'drop', value: '30%', label: t('luxDefWaterSaving'), text: t('luxDefWaterSavingText') },
+                { icon: 'chart', value: '25%', label: t('luxDefProductivity'), text: t('luxDefProductivityText') },
+                { icon: 'clock', value: '24/7', label: t('luxDefMonitoring'), text: t('luxDefMonitoringText') },
+                { icon: 'users', value: '500+', label: t('luxDefCompanies'), text: t('luxDefCompaniesText') },
+                { icon: 'shield', value: '98%', label: t('luxDefSatisfaction'), text: t('luxDefSatisfactionText') }
+            ];
+            const dashboardValues = [
+                { label: t('luxMetricTemperatureLabel'), value: getReading('temperature', t('luxMetricTemperatureValue')), status: t('luxMetricTemperatureStatus') },
+                { label: t('luxMetricHumidityLabel'), value: getReading('moisture', t('luxMetricHumidityValue')), status: t('luxMetricHumidityStatus') },
+                { label: 'EC', value: getReading('ec', t('luxPhoneEcValue')), status: t('luxDefGood') },
+                { label: 'pH', value: getReading('pH', t('luxPhonePhValue')), status: t('luxMetricTemperatureStatus') }
+            ];
+            const parameterRows = [
+                { icon: 'drop', label: t('luxMetricHumidityLabel'), value: getReading('moisture', t('luxMetricHumidityValue')) },
+                { icon: 'temp', label: t('luxMetricTemperatureLabel'), value: getReading('temperature', t('luxMetricTemperatureValue')) },
+                { icon: 'bolt', label: 'EC', value: getReading('ec', t('luxPhoneEcValue')) },
+                { icon: 'sensor', label: 'pH', value: getReading('pH', t('luxPhonePhValue')) },
+                { icon: 'leaf', label: t('luxDemoNitrogenLabel'), value: getReading('nitrogen', '180 mg/kg') }
+            ];
+            const platformAlerts = [
+                { icon: 'drop', tone: 'warning', title: t('luxDefPlatformAlertMoisture'), meta: `${t('luxDefDashMenuParcels')} 3 • ${t('luxDefToday')}, 10:15` },
+                { icon: 'bell', tone: 'info', title: t('luxDefPlatformAlertIrrigation'), meta: `${t('luxDefDashMenuParcels')} 1 • ${t('luxDefToday')}, 08:30` },
+                { icon: 'shield', tone: 'success', title: t('luxDefPlatformAlertNormal'), meta: `${t('luxDefDashMenuParcels')} 2 • ${t('luxDefToday')}, 07:45` }
+            ];
+            const footerColumns = [
+                { title: t('luxDefNavHome'), text: t('luxDefFooterHomeDesc'), action: "setView('home')" },
+                { title: t('luxDefNavSolutions'), text: t('luxDefFooterSolutionsDesc'), action: "navigateToRayatHomeSection('rayat-solutions')" },
+                { title: t('luxDefNavDemo'), text: t('luxDefFooterDemoDesc'), action: "setViewWithTracking('demo')" },
+                { title: t('luxDefNavHow'), text: t('luxDefFooterHowDesc'), action: "navigateToRayatHomeSection('rayat-how')" },
+                { title: t('luxDefNavAbout'), text: t('luxDefFooterAboutDesc'), action: "setView('chi-siamo')" }
+            ];
+
+            return `
+                <main class="rayat-definitive-home">
+                    <header class="rayat-definitive-nav">
+                        <button type="button" class="rayat-definitive-brand" onclick="setView('home')" aria-label="${t('luxBrandName')}">
+                            <img src="${BRAND_LOGO_GREEN}" alt="${t('luxLogoAlt')}">
+                            <span><strong>${t('luxBrandName')}</strong><small>${t('luxBrandSubtitle')}</small></span>
+                        </button>
+                        <nav class="rayat-definitive-navlinks" aria-label="${t('luxMobileMenuLabel')}">
+                            ${navItems.map((item, index) => `
+                                <button type="button" class="${index === 0 ? 'is-active' : ''}" onclick="${item.action}">${item.label}</button>
+                            `).join('')}
+                        </nav>
+                        <div class="rayat-definitive-nav-actions">
+                            <details class="rayat-definitive-language">
+                                <summary aria-label="${t('luxLanguageLabel')}">
+                                    <strong>${activeLanguage.code}</strong>
+                                    <svg viewBox="0 0 12 8" fill="none" aria-hidden="true">
+                                        <path d="M1 1.5 6 6.5l5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path>
+                                    </svg>
+                                </summary>
+                                <div class="rayat-definitive-language-menu">
+                                    ${languageOptions.map((option) => `
+                                        <button type="button" class="${option.lang === activeLanguage.lang ? 'is-active' : ''}" onclick="setLanguage('${option.lang}')">
+                                            <span>${option.code}</span>
+                                            <small>${option.label}</small>
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </details>
+                            <button type="button" class="rayat-definitive-nav-cta glass-btn glass-btn--primary" onclick="setViewWithTracking('demo')">
+                                <span>${t('luxDefHeroSecondary')}</span>${arrowIcon}
+                            </button>
+                            <details class="rayat-definitive-mobile-menu">
+                                <summary aria-label="${t('luxMobileMenuLabel')}"><span></span><span></span></summary>
+                                <div>
+                                    ${navItems.map((item) => `<button type="button" onclick="${item.action}">${item.label}</button>`).join('')}
+                                    <div class="rayat-definitive-mobile-language" aria-label="${t('luxLanguageLabel')}">
+                                        ${languageOptions.map((option) => `
+                                            <button type="button" class="${option.lang === activeLanguage.lang ? 'is-active' : ''}" onclick="setLanguage('${option.lang}')">${option.code}</button>
+                                        `).join('')}
+                                    </div>
+                                    <button type="button" onclick="setViewWithTracking('demo')">${t('luxDefHeroSecondary')}</button>
+                                </div>
+                            </details>
+                        </div>
+                    </header>
+
+                    <section class="rayat-definitive-hero">
+                        <div class="rayat-definitive-hero-copy">
+                            <p class="rayat-definitive-eyebrow rayat-section-eyebrow">${t('luxDefHeroEyebrow')}</p>
+                            <h1 class="rayat-section-title">${heroTitleHtml}</h1>
+                            <p>${t('luxDefHeroText')}</p>
+                            <div class="rayat-definitive-actions">
+                                <button type="button" class="rayat-definitive-primary glass-btn glass-btn--primary" onclick="setViewWithTracking('demo')">${t('luxDefHeroPrimary')}${arrowIcon}</button>
+                                <button type="button" class="rayat-definitive-secondary glass-btn glass-btn--secondary" onclick="setViewWithTracking('demo')">${t('luxDefHeroSecondary')}</button>
+                            </div>
+                        </div>
+                        <div class="rayat-definitive-hero-visual">
+                            <span class="rayat-definitive-ring rayat-definitive-ring--one"></span>
+                            <span class="rayat-definitive-ring rayat-definitive-ring--two"></span>
+                            <img src="${HERO_LOGO_IMAGE}" alt="${t('luxTreeAlt')}" class="rayat-definitive-hero-logo">
+                            <div class="rayat-definitive-hero-status status-indicator status-indicator--${heroStatusState}" data-status="${heroStatusState}">
+                                <span class="status-dot" aria-hidden="true"></span>
+                                <span class="status-indicator__label">${heroStatusLabel}</span>
+                            </div>
+                            <strong>${t('luxDefHeroFarm')}</strong>
+                            <small>${t('luxDefUpdated')}</small>
+                        </div>
+                        <aside class="rayat-definitive-metric-panel">
+                            ${heroMetrics.map((metric) => `
+                                <article class="hero-metric-item">
+                                    ${renderRayatDefinitiveIcon(metric.icon)}
+                                    <span><small>${metric.label}</small><strong>${metric.value}</strong><em>${metric.status}</em></span>
+                                </article>
+                            `).join('')}
+                        </aside>
+                        <div class="rayat-definitive-feature-row">
+                            ${heroFeatures.map((feature) => `
+                                <span>${renderRayatDefinitiveIcon(feature.icon)}<small>${feature.label}</small></span>
+                            `).join('')}
+                        </div>
+                    </section>
+
+                    <section id="rayat-demo-live" class="rayat-definitive-map-card">
+                        <div class="rayat-definitive-map-copy">
+                            <p class="rayat-definitive-eyebrow rayat-section-eyebrow">${t('luxDefDemoEyebrow')}</p>
+                            <h2 class="rayat-section-title rayat-section-title--medium">${t('luxDefDemoTitle')}</h2>
+                            <p>${t('luxDefDemoText')}</p>
+                            <ul>
+                                ${demoBullets.map((item) => `<li>${renderRayatDefinitiveIcon(item.icon)}${item.label}</li>`).join('')}
+                            </ul>
+                            <button type="button" class="glass-btn glass-btn--secondary" onclick="setViewWithTracking('demo')">${t('luxDefViewDemo')}${arrowIcon}</button>
+                        </div>
+                        <div class="rayat-definitive-map-visual">
+                            <img class="rayat-definitive-map-image" src="${DEMO_MAP_IMAGE}" alt="${t('luxDefMapCardTitle')}">
+                            <span class="rayat-definitive-map-pin"><img src="${BRAND_LOGO_GREEN}" alt=""></span>
+                            <article class="rayat-definitive-map-popup">
+                                <strong>${t('luxDefMapCardTitle')}</strong>
+                                <small>${t('luxDefMapArea')} <i class="status-dot online"></i> ${t('luxDefOnline')}</small>
+                                <button type="button" class="glass-btn glass-btn--secondary" onclick="setViewWithTracking('demo')">${t('luxDefViewDetails')}${arrowIcon}</button>
+                            </article>
+                        </div>
+                    </section>
+
+                    <section id="rayat-how" class="rayat-definitive-how">
+                        <p class="rayat-definitive-eyebrow rayat-section-eyebrow">${t('luxDefHowEyebrow')}</p>
+                        <h2 class="rayat-section-title rayat-section-title--large">${t('luxDefHowTitle')}</h2>
+                        <div class="rayat-definitive-steps">
+                            ${howSteps.map((step, index) => `
+                                <article>
+                                    <span class="rayat-definitive-step-icon">${renderRayatDefinitiveIcon(step.icon)}</span>
+                                    <small>${String(index + 1).padStart(2, '0')}</small>
+                                    <strong>${step.title}</strong>
+                                    <span>${step.text}</span>
+                                </article>
+                            `).join('')}
+                        </div>
+                    </section>
+
+                    <section id="rayat-platform" class="rayat-definitive-platform">
+                        <div class="rayat-definitive-platform-copy">
+                            <p class="rayat-definitive-eyebrow rayat-section-eyebrow">${t('luxDefPlatformEyebrow')}</p>
+                            <h2 class="rayat-section-title rayat-section-title--large">${t('luxDefPlatformTitleFull')}</h2>
+                            <p>${t('luxDefPlatformText')}</p>
+                            <ul>${platformBullets.map((item) => `<li class="rayat-platform-feature-card">${renderRayatDefinitiveIcon(item.icon)}<span>${item.label}</span></li>`).join('')}</ul>
+                        </div>
+                        <article class="rayat-definitive-dashboard-mini">
+                            <aside class="rayat-platform-sidebar">
+                                <div class="rayat-platform-sidebar-brand">
+                                    <img src="${BRAND_LOGO_GREEN}" alt="${t('luxLogoAlt')}">
+                                    <strong>${t('luxBrandName')}</strong>
+                                </div>
+                                <nav>
+                                    ${[
+                                        t('luxDefDashMenuDashboard'),
+                                        t('luxDefDashMenuParcels'),
+                                        t('luxDefDashMenuMap'),
+                                        t('luxDefDashMenuSensors'),
+                                        t('luxDefDashMenuAlerts'),
+                                        t('luxDefDashMenuAnalytics'),
+                                        t('luxDefDashMenuReports')
+                                    ].map((item, index) => `<span class="${index === 0 ? 'is-active' : ''}">${renderRayatDefinitiveIcon(index === 2 ? 'map' : index === 4 ? 'bell' : index === 5 ? 'chart' : index === 6 ? 'list' : 'greenhouse')}${item}</span>`).join('')}
+                                </nav>
+                                <footer>
+                                    <i>A</i>
+                                    <span><strong>${t('luxDefPlatformFarmLabel')}</strong><small>${t('luxDefPlatformLocation')}</small></span>
+                                </footer>
+                            </aside>
+                            <div class="rayat-platform-dashboard-main">
+                                <header class="rayat-platform-dashboard-head">
+                                    <span><strong>${t('luxDefOverview')}</strong><small>${t('luxDefUpdated')}</small></span>
+                                    <em>${t('luxDefToday')}</em>
+                                </header>
+                                <div class="rayat-definitive-mini-kpis">
+                                    ${dashboardValues.map((item, index) => `<span>${renderRayatDefinitiveIcon(['temp', 'drop', 'bolt', 'sensor'][index] || 'leaf')}<small>${item.label}</small><strong>${item.value}</strong><em>${item.status}</em></span>`).join('')}
+                                </div>
+                                <section class="rayat-platform-chart-card">
+                                    <header><strong>${t('luxDefPlatformMainParams')}</strong><span>7G</span></header>
+                                    <div class="rayat-definitive-mini-chart">
+                                        <svg viewBox="0 0 620 220" preserveAspectRatio="none" aria-hidden="true">
+                                            <defs>
+                                                <linearGradient id="rayatPlatformChartArea" x1="0" y1="58" x2="0" y2="172" gradientUnits="userSpaceOnUse">
+                                                    <stop offset="0" stop-color="#2d6a4f" stop-opacity="0.16"></stop>
+                                                    <stop offset="1" stop-color="#2d6a4f" stop-opacity="0"></stop>
+                                                </linearGradient>
+                                            </defs>
+                                            <g class="rayat-chart-grid">
+                                                <path d="M58 34H594M58 72H594M58 110H594M58 148H594M58 186H594"></path>
+                                                <path d="M58 34V186M166 34V186M274 34V186M382 34V186M490 34V186M594 34V186"></path>
+                                            </g>
+                                            <g class="rayat-chart-axis">
+                                                <text x="24" y="38">90</text>
+                                                <text x="24" y="76">75</text>
+                                                <text x="24" y="114">60</text>
+                                                <text x="24" y="152">45</text>
+                                                <text x="24" y="190">30</text>
+                                                <text x="58" y="211">24 mag 06:00</text>
+                                                <text x="238" y="211">24 mag 12:00</text>
+                                                <text x="418" y="211">24 mag 18:00</text>
+                                                <text x="548" y="211">25 mag 00:00</text>
+                                            </g>
+                                            <path class="rayat-chart-area" d="M58 118 L88 102 L118 110 L148 88 L178 94 L208 82 L238 92 L268 76 L298 86 L328 72 L358 83 L388 68 L418 80 L448 70 L478 92 L508 76 L538 86 L568 62 L594 72 L594 186 L58 186 Z"></path>
+                                            <path class="rayat-chart-line rayat-chart-line--humidity" d="M58 118 L88 102 L118 110 L148 88 L178 94 L208 82 L238 92 L268 76 L298 86 L328 72 L358 83 L388 68 L418 80 L448 70 L478 92 L508 76 L538 86 L568 62 L594 72"></path>
+                                            <path class="rayat-chart-line rayat-chart-line--temperature" d="M58 138 L88 132 L118 124 L148 128 L178 116 L208 121 L238 108 L268 112 L298 102 L328 106 L358 96 L388 100 L418 88 L448 94 L478 84 L508 90 L538 82 L568 78 L594 86"></path>
+                                            <path class="rayat-chart-line rayat-chart-line--ec" d="M58 158 L88 148 L118 154 L148 143 L178 150 L208 139 L238 146 L268 134 L298 142 L328 132 L358 144 L388 136 L418 146 L448 134 L478 140 L508 130 L538 138 L568 126 L594 134"></path>
+                                            <g class="rayat-chart-points">
+                                                <circle cx="594" cy="72" r="4"></circle>
+                                                <circle cx="594" cy="86" r="4"></circle>
+                                                <circle cx="594" cy="134" r="4"></circle>
+                                            </g>
+                                        </svg>
+                                    </div>
+                                </section>
+                                <div class="rayat-platform-dashboard-bottom">
+                                    <section class="rayat-platform-map-card">
+                                        <header><strong>${t('luxDefPlatformMapTitle')}</strong></header>
+                                        <div class="rayat-platform-map-thumb">
+                                            <img src="${PLATFORM_MAP_IMAGE}" alt="${t('luxDefPlatformMapTitle')}">
+                                        </div>
+                                    </section>
+                                    <section class="rayat-platform-alert-card">
+                                        <header><strong>${t('luxDefPlatformRecentAlerts')}</strong></header>
+                                        ${platformAlerts.map((alert) => `
+                                            <div class="rayat-platform-alert-row rayat-platform-alert-row--${alert.tone}">
+                                                ${renderRayatDefinitiveIcon(alert.icon)}
+                                                <span><strong>${alert.title}</strong><small>${alert.meta}</small></span>
+                                            </div>
+                                        `).join('')}
+                                        <button type="button" onclick="setViewWithTracking('demo')">${t('luxDefPlatformViewAlerts')}${arrowIcon}</button>
+                                    </section>
+                                </div>
+                            </div>
+                        </article>
+                    </section>
+
+                    <section id="rayat-solutions" class="rayat-definitive-lower-grid">
+                        <div class="rayat-definitive-solutions">
+                            <p class="rayat-definitive-eyebrow rayat-section-eyebrow">${t('luxDefSolutionsEyebrow')}</p>
+                            <h2 class="rayat-section-title rayat-section-title--large">${t('luxDefSolutionsTitle')}</h2>
+                            <p class="rayat-definitive-solutions-copy">${t('luxDefSolutionsText')}</p>
                             <div>
-                                <h3 class="text-3xl font-black text-green-800 uppercase tracking-tighter mb-2">${t('mapTitle')}</h3>
-                                <p class="text-gray-600 font-medium">${t('mapSub')}</p>
+                                ${solutionCards.map((item) => `
+                                    <button type="button" onclick="setView('servizi')" class="rayat-definitive-crop-card rayat-definitive-crop-card--${item.modifier}">
+                                        <span><img src="${item.image}" alt="${item.label}"></span>
+                                        <strong>${item.label}</strong>
+                                        ${arrowIcon}
+                                    </button>
+                                `).join('')}
                             </div>
-                            <!-- Live Stats -->
-                            <div class="flex gap-4">
-                                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 text-center min-w-[120px]">
-                                    <div class="text-2xl font-black text-green-600">34</div>
-                                    <div class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">${t('statOnline')}</div>
+                        </div>
+                        <div class="rayat-definitive-mobile-card">
+                            <div>
+                                <p class="rayat-definitive-eyebrow rayat-section-eyebrow">${t('luxDefMobileEyebrow')}</p>
+                                <h2 class="rayat-section-title rayat-section-title--medium">${t('luxDefMobileTitle')}</h2>
+                                <p>${t('luxDefMobileText')}</p>
+                                <div class="rayat-definitive-store-row">
+                                    <button type="button" class="rayat-definitive-store-badge" onclick="setViewWithTracking('demo')" aria-label="App Store">
+                                        <img src="/assets/images/app-mobile/imagedf45.png" alt="App Store">
+                                    </button>
+                                    <button type="button" class="rayat-definitive-store-badge" onclick="setViewWithTracking('demo')" aria-label="Google Play">
+                                        <img src="/assets/images/app-mobile/imagegoogle-play.png" alt="Google Play">
+                                    </button>
                                 </div>
-                                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 text-center min-w-[120px]">
-                                    <div class="text-2xl font-black text-orange-600">>500</div>
-                                    <div class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">${t('statMa')}</div>
+                            </div>
+                            <div class="rayat-definitive-mobile-visual">
+                                <img src="/assets/images/app-mobile/mobile-transparent.png" alt="${t('luxDefMobileTitle')}">
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rayat-definitive-stat-strip">
+                        ${statCards.map((stat) => `
+                            <article>${renderRayatDefinitiveIcon(stat.icon)}<strong>${stat.value}</strong><span>${stat.label}</span><p>${stat.text}</p></article>
+                        `).join('')}
+                    </section>
+
+                    <footer id="rayat-footer" class="rayat-definitive-footer">
+                        <div class="rayat-definitive-footer-main">
+                            <div class="rayat-definitive-footer-brand">
+                                <div class="rayat-definitive-footer-lockup">
+                                    <img src="${BRAND_LOGO_GREEN}" alt="${t('luxLogoAlt')}">
+                                    <span><strong>${t('luxBrandName')}</strong><small>${t('luxBrandSubtitle')}</small></span>
                                 </div>
-                                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 text-center min-w-[120px]">
-                                    <div class="text-2xl font-black text-green-800">112</div>
-                                    <div class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">${t('statSouss')}</div>
+                                <p>${t('luxDefFooterText')}</p>
+                            </div>
+                            <nav class="rayat-definitive-footer-menu" aria-label="${t('luxMobileMenuLabel')}">
+                                ${footerColumns.map((column) => `
+                                    <button type="button" class="rayat-definitive-footer-col" onclick="${column.action}">
+                                        <strong>${column.title}</strong>
+                                        <i aria-hidden="true"></i>
+                                        <span>${column.text}</span>
+                                    </button>
+                                `).join('')}
+                            </nav>
+                        </div>
+                        <div class="rayat-definitive-footer-contact">
+                            <a href="${getWhatsappHref()}" target="_blank" rel="noopener" onclick="trackEvent('WhatsApp Click')" class="rayat-definitive-footer-contact-item">
+                                <span>${renderRayatDefinitiveIcon('whatsapp')}</span>
+                                <b>${t('luxDefFooterWhatsapp')}</b>
+                                <small>${t('luxDefFooterWhatsappNumber')}</small>
+                            </a>
+                            <a href="mailto:${t('luxDefFooterEmailAddress')}" class="rayat-definitive-footer-contact-item">
+                                <span>${renderRayatDefinitiveIcon('mail')}</span>
+                                <b>${t('luxDefFooterEmail')}</b>
+                                <small>${t('luxDefFooterEmailAddress')}</small>
+                            </a>
+                            <button type="button" onclick="setViewWithTracking('demo')" class="rayat-definitive-footer-contact-item">
+                                <span>${renderRayatDefinitiveIcon('calendar')}</span>
+                                <b>${t('luxDefFooterDemoRequest')}</b>
+                                <small>${t('luxDefFooterDemoRequestText')}</small>
+                            </button>
+                        </div>
+                        <div class="rayat-definitive-footer-bottom">
+                            <button type="button" onclick="setView('privacy')" class="rayat-definitive-footer-legal rayat-definitive-footer-legal--left">
+                                ${renderRayatDefinitiveIcon('lock')}
+                                <span>${t('luxDefPrivacy')}</span>
+                            </button>
+                            <div class="rayat-definitive-footer-signature">
+                                <img src="${FOOTER_GOLD_LOGO_IMAGE}" alt="${t('luxLogoAlt')}">
+                                <small>${t('luxDefFooterCopyright')}</small>
+                            </div>
+                            <button type="button" onclick="setView('privacy')" class="rayat-definitive-footer-legal rayat-definitive-footer-legal--right">
+                                ${renderRayatDefinitiveIcon('cookie')}
+                                <span>${t('luxDefCookie')}</span>
+                            </button>
+                        </div>
+                    </footer>
+                </main>
+            `;
+        }
+
+        function renderHomePage() {
+            return renderRayatDefinitiveHomePage();
+            const BRAND_LOGO_GREEN = '/assets/logo/logo-green.svg';
+            const arrowIcon = `
+                <svg class="rayat-luxury-button-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M4 10h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                    <path d="m11 5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+            `;
+            const playIcon = `
+                <svg class="rayat-luxury-button-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.3"></circle>
+                    <path d="M8.4 6.9 13 10l-4.6 3.1V6.9Z" fill="currentColor"></path>
+                </svg>
+            `;
+            const waterIcon = `
+                <svg class="rayat-luxury-card-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 3.5s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11Z" stroke="currentColor" stroke-width="1.5"></path>
+                    <path d="M9 15.2c.6 1.4 1.7 2.1 3.2 2.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                </svg>
+            `;
+            const temperatureIcon = `
+                <svg class="rayat-luxury-card-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M10 14.8V5.5a2 2 0 1 1 4 0v9.3a4 4 0 1 1-4 0Z" stroke="currentColor" stroke-width="1.5"></path>
+                    <path d="M12 8v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                </svg>
+            `;
+            const leafIcon = `
+                <svg class="rayat-luxury-card-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M19.5 4.5C11.8 4.8 6 8.7 6 14.2c0 3 2.1 5.3 5.2 5.3 5.5 0 8.3-6.4 8.3-15Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+                    <path d="M5 20c2.4-5.1 6.4-8.4 11-10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                </svg>
+            `;
+            const trendIcon = `
+                <svg class="rayat-luxury-card-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M5 7.5s7 7.6 7 12c0-4.4 7-12 7-12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M8 16.5c.8 1.6 2 2.5 4 2.5s3.2-.9 4-2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                </svg>
+            `;
+            const navLinks = [
+                { labelKey: 'luxNavProduct', action: "setView('servizi')" },
+                { labelKey: 'luxNavSolutions', action: "setView('servizi')" },
+                { labelKey: 'luxNavTechnology', action: "setView('servizi')" },
+                { labelKey: 'luxNavResources', action: "setView('contatti')" },
+                { labelKey: 'luxNavPricing', action: "setView('contatti')" },
+                { labelKey: 'luxNavAbout', action: "setView('chi-siamo')" }
+            ];
+            const languageOptions = [
+                { lang: 'it', shortKey: 'luxLangShortIt', labelKey: 'luxLangIt' },
+                { lang: 'en', shortKey: 'luxLangShortEn', labelKey: 'luxLangEn' },
+                { lang: 'fr', shortKey: 'luxLangShortFr', labelKey: 'luxLangFr' },
+                { lang: 'ar', shortKey: 'luxLangShortAr', labelKey: 'luxLangAr' },
+                { lang: 'zgh', shortKey: 'luxLangShortTz', labelKey: 'luxLangTz' }
+            ];
+            const languageLabelKeys = {
+                it: 'luxLangShortIt',
+                en: 'luxLangShortEn',
+                fr: 'luxLangShortFr',
+                ar: 'luxLangShortAr',
+                zgh: 'luxLangShortTz',
+                tz: 'luxLangShortTz',
+                ber: 'luxLangShortTz'
+            };
+            const metricCards = [
+                {
+                    key: 'humidity',
+                    icon: waterIcon,
+                    labelKey: 'luxMetricHumidityLabel',
+                    valueKey: 'luxMetricHumidityValue',
+                    statusKey: 'luxMetricHumidityStatus'
+                },
+                {
+                    key: 'temperature',
+                    icon: temperatureIcon,
+                    labelKey: 'luxMetricTemperatureLabel',
+                    valueKey: 'luxMetricTemperatureValue',
+                    statusKey: 'luxMetricTemperatureStatus'
+                },
+                {
+                    key: 'health',
+                    icon: leafIcon,
+                    labelKey: 'luxMetricCropHealthLabel',
+                    valueKey: 'luxMetricCropHealthValue',
+                    statusKey: 'luxMetricCropHealthStatus'
+                },
+                {
+                    key: 'water',
+                    icon: trendIcon,
+                    labelKey: 'luxMetricWaterLabel',
+                    valueKey: 'luxMetricWaterValue',
+                    statusKey: 'luxMetricWaterStatus'
+                }
+            ];
+            const dashboardIcon = `
+                <svg class="rayat-luxury-mini-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 5h6v6H4V5Zm10 0h6v6h-6V5ZM4 15h6v4H4v-4Zm10 0h6v4h-6v-4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+                </svg>
+            `;
+            const parcelIcon = `
+                <svg class="rayat-luxury-mini-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M5 5.5 12 3l7 2.5v13L12 21l-7-2.5v-13Z" stroke="currentColor" stroke-width="1.5"></path>
+                    <path d="M12 3v18M5 5.5l7 2.6 7-2.6" stroke="currentColor" stroke-width="1.5"></path>
+                </svg>
+            `;
+            const sensorIcon = `
+                <svg class="rayat-luxury-mini-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 4v5m0 6v5M4 12h5m6 0h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"></circle>
+                </svg>
+            `;
+            const irrigationIcon = `
+                <svg class="rayat-luxury-mini-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 3.5s5.5 6 5.5 10.3a5.5 5.5 0 1 1-11 0C6.5 9.5 12 3.5 12 3.5Z" stroke="currentColor" stroke-width="1.5"></path>
+                    <path d="M9.2 15.3c.6 1.2 1.6 1.8 3 1.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                </svg>
+            `;
+            const alertIcon = `
+                <svg class="rayat-luxury-mini-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 4.5 20 19H4L12 4.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+                    <path d="M12 9.5v4.2M12 16.8h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                </svg>
+            `;
+            const analyticsIcon = `
+                <svg class="rayat-luxury-mini-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 18 9 12.5l4 3.2L20 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M4 20h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                </svg>
+            `;
+            const reportIcon = `
+                <svg class="rayat-luxury-mini-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M7 4h7l3 3v13H7V4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+                    <path d="M14 4v4h4M9.5 12h5M9.5 15.5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                </svg>
+            `;
+            const settingsIcon = `
+                <svg class="rayat-luxury-mini-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"></circle>
+                    <path d="M12 4v2M12 18v2M4 12h2M18 12h2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M17.7 6.3l-1.4 1.4M7.7 16.3l-1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                </svg>
+            `;
+            const exportIcon = `
+                <svg class="rayat-luxury-small-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M10 3v9m0 0 3.5-3.5M10 12 6.5 8.5M4 15.5h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+            `;
+            const calendarIcon = `
+                <svg class="rayat-luxury-small-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M5.5 3.5v2M14.5 3.5v2M4 7h12M5 5h10a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
+                </svg>
+            `;
+            const rowArrowIcon = `
+                <svg class="rayat-luxury-row-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="m7 4 6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+            `;
+            const dashboardNavItems = [
+                { tab: 'overview', labelKey: 'luxDashboardNavOverview', icon: dashboardIcon },
+                { tab: 'parcels', labelKey: 'luxDashboardNavParcels', icon: parcelIcon },
+                { tab: 'sensors', labelKey: 'luxDashboardNavSensors', icon: sensorIcon },
+                { tab: 'irrigation', labelKey: 'luxDashboardNavIrrigation', icon: irrigationIcon },
+                { tab: 'alerts', labelKey: 'luxDashboardNavAlerts', icon: alertIcon },
+                { tab: 'analytics', labelKey: 'luxDashboardNavAnalytics', icon: analyticsIcon },
+                { tab: 'reports', labelKey: 'luxDashboardNavReports', icon: reportIcon },
+                { tab: 'settings', labelKey: 'luxDashboardNavSettings', icon: settingsIcon }
+            ];
+            const kpiCards = [
+                { key: 'water', icon: waterIcon, labelKey: 'luxKpiWaterLabel', valueKey: 'luxKpiWaterValue', statusKey: 'luxKpiWaterStatus', spark: 'M2 31 C7 28 12 28 17 29 C22 30 25 27 30 28 C35 29 38 25 43 27 C48 29 51 20 56 18' },
+                { key: 'health', icon: leafIcon, labelKey: 'luxKpiHealthLabel', valueKey: 'luxKpiHealthValue', statusKey: 'luxKpiHealthStatus', spark: 'M2 28 C8 25 13 24 18 26 C23 28 27 30 32 28 C38 25 43 27 48 24 C52 22 55 17 58 16' },
+                { key: 'irrigation', icon: irrigationIcon, labelKey: 'luxKpiIrrigationLabel', valueKey: 'luxKpiIrrigationValue', statusKey: 'luxKpiIrrigationStatus', spark: 'M2 30 C8 26 14 25 20 27 C26 29 31 24 36 25 C43 26 47 22 52 17 C55 14 57 11 58 8' },
+                { key: 'temperature', icon: temperatureIcon, labelKey: 'luxKpiTempLabel', valueKey: 'luxKpiTempValue', statusKey: 'luxKpiTempStatus', spark: 'M2 24 C7 21 13 20 19 23 C25 26 30 24 36 21 C42 18 47 26 52 22 C55 20 57 18 58 16' }
+            ];
+            const recommendations = [
+                { icon: waterIcon, titleKey: 'luxAiRow1Title', textKey: 'luxAiRow1Text' },
+                { icon: alertIcon, titleKey: 'luxAiRow2Title', textKey: 'luxAiRow2Text' },
+                { icon: leafIcon, titleKey: 'luxAiRow3Title', textKey: 'luxAiRow3Text' }
+            ];
+            const editorialPhoto = 'https://images.unsplash.com/photo-1764399125007-ae859306abe7?auto=format&fit=crop&w=1350&q=82';
+            const editorialBenefits = [
+                { icon: sensorIcon, titleKey: 'luxEditorialLiveTitle', textKey: 'luxEditorialLiveText' },
+                { icon: dashboardIcon, titleKey: 'luxEditorialAiTitle', textKey: 'luxEditorialAiText' },
+                { icon: irrigationIcon, titleKey: 'luxEditorialWaterTitle', textKey: 'luxEditorialWaterText' },
+                { icon: alertIcon, titleKey: 'luxEditorialAlertsTitle', textKey: 'luxEditorialAlertsText' }
+            ];
+            const editorialStats = [
+                { icon: leafIcon, valueKey: 'luxEditorialKpiWaterValue', textKey: 'luxEditorialKpiWaterText' },
+                { icon: analyticsIcon, valueKey: 'luxEditorialKpiYieldValue', textKey: 'luxEditorialKpiYieldText' },
+                { icon: alertIcon, valueKey: 'luxEditorialKpiMonitoringValue', textKey: 'luxEditorialKpiMonitoringText' },
+                { icon: dashboardIcon, valueKey: 'luxEditorialKpiFarmersValue', textKey: 'luxEditorialKpiFarmersText' }
+            ];
+            const editorialPreviewMetrics = [
+                { labelKey: 'luxMetricHumidityLabel', valueKey: 'luxMetricHumidityValue', statusKey: 'luxMetricHumidityStatus' },
+                { labelKey: 'luxMetricTemperatureLabel', valueKey: 'luxMetricTemperatureValue', statusKey: 'luxMetricTemperatureStatus' },
+                { labelKey: 'luxPhoneEcLabel', valueKey: 'luxPhoneEcValue', statusKey: 'luxMetricCropHealthStatus' }
+            ];
+            const luxuryLiveSensors = getLuxuryDashboardSoilReadings();
+            const luxuryLiveSensorIconKind = {
+                moisture: 'water',
+                temperature: 'temperature',
+                ec: 'sensor',
+                pH: 'leaf',
+                nitrogen: 'leaf',
+                phosphorus: 'leaf',
+                potassium: 'leaf'
+            };
+            const luxuryLiveSensorLabelKey = {
+                moisture: 'luxLiveHumidityLabel'
+            };
+            const luxuryLiveRecommendations = [
+                {
+                    icon: renderLuxuryDashboardIcon('water'),
+                    titleKey: 'luxAiRow1Title',
+                    priorityKey: 'luxLivePriorityMedium',
+                    level: 'medium',
+                    outcomeKey: 'luxLiveIrrigationOutcome',
+                    factKeys: ['luxLiveIrrigationFactOne', 'luxLiveIrrigationFactTwo'],
+                    ctaKey: 'luxLiveIrrigationCta'
+                },
+                {
+                    icon: renderLuxuryDashboardIcon('alert'),
+                    titleKey: 'luxAiRow2Title',
+                    priorityKey: 'luxLivePriorityHigh',
+                    level: 'high',
+                    outcomeKey: 'luxLiveRiskOutcome',
+                    factKeys: ['luxLiveRiskFactOne', 'luxLiveRiskFactTwo'],
+                    ctaKey: 'luxLiveRiskCta'
+                },
+                {
+                    icon: renderLuxuryDashboardIcon('leaf'),
+                    titleKey: 'luxAiRow3Title',
+                    priorityKey: 'luxLivePriorityMedium',
+                    level: 'medium',
+                    outcomeKey: 'luxLiveFertilizationOutcome',
+                    factKeys: ['luxLiveFertilizationFactOne', 'luxLiveFertilizationFactTwo'],
+                    ctaKey: 'luxLiveFertilizationCta'
+                },
+                {
+                    icon: `
+                        <svg class="rayat-luxury-home-dashboard-tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M12 3.4 19 6v5.4c0 4.3-2.8 7.7-7 9.3-4.2-1.6-7-5-7-9.3V6l7-2.6Z" stroke="currentColor" stroke-width="1.5"></path>
+                            <path d="m9.1 12 2 2 4-4.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    `,
+                    titleKey: 'luxLiveHealthTitle',
+                    priorityKey: 'luxLivePriorityLow',
+                    level: 'low',
+                    outcomeKey: 'luxLiveHealthOutcome',
+                    factKeys: ['luxLiveHealthFactOne', 'luxLiveHealthFactTwo'],
+                    ctaKey: 'luxLiveHealthCta'
+                }
+            ];
+            const luxuryLiveApplications = [
+                {
+                    labelKey: 'luxLiveAppGreenhouses',
+                    icon: '<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M5 42h38M8 42V22c0-9.4 7.1-17 16-17s16 7.6 16 17v20M8 22h32M24 5v37M16 42V29h16v13M13 14.5c6.8 2.1 15.2 2.1 22 0" /></svg>'
+                },
+                {
+                    labelKey: 'luxLiveAppBananas',
+                    icon: '<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M34.6 10.4c1.2.2 2.5-.2 3.5-1.3" /><path d="M34.3 10.3c1 1.8 1.2 3.5.7 5" /><path d="M35 15.2c-1 10.4-8.4 18.8-18.6 20.6-3.7.7-6.8-.5-8.4-3.1-.6-1-.9-2-.9-3.2 4.1 1 8.5-.1 12.6-3.1 5.1-3.7 8.1-8.1 9.3-12.8 2.1-.1 4.2.4 6 1.6Z" /><path d="M8 29.5c5.5 3.2 12.3 1.2 18.1-4.4 3-2.9 5.2-6.3 6.2-10.2" /></svg>'
+                },
+                {
+                    labelKey: 'luxLiveAppMelons',
+                    icon: '<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M25 11c0-4 2-6.6 5.7-7.5M25 10c3.8-4.1 8.1-3.9 10.5-1.5-3.4 3.3-7 3.8-10.5 1.5" /><path d="M24 11c10.3 0 17 6.4 17 15.5S34.3 43 24 43 7 35.6 7 26.5 13.7 11 24 11Z" /><path d="M20.5 11.5c-4.3 7.2-4.3 23.5 0 30.5M27.5 11.5c4.3 7.2 4.3 23.5 0 30.5M24 11.5V42" /></svg>'
+                },
+                {
+                    labelKey: 'luxLiveAppTomatoes',
+                    icon: '<svg viewBox="0 0 36 36" fill="none" aria-hidden="true"><path d="M18 11c8.5 0 13 4.9 12 11.5C29 29 23.5 32 18 32S7 29 6 22.5C5 15.9 9.5 11 18 11Z" /><path d="m18 12-5.5-3 4.2.5L18 5l1.3 4.5 4.2-.5-5.5 3Z" /></svg>'
+                },
+                {
+                    labelKey: 'luxLiveAppIrrigation',
+                    icon: '<svg viewBox="0 0 36 36" fill="none" aria-hidden="true"><path d="M18 5s8 9 8 15a8 8 0 1 1-16 0c0-6 8-15 8-15Z" /><path d="M7 29 4 32M29 29l3 3M18 31v4" /></svg>'
+                },
+                {
+                    labelKey: 'luxLiveAppCooperatives',
+                    icon: '<svg viewBox="0 0 36 36" fill="none" aria-hidden="true"><circle cx="13" cy="12" r="5" /><circle cx="24" cy="13" r="4.5" /><path d="M4 31c0-6 3.5-10 9-10s9 4 9 10M21 23c5.7-.7 10 2.5 10 8" /></svg>'
+                }
+            ];
+            const finalPhoneReadings = Object.fromEntries(luxuryLiveSensors.map((reading) => [reading.key, reading]));
+            const finalResultStats = [
+                {
+                    icon: leafIcon,
+                    valueKey: 'luxEditorialKpiWaterValue',
+                    labelKey: 'luxEditorialKpiWaterText'
+                },
+                {
+                    icon: analyticsIcon,
+                    valueKey: 'luxEditorialKpiYieldValue',
+                    labelKey: 'luxEditorialKpiYieldText'
+                },
+                {
+                    icon: `
+                        <svg class="rayat-luxury-card-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.5"></circle>
+                            <path d="M12 7v5l3.4 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                        </svg>
+                    `,
+                    valueKey: 'luxEditorialKpiMonitoringValue',
+                    labelKey: 'luxEditorialKpiMonitoringText'
+                },
+                {
+                    icon: `
+                        <svg class="rayat-luxury-card-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <circle cx="9" cy="9" r="3" stroke="currentColor" stroke-width="1.5"></circle>
+                            <circle cx="16" cy="10" r="2.6" stroke="currentColor" stroke-width="1.5"></circle>
+                            <path d="M3.8 19c.4-3.3 2.4-5.2 5.2-5.2s4.8 1.9 5.2 5.2M14 14.5c3-.6 5.5 1.1 6 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                        </svg>
+                    `,
+                    valueKey: 'luxEditorialKpiFarmersValue',
+                    labelKey: 'luxEditorialKpiFarmersText'
+                },
+                {
+                    icon: `
+                        <svg class="rayat-luxury-card-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M12 3.4 19 6v5.4c0 4.3-2.8 7.7-7 9.3-4.2-1.6-7-5-7-9.3V6l7-2.6Z" stroke="currentColor" stroke-width="1.5"></path>
+                            <path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                        </svg>
+                    `,
+                    valueKey: 'luxFinalSatisfactionValue',
+                    labelKey: 'luxFinalSatisfactionText'
+                }
+            ];
+            const finalFooterColumns = [
+                {
+                    titleKey: 'luxFinalFooterProduct',
+                    links: [
+                        { labelKey: 'luxFinalFooterDashboard', action: "setViewWithTracking('demo')" },
+                        { labelKey: 'luxFinalFooterSensors', action: "setViewWithTracking('demo')" },
+                        { labelKey: 'luxFinalFooterIrrigation', action: "setView('servizi')" },
+                        { labelKey: 'luxFinalFooterAnalytics', action: "setViewWithTracking('demo')" },
+                        { labelKey: 'luxFinalFooterAdvisor', action: "setView('servizi')" }
+                    ]
+                },
+                {
+                    titleKey: 'luxFinalFooterSolutions',
+                    links: [
+                        { labelKey: 'luxFinalFooterOpenFields', action: "setView('servizi')" },
+                        { labelKey: 'luxFinalFooterGreenhouses', action: "setView('servizi')" },
+                        { labelKey: 'luxFinalFooterOrchards', action: "setView('servizi')" },
+                        { labelKey: 'luxFinalFooterSmartIrrigation', action: "setView('servizi')" },
+                        { labelKey: 'luxFinalFooterCooperatives', action: "setView('servizi')" }
+                    ]
+                },
+                {
+                    titleKey: 'luxFinalFooterResources',
+                    links: [
+                        { labelKey: 'luxFinalFooterDocumentation', action: "setView('contatti')" },
+                        { labelKey: 'luxFinalFooterBlog', action: "setView('contatti')" },
+                        { labelKey: 'luxFinalFooterGuides', action: "setView('servizi')" },
+                        { labelKey: 'luxFinalFooterSupport', action: "setView('contatti')" },
+                        { labelKey: 'luxFinalFooterApi', action: "setView('contatti')" }
+                    ]
+                },
+                {
+                    titleKey: 'luxFinalFooterCompany',
+                    links: [
+                        { labelKey: 'luxFinalFooterAbout', action: "setView('chi-siamo')" },
+                        { labelKey: 'luxFinalFooterCareer', action: "setView('contatti')" },
+                        { labelKey: 'luxFinalFooterWork', action: "setView('contatti')" },
+                        { labelKey: 'luxFinalFooterDemo', action: "setViewWithTracking('demo')" }
+                    ]
+                }
+            ];
+
+            setTimeout(() => {
+                if (typeof window === 'undefined' || typeof document === 'undefined') {
+                    return;
+                }
+
+                const revealItems = Array.from(document.querySelectorAll('.rayat-luxury-scroll-reveal'));
+                if (!revealItems.length) {
+                    return;
+                }
+
+                if (window.__rayatLuxuryRevealObserver) {
+                    window.__rayatLuxuryRevealObserver.disconnect();
+                }
+
+                revealItems.forEach((item, index) => {
+                    item.style.setProperty('--rayat-luxury-stagger', `${Math.min(index, 12) * 70}ms`);
+                });
+
+                if (!('IntersectionObserver' in window)) {
+                    revealItems.forEach((item) => item.classList.add('rayat-luxury-scroll-reveal--visible'));
+                    return;
+                }
+
+                window.__rayatLuxuryRevealObserver = new IntersectionObserver((entries, observer) => {
+                    entries.forEach((entry) => {
+                        if (!entry.isIntersecting) {
+                            return;
+                        }
+
+                        entry.target.classList.add('rayat-luxury-scroll-reveal--visible');
+                        observer.unobserve(entry.target);
+                    });
+                }, { rootMargin: '0px 0px -8% 0px', threshold: 0.16 });
+
+                revealItems.forEach((item) => window.__rayatLuxuryRevealObserver.observe(item));
+            }, 0);
+
+            return `
+                <main class="rayat-luxury-home">
+                    <header class="rayat-luxury-navbar">
+                        <div class="rayat-luxury-navbar-inner">
+                            <button type="button" onclick="setView('home')" class="rayat-luxury-brand" aria-label="${t('luxBrandName')}">
+                                <img src="${BRAND_LOGO_GREEN}" alt="${t('luxLogoAlt')}" class="rayat-luxury-brand-logo">
+                                <span class="rayat-luxury-brand-copy">
+                                    <span class="rayat-luxury-brand-name">${t('luxBrandName')}</span>
+                                    <span class="rayat-luxury-brand-subtitle">${t('luxBrandSubtitle')}</span>
+                                </span>
+                            </button>
+
+                            <nav class="rayat-luxury-nav" aria-label="${t('luxMobileMenuLabel')}">
+                                ${navLinks.map((link) => `
+                                    <button type="button" onclick="${link.action}" class="rayat-luxury-nav-link">
+                                        ${t(link.labelKey)}
+                                    </button>
+                                `).join('')}
+                            </nav>
+
+                            <div class="rayat-luxury-navbar-actions">
+                                <details class="rayat-luxury-language">
+                                    <summary class="rayat-luxury-language-trigger" aria-label="${t('luxLanguageLabel')}">
+                                        <span>${t(languageLabelKeys[currentLang] || 'luxLangShortFr')}</span>
+                                        <svg class="rayat-luxury-language-chevron" viewBox="0 0 12 8" fill="none" aria-hidden="true">
+                                            <path d="M1 1.5 6 6.5l5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path>
+                                        </svg>
+                                    </summary>
+                                    <div class="rayat-luxury-language-menu">
+                                        ${languageOptions.map((option) => `
+                                            <button type="button" onclick="setLanguage('${option.lang}')" class="rayat-luxury-language-option ${currentLang === option.lang ? 'rayat-luxury-language-option--active' : ''}">
+                                                <span class="rayat-luxury-language-code">${t(option.shortKey)}</span>
+                                                <span class="rayat-luxury-language-name">${t(option.labelKey)}</span>
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                </details>
+
+                                <button type="button" onclick="setViewWithTracking('demo')" class="rayat-luxury-demo-button">
+                                    <span>${t('luxCtaDemo')}</span>
+                                    ${arrowIcon}
+                                </button>
+
+                                <details class="rayat-luxury-mobile-menu">
+                                    <summary class="rayat-luxury-mobile-trigger" aria-label="${t('luxMobileMenuLabel')}">
+                                        <span class="rayat-luxury-mobile-line"></span>
+                                        <span class="rayat-luxury-mobile-line"></span>
+                                    </summary>
+                                    <div class="rayat-luxury-mobile-panel">
+                                        ${navLinks.map((link) => `
+                                            <button type="button" onclick="${link.action}" class="rayat-luxury-mobile-link">
+                                                ${t(link.labelKey)}
+                                            </button>
+                                        `).join('')}
+                                        <button type="button" onclick="setViewWithTracking('demo')" class="rayat-luxury-mobile-demo-button">
+                                            <span>${t('luxCtaDemo')}</span>
+                                            ${arrowIcon}
+                                        </button>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </header>
+
+                    <section class="rayat-luxury-hero">
+                        <div class="rayat-luxury-hero-inner">
+                            <div class="rayat-luxury-hero-copy rayat-luxury-reveal">
+                                <p class="rayat-luxury-eyebrow">${t('luxHeroEyebrow')}</p>
+                                <h1 class="rayat-luxury-title">
+                                    <span>${t('luxHeroTitleLine1')}</span>
+                                    <span>${t('luxHeroTitleLine2')}</span>
+                                    <span class="rayat-luxury-title-accent">${t('luxHeroTitleAccent')}</span>
+                                </h1>
+                                <p class="rayat-luxury-subtitle">${t('luxHeroBody')}</p>
+                                <div class="rayat-luxury-hero-actions">
+                                    <button type="button" onclick="setViewWithTracking('demo')" class="rayat-luxury-primary-button">
+                                        <span>${t('luxHeroPrimaryCta')}</span>
+                                        ${arrowIcon}
+                                    </button>
+                                    <button type="button" onclick="setView('servizi')" class="rayat-luxury-secondary-button">
+                                        <span>${t('luxHeroSecondaryCta')}</span>
+                                        ${playIcon}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="rayat-luxury-hero-visual rayat-luxury-reveal">
+                                <div class="rayat-luxury-visual-ring rayat-luxury-visual-ring--outer"></div>
+                                <div class="rayat-luxury-visual-ring rayat-luxury-visual-ring--inner"></div>
+                                <span class="rayat-luxury-orbit-dot rayat-luxury-orbit-dot--one"></span>
+                                <span class="rayat-luxury-orbit-dot rayat-luxury-orbit-dot--two"></span>
+                                <span class="rayat-luxury-orbit-dot rayat-luxury-orbit-dot--three"></span>
+                                <span class="rayat-luxury-orbit-dot rayat-luxury-orbit-dot--four"></span>
+                                <img src="${BRAND_LOGO_GREEN}" alt="${t('luxTreeAlt')}" class="rayat-luxury-tree">
+                                <div class="rayat-luxury-floating-cards">
+                                    ${metricCards.map((card) => `
+                                        <article class="rayat-luxury-floating-card rayat-luxury-floating-card--${card.key}">
+                                            <div class="rayat-luxury-card-icon-shell">
+                                                ${card.icon}
+                                            </div>
+                                            <div class="rayat-luxury-card-copy">
+                                                <p class="rayat-luxury-card-label">${t(card.labelKey)}</p>
+                                                <strong class="rayat-luxury-card-value">${t(card.valueKey)}</strong>
+                                                <span class="rayat-luxury-card-status">${t(card.statusKey)}</span>
+                                            </div>
+                                        </article>
+                                    `).join('')}
                                 </div>
                             </div>
                         </div>
+                    </section>
 
-                        <div class="bg-white p-2 rounded-[2.5rem] shadow-2xl overflow-hidden border-4 border-white rayat-map-shell rayat-home-map-card">
-                            <div class="rayat-home-map-header">
-                                <div class="rayat-home-map-badge">
-                                    📍 ${t('mapFocusArea')}: Souss-Massa
+                    <section class="rayat-luxury-home-dashboard-section">
+                        <div class="rayat-luxury-home-dashboard-shell rayat-luxury-scroll-reveal">
+                            <aside class="rayat-luxury-home-dashboard-sidebar">
+                                <div class="rayat-luxury-home-dashboard-sidebar-brand">
+                                    <img src="${BRAND_LOGO_GREEN}" alt="${t('luxLogoAlt')}" class="rayat-luxury-home-dashboard-sidebar-logo">
+                                    <div class="rayat-luxury-home-dashboard-sidebar-brand-copy">
+                                        <strong>${t('luxDashboardSidebarTitle')}</strong>
+                                        <span>${t('luxDashboardSidebarSubtitle')}</span>
+                                    </div>
+                                </div>
+                                <nav class="rayat-luxury-home-dashboard-nav">
+                                    ${dashboardNavItems.map((item) => `
+                                        <button
+                                            type="button"
+                                            data-luxury-tab="${item.tab}"
+                                            onclick="setLuxuryDashboardTab('${item.tab}')"
+                                            class="rayat-luxury-home-dashboard-nav-item ${currentLuxuryDashboardTab === item.tab ? 'is-active rayat-luxury-home-dashboard-nav-item--active' : ''}"
+                                        >
+                                            ${item.icon}
+                                            <span>${t(item.labelKey)}</span>
+                                        </button>
+                                    `).join('')}
+                                </nav>
+                                <div class="rayat-luxury-home-dashboard-profile">
+                                    <span class="rayat-luxury-home-dashboard-profile-avatar">${t('luxDashboardProfileInitials')}</span>
+                                    <span class="rayat-luxury-home-dashboard-profile-copy">
+                                        <strong>${t('luxDashboardProfileName')}</strong>
+                                        <span>${t('luxDashboardProfileRole')}</span>
+                                    </span>
+                                </div>
+                            </aside>
+
+                            <div class="rayat-luxury-home-dashboard-main">
+                                <div id="rayat-luxury-home-dashboard-content" class="rayat-luxury-home-dashboard-content">
+                                    ${renderLuxuryDashboardTabContent(currentLuxuryDashboardTab)}
                                 </div>
                             </div>
 
-                            <div class="rayat-home-map-layout">
-                                <!-- Legend -->
-                                <div class="bg-white/90 backdrop-blur-md p-6 rounded-3xl shadow-2xl border border-white/50 space-y-4 rayat-home-map-legend">
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-4 h-4 marker-online shadow-none"></div>
-                                        <span class="text-xs font-black text-gray-700 uppercase tracking-widest">${t('mapLegendOnline')}</span>
+                            <aside class="rayat-luxury-home-dashboard-side">
+                                <div class="rayat-luxury-mobile-card rayat-luxury-scroll-reveal">
+                                    <div class="rayat-luxury-mobile-card-copy">
+                                        <h3>${t('luxMobileCardTitle')}</h3>
+                                        <p>${t('luxMobileCardText')}</p>
+                                        <div class="rayat-luxury-store-badges">
+                                            <span>${t('luxMobileAppStore')}</span>
+                                            <span>${t('luxMobileGooglePlay')}</span>
+                                        </div>
                                     </div>
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-4 h-4 bg-gray-300 border border-white rounded-full"></div>
-                                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">${t('mapLegendOffline')}</span>
+                                    <div class="rayat-luxury-phone">
+                                        <div class="rayat-luxury-phone-speaker"></div>
+                                        <div class="rayat-luxury-phone-header">
+                                            <span>${t('luxPhoneParcel')}</span>
+                                        </div>
+                                        <div class="rayat-luxury-phone-gauge">
+                                            <span>${t('luxPhoneHumidityLabel')}</span>
+                                            <strong>${t('luxMetricHumidityValue')}</strong>
+                                            <em>${t('luxMetricHumidityStatus')}</em>
+                                        </div>
+                                        <div class="rayat-luxury-phone-grid">
+                                            <span><small>${t('luxPhoneTempLabel')}</small><strong>${t('luxPhoneTempValue')}</strong></span>
+                                            <span><small>${t('luxPhoneEcLabel')}</small><strong>${t('luxPhoneEcValue')}</strong></span>
+                                            <span><small>${t('luxPhonePhLabel')}</small><strong>${t('luxPhonePhValue')}</strong></span>
+                                            <span><small>${t('luxPhoneAirHumidityLabel')}</small><strong>${t('luxPhoneAirHumidityValue')}</strong></span>
+                                        </div>
+                                        <div class="rayat-luxury-phone-tabs">
+                                            <span>${t('luxPhoneHome')}</span>
+                                            <span>${t('luxPhonePlots')}</span>
+                                            <span>${t('luxPhoneAlerts')}</span>
+                                            <span>${t('luxPhoneProfile')}</span>
+                                        </div>
                                     </div>
-                                    <div class="h-[1px] bg-gray-200 my-2"></div>
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-5 h-5 bg-green-100 border-2 border-green-300 rounded-lg"></div>
-                                        <span class="text-[10px] font-black text-green-700 uppercase tracking-widest">${t('mapFocusArea')}: Souss-Massa</span>
+                                </div>
+                            </aside>
+                        </div>
+
+                        <section class="rayat-luxury-editorial-section rayat-luxury-scroll-reveal" aria-label="${t('luxEditorialEyebrow')}">
+                            <div class="rayat-luxury-editorial-layout">
+                                <div class="rayat-luxury-editorial-copy">
+                                    <p class="rayat-luxury-editorial-eyebrow">
+                                        ${t('luxEditorialEyebrow')}
+                                        <span aria-hidden="true"></span>
+                                    </p>
+                                    <h2 class="rayat-luxury-editorial-title">${t('luxEditorialTitle')}</h2>
+                                    <p class="rayat-luxury-editorial-text">${t('luxEditorialText')}</p>
+
+                                    <div class="rayat-luxury-editorial-benefits">
+                                        ${editorialBenefits.map((benefit) => `
+                                            <article class="rayat-luxury-editorial-benefit">
+                                                <span class="rayat-luxury-editorial-benefit-icon">${benefit.icon}</span>
+                                                <span class="rayat-luxury-editorial-benefit-copy">
+                                                    <strong>${t(benefit.titleKey)}</strong>
+                                                    <span>${t(benefit.textKey)}</span>
+                                                </span>
+                                            </article>
+                                        `).join('')}
+                                    </div>
+
+                                    <div class="rayat-luxury-editorial-actions">
+                                        <button type="button" onclick="setView('servizi')" class="rayat-luxury-editorial-primary">
+                                            <span>${t('luxEditorialPrimaryCta')}</span>
+                                            ${arrowIcon}
+                                        </button>
+                                        <button type="button" onclick="setViewWithTracking('demo')" class="rayat-luxury-editorial-secondary">
+                                            <span>${t('luxEditorialSecondaryCta')}</span>
+                                            ${playIcon}
+                                        </button>
                                     </div>
                                 </div>
 
-                                <div class="rayat-home-map-canvas">
-                                    <div id="home-map" style="height: 600px; width: 100%; z-index: 10;" class="rounded-[2rem]"></div>
+                                <div class="rayat-luxury-editorial-visual">
+                                    <img class="rayat-luxury-editorial-photo" src="${editorialPhoto}" alt="${t('luxEditorialPhotoAlt')}" loading="lazy">
+
+                                    <div class="rayat-luxury-editorial-preview">
+                                        <aside class="rayat-luxury-editorial-preview-nav">
+                                            <span class="rayat-luxury-editorial-preview-brand">
+                                                <img src="${BRAND_LOGO_GREEN}" alt="">
+                                                <span><strong>${t('luxBrandName')}</strong><small>${t('luxBrandSubtitle')}</small></span>
+                                            </span>
+                                            ${dashboardNavItems.slice(0, 6).map((item, index) => `
+                                                <span class="rayat-luxury-editorial-preview-link ${index === 5 ? 'is-active' : ''}">
+                                                    ${item.icon}
+                                                    ${t(item.labelKey)}
+                                                </span>
+                                            `).join('')}
+                                        </aside>
+                                        <div class="rayat-luxury-editorial-preview-main">
+                                            <header class="rayat-luxury-editorial-preview-header">
+                                                <span>
+                                                    <strong>${t('luxDashboardNavAnalytics')}</strong>
+                                                    <small>${t('luxDashboardAnalyticsSubtitle')}</small>
+                                                </span>
+                                                <span class="rayat-luxury-editorial-preview-period">
+                                                    <small>${t('luxDashboardPeriod24h')}</small>
+                                                    <strong>${t('luxDashboardPeriod7d')}</strong>
+                                                    <small>${t('luxDashboardPeriod30d')}</small>
+                                                </span>
+                                            </header>
+                                            <div class="rayat-luxury-editorial-preview-metrics">
+                                                ${editorialPreviewMetrics.map((metric) => `
+                                                    <span>
+                                                        <small>${t(metric.labelKey)}</small>
+                                                        <strong>${t(metric.valueKey)}</strong>
+                                                        <em>${t(metric.statusKey)}</em>
+                                                    </span>
+                                                `).join('')}
+                                            </div>
+                                            <article class="rayat-luxury-editorial-preview-chart">
+                                                <header>
+                                                    <span>${t('luxPhonePhLabel')}</span>
+                                                    <strong>${t('luxPhonePhValue')}</strong>
+                                                </header>
+                                                <svg viewBox="0 0 420 100" preserveAspectRatio="none" aria-hidden="true">
+                                                    <path class="rayat-luxury-editorial-grid" d="M0 24H420M0 55H420M0 86H420"></path>
+                                                    <path class="rayat-luxury-editorial-graph" d="M0 67 L12 73 L23 58 L34 69 L46 41 L58 62 L70 48 L84 67 L97 53 L110 61 L122 44 L136 70 L148 58 L159 63 L171 48 L184 59 L195 54 L208 66 L220 42 L233 57 L245 51 L257 65 L270 46 L283 53 L295 49 L307 68 L319 52 L331 39 L343 58 L356 51 L368 62 L380 45 L392 55 L405 47 L420 52"></path>
+                                                </svg>
+                                            </article>
+                                        </div>
+                                    </div>
+
+                                    <div class="rayat-luxury-editorial-phone">
+                                        <span class="rayat-luxury-editorial-phone-speaker"></span>
+                                        <strong>${t('luxPhoneParcel')}</strong>
+                                        <small>${t('luxPhoneHumidityLabel')}</small>
+                                        <span class="rayat-luxury-editorial-phone-gauge"><b>${t('luxMetricHumidityValue')}</b></span>
+                                        <em>${t('luxMetricHumidityStatus')}</em>
+                                        <div class="rayat-luxury-editorial-phone-readings">
+                                            <span><small>${t('luxPhoneTempLabel')}</small><strong>${t('luxPhoneTempValue')}</strong></span>
+                                            <span><small>${t('luxPhoneEcLabel')}</small><strong>${t('luxPhoneEcValue')}</strong></span>
+                                            <span><small>${t('luxPhonePhLabel')}</small><strong>${t('luxPhonePhValue')}</strong></span>
+                                            <span><small>${t('luxPhoneAirHumidityLabel')}</small><strong>${t('luxPhoneAirHumidityValue')}</strong></span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+
+                            <div class="rayat-luxury-editorial-stats">
+                                ${editorialStats.map((stat) => `
+                                    <article class="rayat-luxury-editorial-stat">
+                                        <span class="rayat-luxury-editorial-stat-icon">${stat.icon}</span>
+                                        <span>
+                                            <strong>${t(stat.valueKey)}</strong>
+                                            <small>${t(stat.textKey)}</small>
+                                        </span>
+                                    </article>
+                                `).join('')}
+                            </div>
+                        </section>
+
+                        <section class="rayat-luxury-live-suite" aria-label="${t('luxLiveSensorEyebrow')}">
+                            <div class="rayat-luxury-live-sensors-panel">
+                                <header class="rayat-luxury-live-header rayat-luxury-live-reveal">
+                                    <div>
+                                        <p class="rayat-luxury-live-eyebrow">
+                                            <span aria-hidden="true"></span>
+                                            ${t('luxLiveSensorEyebrow')}
+                                            ${sensorIcon}
+                                        </p>
+                                        <h2 class="rayat-luxury-live-title">${t('luxLiveSensorTitle')}</h2>
+                                        <p class="rayat-luxury-live-subtitle">${t('luxLiveSensorText')}</p>
+                                    </div>
+                                    <button type="button" onclick="setLuxuryDashboardTab('sensors'); document.getElementById('rayat-luxury-home-dashboard-content')?.scrollIntoView({ behavior: 'smooth', block: 'center' });" class="rayat-luxury-live-header-button">
+                                        <span>${t('luxLiveAllSensors')}</span>
+                                        ${arrowIcon}
+                                    </button>
+                                </header>
+
+                                <div class="rayat-luxury-live-sensor-strip">
+                                    ${luxuryLiveSensors.map((reading, index) => `
+                                        <article
+                                            class="rayat-luxury-live-sensor-card rayat-luxury-live-hover rayat-luxury-live-reveal"
+                                            style="--rayat-luxury-live-order:${index + 1};"
+                                            aria-label="${t(luxuryLiveSensorLabelKey[reading.key] || reading.labelKey)}"
+                                        >
+                                            <header class="rayat-luxury-live-sensor-head">
+                                                <span class="rayat-luxury-live-sensor-icon rayat-luxury-live-sensor-icon--${reading.key}">
+                                                    ${renderLuxuryDashboardIcon(luxuryLiveSensorIconKind[reading.key])}
+                                                </span>
+                                                <span>${t(luxuryLiveSensorLabelKey[reading.key] || reading.labelKey)}</span>
+                                            </header>
+                                            <strong class="rayat-luxury-live-sensor-value">
+                                                ${reading.displayValue}${reading.key === 'pH' ? '' : `<small>${reading.unit}</small>`}
+                                            </strong>
+                                            <span class="rayat-luxury-live-sensor-status rayat-luxury-live-sensor-status--${reading.state.level}">${reading.state.label}</span>
+                                            ${renderLuxuryHomeSensorEvidence(reading)}
+                                        </article>
+                                    `).join('')}
+                                </div>
+                            </div>
+
+                            <div class="rayat-luxury-live-ai-panel">
+                                <header class="rayat-luxury-live-header rayat-luxury-live-reveal">
+                                    <div>
+                                        <p class="rayat-luxury-live-eyebrow">${t('luxLiveAiEyebrow')}</p>
+                                        <h2 class="rayat-luxury-live-title">${t('luxLiveAiTitle')}</h2>
+                                        <p class="rayat-luxury-live-subtitle">${t('luxLiveAiText')}</p>
+                                    </div>
+                                    <button type="button" onclick="setLuxuryDashboardTab('analytics'); document.getElementById('rayat-luxury-home-dashboard-content')?.scrollIntoView({ behavior: 'smooth', block: 'center' });" class="rayat-luxury-live-header-button">
+                                        <span>${t('luxLiveAiHowWorks')}</span>
+                                        ${arrowIcon}
+                                    </button>
+                                </header>
+
+                                <div class="rayat-luxury-live-ai-grid">
+                                    ${luxuryLiveRecommendations.map((recommendation, index) => `
+                                        <article class="rayat-luxury-live-ai-card rayat-luxury-live-hover rayat-luxury-live-reveal" style="--rayat-luxury-live-order:${index + 9};">
+                                            <header class="rayat-luxury-live-ai-card-head">
+                                                <span class="rayat-luxury-live-ai-icon rayat-luxury-live-ai-icon--${recommendation.level}">${recommendation.icon}</span>
+                                                <span>
+                                                    <strong>${t(recommendation.titleKey)}</strong>
+                                                    <small class="rayat-luxury-live-priority rayat-luxury-live-priority--${recommendation.level}">${t(recommendation.priorityKey)}</small>
+                                                </span>
+                                            </header>
+                                            <h3>${t(recommendation.outcomeKey)}</h3>
+                                            <div class="rayat-luxury-live-ai-facts">
+                                                ${recommendation.factKeys.map((factKey) => `
+                                                    <span>${t(factKey)}</span>
+                                                `).join('')}
+                                            </div>
+                                            <button type="button" onclick="setLuxuryDashboardTab('analytics'); document.getElementById('rayat-luxury-home-dashboard-content')?.scrollIntoView({ behavior: 'smooth', block: 'center' });" class="rayat-luxury-live-ai-action">
+                                                <span>${t(recommendation.ctaKey)}</span>
+                                                ${arrowIcon}
+                                            </button>
+                                        </article>
+                                    `).join('')}
+                                </div>
+
+                                <footer class="rayat-luxury-live-applications rayat-luxury-live-reveal" style="--rayat-luxury-live-order:13;">
+                                    <div class="rayat-luxury-live-app-intro">
+                                        <strong>${t('luxLiveApplicationsTitle')}</strong>
+                                        <span>${t('luxLiveApplicationsText')}</span>
+                                    </div>
+                                    <div class="rayat-luxury-live-app-row">
+                                        ${luxuryLiveApplications.map((application) => `
+                                            <span class="rayat-luxury-live-app">
+                                                ${application.icon}
+                                                <small>${t(application.labelKey)}</small>
+                                            </span>
+                                        `).join('')}
+                                    </div>
+                                    <button type="button" onclick="setView('servizi')" class="rayat-luxury-live-header-button rayat-luxury-live-app-button">
+                                        <span>${t('luxLiveAllApplications')}</span>
+                                        ${arrowIcon}
+                                    </button>
+                                </footer>
+                            </div>
+                        </section>
+
+                        <section class="rayat-luxury-final-mobile rayat-luxury-scroll-reveal" aria-label="${t('luxFinalMobileEyebrow')}">
+                            <div class="rayat-luxury-final-mobile-copy">
+                                <p class="rayat-luxury-final-eyebrow">
+                                    <strong>${t('luxFinalMobileStep')}</strong>
+                                    <span>${t('luxFinalMobileEyebrow')}</span>
+                                </p>
+                                <h2>${t('luxFinalMobileTitle')}</h2>
+                                <p class="rayat-luxury-final-mobile-text">${t('luxFinalMobileText')}</p>
+                                <div class="rayat-luxury-final-store-row">
+                                    <button type="button" onclick="setViewWithTracking('demo')" class="rayat-luxury-final-store">
+                                        <svg viewBox="0 0 22 26" fill="currentColor" aria-hidden="true"><path d="M16.7 13.7c0-3.2 2.6-4.7 2.7-4.8-1.5-2.2-3.8-2.5-4.6-2.5-2-.2-3.8 1.1-4.8 1.1s-2.5-1.1-4.2-1.1C3.7 6.5 1.7 7.7.6 9.7c-2.3 4-.6 10 1.7 13.2 1.1 1.6 2.4 3.4 4.2 3.3 1.7-.1 2.3-1.1 4.3-1.1s2.6 1.1 4.4 1.1c1.8 0 3-1.6 4.1-3.2 1.3-1.9 1.8-3.7 1.8-3.8-.1 0-4.4-1.7-4.4-5.5ZM13.5 4.3c.9-1.1 1.5-2.7 1.3-4.3-1.3.1-2.9.9-3.8 2-.8 1-1.6 2.6-1.4 4.1 1.4.1 2.9-.7 3.9-1.8Z"></path></svg>
+                                        <span><small>${t('luxFinalDownloadOn')}</small><b>${t('luxFinalAppStore')}</b></span>
+                                    </button>
+                                    <button type="button" onclick="setViewWithTracking('demo')" class="rayat-luxury-final-store">
+                                        <svg viewBox="0 0 24 26" aria-hidden="true"><path fill="#35b878" d="M1 1.5 13.8 13 1 24.5V1.5Z"></path><path fill="#f5c441" d="m13.8 13 4-3.6 4.6 2.6c.8.4.8 1.6 0 2l-4.6 2.6-4-3.6Z"></path><path fill="#3c86e7" d="M1 1.5 17.8 9.4 13.8 13 1 1.5Z"></path><path fill="#e9514e" d="m1 24.5 12.8-11.5 4 3.6L1 24.5Z"></path></svg>
+                                        <span><small>${t('luxFinalAvailableOn')}</small><b>${t('luxFinalGooglePlay')}</b></span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="rayat-luxury-final-phones">
+                                <article class="rayat-luxury-final-phone rayat-luxury-final-phone--map">
+                                    <span class="rayat-luxury-final-phone-notch"></span>
+                                    <header><span aria-hidden="true">&#8249;</span><strong>${t('luxFinalMapTitle')}</strong></header>
+                                    <div class="rayat-luxury-final-phone-map"><span></span></div>
+                                    <div class="rayat-luxury-final-field">
+                                        <strong>${t('luxFinalFieldName')}</strong>
+                                        <small>${t('luxFinalCropName')}</small>
+                                        <em>${t('luxMetricHumidityStatus')}</em>
+                                    </div>
+                                    <nav class="rayat-luxury-final-phone-nav">${dashboardIcon}${parcelIcon}${alertIcon}${settingsIcon}</nav>
+                                </article>
+
+                                <article class="rayat-luxury-final-phone">
+                                    <span class="rayat-luxury-final-phone-notch"></span>
+                                    <header><span aria-hidden="true">&#8249;</span><strong>${t('luxFinalSensorsTitle')}</strong></header>
+                                    <div class="rayat-luxury-final-sensor-list">
+                                        ${['moisture', 'temperature', 'ec', 'pH', 'nitrogen'].map((key) => {
+                                            const reading = finalPhoneReadings[key];
+                                            return `
+                                                <span>
+                                                    ${renderLuxuryDashboardIcon(luxuryLiveSensorIconKind[key])}
+                                                    <small>${t(luxuryLiveSensorLabelKey[key] || reading.labelKey)}</small>
+                                                    <strong>${reading.displayValue}${reading.unit ? ` ${reading.unit}` : ''}</strong>
+                                                </span>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                    <nav class="rayat-luxury-final-phone-nav">${dashboardIcon}${parcelIcon}${alertIcon}${settingsIcon}</nav>
+                                </article>
+
+                                <article class="rayat-luxury-final-phone rayat-luxury-final-phone--trend">
+                                    <span class="rayat-luxury-final-phone-notch"></span>
+                                    <header><span aria-hidden="true">&#8249;</span><strong>${t('luxFinalTrendTitle')}</strong></header>
+                                    <div class="rayat-luxury-final-select">${t('luxMetricHumidityLabel')}<span aria-hidden="true">&#8964;</span></div>
+                                    <div class="rayat-luxury-final-periods">
+                                        <strong>${t('luxFinalToday')}</strong>
+                                        <span>${t('luxDashboardPeriod7d')}</span>
+                                        <span>${t('luxDashboardPeriod30d')}</span>
+                                    </div>
+                                    <svg class="rayat-luxury-final-phone-chart" viewBox="0 0 132 145" preserveAspectRatio="none" aria-hidden="true">
+                                        <path class="rayat-luxury-final-phone-chart-grid" d="M12 20H128M12 54H128M12 88H128M12 122H128"></path>
+                                        <path class="rayat-luxury-final-phone-chart-area" d="M12 86 26 63 37 77 50 68 65 47 78 61 91 74 107 53 120 44 128 51V122H12Z"></path>
+                                        <path class="rayat-luxury-final-phone-chart-line" d="M12 86 26 63 37 77 50 68 65 47 78 61 91 74 107 53 120 44 128 51"></path>
+                                    </svg>
+                                </article>
+
+                                <article class="rayat-luxury-final-phone rayat-luxury-final-phone--activity">
+                                    <span class="rayat-luxury-final-phone-notch"></span>
+                                    <header><span aria-hidden="true">&#8249;</span><strong>${t('luxFinalActivityTitle')}</strong></header>
+                                    <div class="rayat-luxury-final-activity-list">
+                                        <span>${irrigationIcon}<strong>${t('luxFinalIrrigationItem')}</strong><small>${t('luxFinalIrrigationTime')}<br>${t('luxFinalCompleted')}</small></span>
+                                        <span>${leafIcon}<strong>${t('luxFinalFertilizationItem')}</strong><small>${t('luxFinalFertilizationTime')}<br>${t('luxFinalCompleted')}</small></span>
+                                        <span>${alertIcon}<strong>${t('luxFinalAlarmItem')}</strong><small>${t('luxFinalAlarmTime')}</small></span>
+                                        <span>${sensorIcon}<strong>${t('luxFinalSensorsItem')}</strong><small>${t('luxFinalOperating')}</small></span>
+                                    </div>
+                                    <button type="button" onclick="setViewWithTracking('demo')" class="rayat-luxury-final-phone-action">${t('luxFinalNewActivity')}</button>
+                                </article>
+
+                                <article class="rayat-luxury-final-phone rayat-luxury-final-phone--report">
+                                    <span class="rayat-luxury-final-phone-notch"></span>
+                                    <header><span aria-hidden="true">&#8249;</span><strong>${t('luxFinalReportTitle')}</strong></header>
+                                    <strong class="rayat-luxury-final-report-label">${t('luxFinalReportHealth')}</strong>
+                                    <span class="rayat-luxury-final-report-ring"><b>${t('luxFinalSatisfactionValue')}</b><small>${t('luxFinalReportExcellent')}</small></span>
+                                    <small class="rayat-luxury-final-report-trend">${t('luxFinalTrendPositive')}</small>
+                                    <strong class="rayat-luxury-final-report-value">${t('luxFinalTrendValue')}</strong>
+                                    <small>${t('luxFinalComparedYesterday')}</small>
+                                </article>
+                            </div>
+                        </section>
+
+                        <section class="rayat-luxury-final-results rayat-luxury-scroll-reveal" aria-label="${t('luxFinalResultsEyebrow')}">
+                            <header>
+                                <p class="rayat-luxury-final-eyebrow">
+                                    <strong>${t('luxFinalResultsStep')}</strong>
+                                    <span>${t('luxFinalResultsEyebrow')}</span>
+                                </p>
+                                <h2>${t('luxFinalResultsTitle')}</h2>
+                            </header>
+                            <div class="rayat-luxury-final-results-grid">
+                                ${finalResultStats.map((stat) => `
+                                    <article>
+                                        <span>${stat.icon}</span>
+                                        <strong>${t(stat.valueKey)}</strong>
+                                        <small>${t(stat.labelKey)}</small>
+                                    </article>
+                                `).join('')}
+                            </div>
+                        </section>
+
+                        <footer class="rayat-luxury-final-footer rayat-luxury-scroll-reveal">
+                            <div class="rayat-luxury-final-footer-brand">
+                                <span class="rayat-luxury-final-footer-lockup">
+                                    <img src="${BRAND_LOGO_WHITE}" alt="${t('luxLogoAlt')}">
+                                    <span><strong>${t('luxBrandName')}</strong><small>${t('luxFinalFooterSubtitle')}</small></span>
+                                </span>
+                                <p>${t('luxFinalFooterText')}</p>
+                                <nav class="rayat-luxury-final-socials">
+                                    <button type="button" onclick="setView('contatti')" aria-label="${t('luxFinalSocialLinkedin')}">
+                                        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.3 7.3H2.7V17h2.6V7.3ZM4 3a1.7 1.7 0 1 0 0 3.4A1.7 1.7 0 0 0 4 3Zm13.1 8.5c0-2.9-1.5-4.5-3.8-4.5-1.7 0-2.5.9-2.9 1.6V7.3H7.8V17h2.6v-5.4c0-1.5.3-2.5 1.9-2.5 1.5 0 1.6 1.4 1.6 2.6V17h2.7l.5-5.5Z"></path></svg>
+                                    </button>
+                                    <button type="button" onclick="setView('contatti')" aria-label="${t('luxFinalSocialInstagram')}">
+                                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="4" stroke="currentColor" stroke-width="1.5"></rect><circle cx="10" cy="10" r="3.2" stroke="currentColor" stroke-width="1.5"></circle><circle cx="14" cy="6" r="1" fill="currentColor"></circle></svg>
+                                    </button>
+                                    <button type="button" onclick="setView('contatti')" aria-label="${t('luxFinalSocialYoutube')}">
+                                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M17 10c0 3-.4 4.3-1.1 4.8-.8.5-2.8.7-5.9.7s-5.1-.2-5.9-.7C3.4 14.3 3 13 3 10s.4-4.3 1.1-4.8c.8-.5 2.8-.7 5.9-.7s5.1.2 5.9.7c.7.5 1.1 1.8 1.1 4.8Z" stroke="currentColor" stroke-width="1.35"></path><path d="m8.3 7.5 4.3 2.5-4.3 2.5v-5Z" fill="currentColor"></path></svg>
+                                    </button>
+                                </nav>
+                            </div>
+                            ${finalFooterColumns.map((column) => `
+                                <nav class="rayat-luxury-final-footer-links">
+                                    <strong>${t(column.titleKey)}</strong>
+                                    ${column.links.map((link) => `
+                                        <button type="button" onclick="${link.action}">${t(link.labelKey)}</button>
+                                    `).join('')}
+                                </nav>
+                            `).join('')}
+                            <div class="rayat-luxury-final-newsletter">
+                                <strong>${t('luxFinalFooterNewsletter')}</strong>
+                                <p>${t('luxFinalNewsletterText')}</p>
+                                <button type="button" onclick="setView('contatti')" class="rayat-luxury-final-email" aria-label="${t('luxFinalNewsletterSubmit')}">
+                                    <span>${t('luxFinalEmailPlaceholder')}</span>
+                                    ${arrowIcon}
+                                </button>
+                            </div>
+                            <div class="rayat-luxury-final-footer-bottom">
+                                <small>${t('footerRights')}</small>
+                                <nav>
+                                    <button type="button" onclick="setView('privacy')">${t('privacyPolicy')}</button>
+                                    <button type="button" onclick="setView('terms')">${t('termsOfService')}</button>
+                                    <button type="button" onclick="setView('privacy')">${t('luxFinalCookiePolicy')}</button>
+                                </nav>
+                            </div>
+                        </footer>
+                    </section>
+                </main>
+            `;
+        }
+
+        // RAYAT FIX - login/profile/final UX cleanup
+        function renderLoginPage() {
+            return `
+                ${renderHeader(false)}
+            <div class="rayat-auth-screen min-h-screen flex items-center justify-center py-12 px-4 bg-gray-50">
+                <div class="rayat-auth-card max-w-md w-full bg-white rounded-xl shadow-2xl p-8">
+                    <h2 class="text-3xl font-bold text-green-800 mb-6 text-center">${t('loginTitle')}</h2>
+
+                    <div id="error" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-center">
+                        ${t('loginError')}
+                    </div>
+
+                    <form onsubmit="login(event)" class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">${t('emailLabel')}</label>
+                            <input type="email" id="email" required autocomplete="email" inputmode="email" class="w-full px-4 py-3 border rounded-2xl" placeholder="nome@azienda.com">
+                        </div>
+                        ${renderPasswordField({
+                            inputId: 'password',
+                            labelKey: 'passwordLabel',
+                            placeholder: '••••••••',
+                            autocomplete: 'current-password'
+                        })}
+                        <div class="rayat-remember-row">
+                            <label for="remember-me" class="rayat-remember-label">
+                                <input type="checkbox" id="remember-me" class="rayat-remember-checkbox" ${shouldRememberLogin() ? 'checked' : ''}>
+                                <span>${t('rememberMe')}</span>
+                            </label>
+                        </div>
+                        <button type="submit" class="w-full bg-green-700 hover:bg-green-800 text-white py-3 rounded-lg font-semibold transition">
+                            ${t('loginBtn')}
+                        </button>
+                    </form>
+
+                    <div class="mt-4 text-center">
+                        <button type="button" onclick="requestPasswordReset()" class="text-sm text-green-700 font-bold hover:underline">
+                            ${t('forgotPassword')}
+                        </button>
+                    </div>
+
+                    <div class="mt-8 text-center pt-6 border-t">
+                        <p class="text-gray-600 mb-2">${t('loginNoAccount')}</p>
+                        <button onclick="registrationStep = 1; setView('register')" class="text-green-700 font-bold hover:underline">
+                            ${t('loginRegisterNow')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+            ${renderFooter()}
+            `;
+        }
+
+        function renderResetPasswordPage() {
+            const token = new URLSearchParams(window.location.search).get('token');
+
+            return `
+                ${renderHeader(false)}
+                <div class="min-h-screen flex items-center justify-center py-12 px-4 bg-gray-50">
+                    <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8 border border-gray-100">
+                        <h2 class="text-3xl font-black text-green-800 mb-3 text-center">${t('resetPasswordTitle')}</h2>
+                        <p class="text-center text-gray-500 mb-6 leading-relaxed">${t('resetPasswordDesc')}</p>
+
+                        <div id="reset-password-error" class="${token ? 'hidden' : ''} bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded-2xl mb-4 text-center">
+                            ${token ? '' : t('resetPasswordInvalidToken')}
+                        </div>
+                        <div id="reset-password-success" class="hidden bg-green-100 border border-green-300 text-green-800 px-4 py-3 rounded-2xl mb-4 text-center"></div>
+
+                        <form id="reset-password-form" onsubmit="submitPasswordReset(event)" class="space-y-5">
+                            ${renderPasswordField({
+                                inputId: 'reset-password',
+                                labelKey: 'newPasswordLabel',
+                                minLength: '8',
+                                autocomplete: 'new-password'
+                            })}
+                            ${renderPasswordField({
+                                inputId: 'reset-password-confirm',
+                                labelKey: 'confirmPasswordLabel',
+                                minLength: '8',
+                                autocomplete: 'new-password'
+                            })}
+                            <button type="submit" class="w-full bg-green-700 hover:bg-green-800 text-white py-3 rounded-2xl font-semibold transition">
+                                ${t('resetPasswordSubmit')}
+                            </button>
+                        </form>
+
+                        <div class="mt-6 text-center">
+                            <button onclick="setViewWithTracking('login')" class="text-sm text-green-700 font-bold hover:underline">
+                                ${t('backToLogin')}
+                            </button>
                         </div>
                     </div>
-                </section>
-
-                ${renderHomepageWhatsappSection()}
-
+                </div>
                 ${renderFooter()}
             `;
+        }
+
+        function initLuxuryHomeSectionAnimations() {
+            const section = document.querySelector('.rayat-luxury-live-suite');
+            if (!section) {
+                return;
+            }
+
+            const cards = Array.from(section.querySelectorAll('.rayat-luxury-live-hover'));
+            const revealItems = Array.from(section.querySelectorAll('.rayat-luxury-live-reveal'));
+            const finePointer = !window.matchMedia
+                || window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+            const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+            if (window.gsap && finePointer && !reduceMotion) {
+                cards.forEach((card) => {
+                    if (card.dataset.luxuryHomeHoverBound === '1') {
+                        return;
+                    }
+
+                    card.dataset.luxuryHomeHoverBound = '1';
+                    card.addEventListener('mouseenter', () => {
+                        window.gsap.to(card, {
+                            scale: 1.03,
+                            y: -6,
+                            duration: 0.35,
+                            ease: 'power2.out',
+                            overwrite: true,
+                            borderColor: 'rgba(45, 106, 79, 0.27)',
+                            boxShadow: '0 18px 44px rgba(26, 46, 26, 0.09)'
+                        });
+                    });
+                    card.addEventListener('mouseleave', () => {
+                        window.gsap.to(card, {
+                            scale: 1,
+                            y: 0,
+                            duration: 0.35,
+                            ease: 'power2.out',
+                            overwrite: true,
+                            borderColor: 'rgba(229, 231, 235, 0.92)',
+                            boxShadow: '0 5px 18px rgba(26, 46, 26, 0.035)'
+                        });
+                    });
+                });
+            }
+
+            const reveal = () => {
+                if (window.__rayatLuxuryLiveSuiteRevealed) {
+                    revealItems.forEach((item) => item.classList.add('rayat-luxury-live-reveal--visible'));
+                    return;
+                }
+
+                window.__rayatLuxuryLiveSuiteRevealed = true;
+                if (window.gsap && !reduceMotion) {
+                    window.gsap.to(revealItems, {
+                        autoAlpha: 1,
+                        y: 0,
+                        duration: 0.58,
+                        stagger: 0.055,
+                        ease: 'power2.out',
+                        overwrite: true
+                    });
+                    return;
+                }
+
+                revealItems.forEach((item) => item.classList.add('rayat-luxury-live-reveal--visible'));
+            };
+
+            if (window.__rayatLuxuryLiveSuiteRevealed || reduceMotion || !('IntersectionObserver' in window)) {
+                reveal();
+                return;
+            }
+
+            window.__rayatLuxuryLiveSuiteObserver?.disconnect();
+            window.__rayatLuxuryLiveSuiteObserver = new IntersectionObserver((entries, observer) => {
+                if (!entries.some((entry) => entry.isIntersecting)) {
+                    return;
+                }
+
+                reveal();
+                observer.disconnect();
+            }, { rootMargin: '0px 0px -10% 0px', threshold: 0.12 });
+            window.__rayatLuxuryLiveSuiteObserver.observe(section);
         }
 
         // RAYAT FIX - login/profile/final UX cleanup
@@ -5668,13 +11065,13 @@
                 : [30.4278, -9.5981];
             regMap = L.map('map-registration').setView(initialPos, 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(regMap);
-            
+
             regMarker = L.marker(initialPos, { draggable: true }).addTo(regMap);
             regMarker.on('dragend', async function() {
                 const pos = regMarker.getLatLng();
                 await updateRegistrationLocationFromCoords(pos.lat, pos.lng);
             });
-            
+
             regMap.on('click', async function(e) {
                 regMarker.setLatLng(e.latlng);
                 await updateRegistrationLocationFromCoords(e.latlng.lat, e.latlng.lng);
@@ -5707,7 +11104,7 @@
                 alert(t('regRequiredFields'));
                 return;
             }
-            
+
             try {
                 const res = await fetch(`${CONFIG.API_BASE_URL}/auth/register-full`, {
                     method: 'POST',
@@ -5732,7 +11129,7 @@
                 } else {
                     throw new Error(data.error);
                 }
-            } catch (e) { 
+            } catch (e) {
                 console.error('Registration error:', e);
                 alert(e.message || 'Errore registrazione. Controlla la connessione al server.');
             }
@@ -5769,7 +11166,7 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        
+
                                         <div class="bg-green-50 rounded-xl p-6">
                                             <h4 class="text-2xl font-bold mb-4 text-green-700">${t('features')}</h4>
                                             <ul class="space-y-3">
@@ -5853,7 +11250,7 @@
 
                     <div class="container mx-auto px-4 -mt-10 pb-20">
                         <div class="rayat-contact-grid grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            
+
                             <!-- Sidebar: Contatti Rapidi & Orari -->
                             <div class="lg:col-span-1 space-y-6">
                                 <!-- Contatti Card -->
@@ -6111,7 +11508,7 @@
                     if (cropKey === 'orange' || cropKey === 'citrus') cropKey = 'agrumi';
                     if (cropKey === 'strawberry') cropKey = 'fragole';
                     if (cropKey === 'olive') cropKey = 'olive';
-                    
+
                     const translatedCrop = t(cropKey);
                     const lastActiveLabel = t('lastActive') || 'Ultima attività';
 
@@ -6361,6 +11758,31 @@
                                 </div>
                             </div>
 
+                            ${isBarakahPerliteCustomer() ? `
+                                <div class="rayat-profile-sensors-grid mb-8">
+                                    <button type="button" onclick="setView('perlite-track')" class="rayat-profile-sensor-card text-left">
+                                        <div class="flex items-start justify-between gap-4">
+                                            <div class="min-w-0">
+                                                <div class="text-3xl mb-4">🌱</div>
+                                                <h4 class="text-xl font-black text-slate-900 tracking-tight break-words">RAYAT perlite track</h4>
+                                                <p class="text-sm text-slate-500 mt-2">Substrate Rayat: umidita, EC e temperatura del substrato</p>
+                                            </div>
+                                            <span class="inline-flex items-center justify-center px-3 py-1 rounded-full bg-green-50 text-green-700 font-black text-[11px] uppercase tracking-[0.14em]">${t('profileViewOnly')}</span>
+                                        </div>
+                                        <div class="space-y-3 mt-6">
+                                            <div class="rayat-profile-meta-row">
+                                                <span>${escapeHtml(t('profileDeviceLabel'))}</span>
+                                                <strong>GW-002</strong>
+                                            </div>
+                                            <div class="rayat-profile-meta-row">
+                                                <span>${escapeHtml(t('profileLatestReading'))}</span>
+                                                <strong>Substrate Rayat</strong>
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
+                            ` : ''}
+
                             ${assignedSensors.length ? `
                                 <div class="rayat-profile-sensors-grid">
                                     ${assignedSensors.map((sensor) => `
@@ -6407,7 +11829,7 @@
                             <h2 class="text-5xl font-black text-slate-900 tracking-tighter uppercase mb-4">${t('privacyPolicy')}</h2>
                             <p class="text-xl font-bold text-green-700 uppercase tracking-widest">Rayat Smart Monitoring - Maroc</p>
                         </div>
-                        
+
                         <div class="bg-white rounded-[3rem] shadow-2xl p-10 md:p-16 border border-gray-100 text-gray-700 leading-relaxed">
                             <h3 class="text-2xl font-black text-slate-900 mb-6 uppercase border-b-4 border-green-500 inline-block pb-2">1. Responsable du traitement</h3>
                             <p class="mb-8 font-medium">
@@ -6591,7 +12013,7 @@
         }
 
 
-        function renderDemoPage() {
+        function renderLegacyDemoPage() {
             const currentSensorKey = normalizeDashboardSensorKey(selectedSensor) || resolveFreshestSensorKey(selectedSensor); // RAYAT-FIX
             const current = sensorData[currentSensorKey] || sensorData.terreno; // RAYAT-FIX
 
@@ -6795,7 +12217,7 @@
                                     <button onclick="setCustomFilter()" class="bg-[#3b82f6] hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold uppercase tracking-tight text-[11px] shadow-lg transition-all shrink-0 flex items-center gap-2">🔍 <span>${t('search')}</span></button>
 
                                     <!-- Export Button -->
-                                    <button onclick="exportCSV()" class="bg-[#10b981] hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold uppercase tracking-tight text-[11px] shadow-xl transition-all shrink-0 flex items-center gap-2">📥 <span>${t('export')}</span></button>
+                                    ${(!isAuthenticated() || !isCustomerRole(currentRole) || hasCustomerPermission('export_csv')) ? `<button onclick="exportCSV()" class="bg-[#10b981] hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold uppercase tracking-tight text-[11px] shadow-xl transition-all shrink-0 flex items-center gap-2">📥 <span>${t('export')}</span></button>` : ''}
                             </div>
 
                             <!-- Dynamic History Table -->
@@ -6910,6 +12332,1423 @@
             `;
         }
 
+        let luxuryDashboardMap = null;
+        let isLuxuryDashboardSidebarOpen = false;
+
+        function toggleLuxuryDashboardProfileMenu(forceState, event) {
+            event?.stopPropagation?.();
+            isLuxuryDashboardProfileMenuOpen = typeof forceState === 'boolean'
+                ? forceState
+                : !isLuxuryDashboardProfileMenuOpen;
+
+            document.querySelector('.rayat-luxury-dashboard-profile-dropdown')?.classList.toggle('is-open', isLuxuryDashboardProfileMenuOpen);
+            document.querySelector('.rayat-luxury-dashboard-profile')?.setAttribute('aria-expanded', String(isLuxuryDashboardProfileMenuOpen));
+        }
+
+        function closeLuxuryDashboardProfileMenu() {
+            toggleLuxuryDashboardProfileMenu(false);
+        }
+
+        function toggleLuxuryDashboardSidebar(forceState) {
+            isLuxuryDashboardSidebarOpen = typeof forceState === 'boolean'
+                ? forceState
+                : !isLuxuryDashboardSidebarOpen;
+
+            document.querySelector('.rayat-luxury-dashboard-sidebar')?.classList.toggle('is-open', isLuxuryDashboardSidebarOpen);
+            document.querySelector('.rayat-luxury-dashboard-sidebar-backdrop')?.classList.toggle('is-open', isLuxuryDashboardSidebarOpen);
+            document.querySelector('.rayat-luxury-dashboard-mobile-toggle')?.setAttribute('aria-expanded', String(isLuxuryDashboardSidebarOpen));
+            syncPageScrollLock();
+        }
+
+        function scrollLuxuryDashboardSection(sectionId) {
+            const target = document.getElementById(sectionId);
+            if (!target) {
+                return;
+            }
+
+            document.querySelectorAll('.rayat-luxury-dashboard-nav button').forEach((button) => {
+                button.classList.toggle('is-active', button.dataset.dashboardTarget === sectionId);
+            });
+
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.matchMedia?.('(max-width: 900px)').matches) {
+                toggleLuxuryDashboardSidebar(false);
+            }
+        }
+
+        function getLuxuryDashboardIcon(name) {
+            const icons = {
+                dashboard: '<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"></path>',
+                greenhouse: '<path d="M4 20h16M6 20V9l6-5 6 5v11M12 4v16M6 10h12"></path>',
+                sensors: '<path d="M12 3v5M12 16v5M3 12h5M16 12h5"></path><circle cx="12" cy="12" r="4"></circle>',
+                irrigation: '<path d="M12 3S6 10.2 6 14a6 6 0 0 0 12 0c0-3.8-6-11-6-11z"></path>',
+                alert: '<path d="M12 3 2.5 20h19L12 3z"></path><path d="M12 9v5M12 17h.01"></path>',
+                analytics: '<path d="M4 19h16M5 16l5-6 4 3 5-8"></path>',
+                report: '<path d="M7 3h7l4 4v14H7zM14 3v5h5M10 12h5M10 16h5"></path>',
+                history: '<path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5M12 7v6l4 2"></path>',
+                settings: '<circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M19.1 4.9l-2.8 2.8M7.7 16.3l-2.8 2.8"></path>',
+                support: '<path d="M4 13v-2a8 8 0 0 1 16 0v2M4 13h4v6H6a2 2 0 0 1-2-2zM20 13h-4v6h2a2 2 0 0 0 2-2zM16 19c0 1.1-1.8 2-4 2"></path>',
+                leaf: '<path d="M20 4C11 4 5 9 5 16c0 2 1 4 3 4 8 0 12-7 12-16zM5 19c3-4 7-7 12-10"></path>',
+                wifi: '<path d="M4 9a12 12 0 0 1 16 0M7 13a7.5 7.5 0 0 1 10 0M10 17a3.2 3.2 0 0 1 4 0"></path><circle cx="12" cy="20" r=".6"></circle>',
+                drop: '<path d="M12 3S6 10.2 6 14a6 6 0 0 0 12 0c0-3.8-6-11-6-11z"></path>',
+                thermometer: '<path d="M10 14.8V5a2 2 0 0 1 4 0v9.8a4.5 4.5 0 1 1-4 0zM12 8v9"></path>',
+                bolt: '<path d="M13 2 5 13h7l-1 9 8-12h-7z"></path>',
+                flask: '<path d="M9 3h6M10 3v7l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3M8 15h8"></path>',
+                nutrient: '<path d="M12 21V4M12 9 7 6M12 12l6-4M12 16l-6-3"></path>',
+                weather: '<path d="M7 18a4 4 0 1 1 1-7.9A5.6 5.6 0 0 1 19 12a3 3 0 0 1-1 6zM13 3v3M5 7 3 5M19 7l2-2"></path>',
+                download: '<path d="M12 3v12M7 10l5 5 5-5M4 20h16"></path>',
+                refresh: '<path d="M20 11a8 8 0 1 0-2.2 5.5"></path><path d="M20 4v7h-7"></path>',
+                pin: '<path d="M12 21s7-6.2 7-12A7 7 0 1 0 5 9c0 5.8 7 12 7 12z"></path><circle cx="12" cy="9" r="2"></circle>',
+                calendar: '<path d="M7 3v4M17 3v4M4 8h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1z"></path>',
+                clock: '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v6l4 2"></path>',
+                bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path>',
+                question: '<circle cx="12" cy="12" r="9"></circle><path d="M9.8 9a2.4 2.4 0 0 1 4.4 1.4c0 1.8-2.2 2-2.2 3.6M12 17h.01"></path>',
+                expand: '<path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5M3 3l6 6M21 3l-6 6M3 21l6-6M21 21l-6-6"></path>',
+                shield: '<path d="M12 3 20 6v6c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V6z"></path><path d="m9 12 2 2 4-5"></path>',
+                sun: '<circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>',
+                wind: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h16M3 16h10a3 3 0 1 1-3 3"></path>'
+            };
+            return `<svg class="rayat-luxury-dashboard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.sensors}</svg>`;
+        }
+
+        function getLuxuryDashboardHistoryValue(key) {
+            const historyFieldByKey = {
+                moisture: 'terreno',
+                temperature: 'temperature',
+                ec: 'ec',
+                pH: 'pH',
+                nitrogen: 'nitrogen',
+                phosphorus: 'phosphorus',
+                potassium: 'potassium'
+            };
+            const field = historyFieldByKey[key];
+            if (!field) {
+                return null;
+            }
+
+            const latestRow = [...globalHistory].reverse().find((row) => Number.isFinite(parseNumericValue(row?.[field])));
+            return latestRow ? latestRow[field] : null;
+        }
+
+        const RAYAT_LUXURY_DASHBOARD_DEMO_FALLBACK = {
+            soil: {
+                moisture: 65.4,
+                temperature: 20.1,
+                ec: 2.18,
+                pH: 6.23,
+                nitrogen: 164,
+                phosphorus: 36.1,
+                potassium: 283
+            },
+            climate: {
+                temperature: 26,
+                humidity: 54,
+                windSpeed: 12
+            }
+        };
+
+        function getLuxuryDashboardSoilMetrics() {
+            return (sensorData.terreno?.details || []).map((metric) => {
+                let value = normalizeMetricValue('soil', metric.key, metric.value);
+                let usesFallback = false;
+                if (!Number.isFinite(value)) {
+                    value = normalizeMetricValue('soil', metric.key, getLuxuryDashboardHistoryValue(metric.key));
+                }
+                if (!Number.isFinite(value) && Object.prototype.hasOwnProperty.call(RAYAT_LUXURY_DASHBOARD_DEMO_FALLBACK.soil, metric.key)) {
+                    value = RAYAT_LUXURY_DASHBOARD_DEMO_FALLBACK.soil[metric.key];
+                    usesFallback = true;
+                }
+                const available = Number.isFinite(value);
+                const range = getRangeForMetric('soil', metric.key);
+                const state = available
+                    ? getMetricState(value, range)
+                    : { level: 'unavailable', label: t('luxuryDashUnavailableStatus') };
+
+                return {
+                    ...metric,
+                    value,
+                    available,
+                    usesFallback,
+                    range,
+                    state,
+                    unit: getMetricUnit('soil', metric.key, metric.unit || '')
+                };
+            });
+        }
+
+        function getLuxuryDashboardClimateMetrics() {
+            const historyFields = {
+                temperature: 'climaTemp',
+                humidity: 'humidity',
+                co2: 'co2',
+                windSpeed: 'windSpeed'
+            };
+
+            return (sensorData.clima?.details || []).map((metric) => {
+                let value = normalizeMetricValue('climate', metric.key, metric.value);
+                let usesFallback = false;
+                if (!Number.isFinite(value)) {
+                    const field = historyFields[metric.key];
+                    const row = [...globalHistory].reverse().find((item) => Number.isFinite(parseNumericValue(item?.[field])));
+                    value = normalizeMetricValue('climate', metric.key, row?.[field]);
+                }
+                if (!Number.isFinite(value) && Object.prototype.hasOwnProperty.call(RAYAT_LUXURY_DASHBOARD_DEMO_FALLBACK.climate, metric.key)) {
+                    value = RAYAT_LUXURY_DASHBOARD_DEMO_FALLBACK.climate[metric.key];
+                    usesFallback = true;
+                }
+                return {
+                    ...metric,
+                    value,
+                    available: Number.isFinite(value),
+                    usesFallback,
+                    unit: getMetricUnit('climate', metric.key, metric.unit || '')
+                };
+            });
+        }
+
+        function getLuxuryDashboardHealthIndex(metrics) {
+            const availableMetrics = metrics.filter((metric) => metric.available);
+            if (!availableMetrics.length) {
+                return null;
+            }
+
+            const score = availableMetrics.reduce((total, metric) => {
+                if (metric.state.level === 'alert') return total + 35;
+                if (metric.state.level === 'attention') return total + 68;
+                return total + 100;
+            }, 0);
+
+            return Math.round(score / availableMetrics.length);
+        }
+
+        function getLuxuryDashboardStatusClass(level) {
+            return level === 'alert'
+                ? 'is-alert'
+                : (level === 'attention' ? 'is-attention' : (level === 'unavailable' ? 'is-unavailable' : 'is-normal'));
+        }
+
+        function getLuxuryDashboardMetric(metrics, key) {
+            return metrics.find((metric) => metric.key === key) || {
+                key,
+                value: null,
+                available: false,
+                state: { level: 'unavailable', label: t('luxuryDashUnavailableStatus') },
+                unit: ''
+            };
+        }
+
+        function renderLuxuryDashboardTrendChart() {
+            const rows = getFilteredHistory().slice(-32);
+            const seriesConfig = [
+                { key: 'moisture', field: 'terreno', group: 'soil', label: t('sensorSoF2'), color: '#1f8f3a', unit: '%' },
+                { key: 'temperature', field: 'temperature', group: 'soil', label: t('sensorSoF1'), color: '#f97316', unit: '°C' },
+                { key: 'ec', field: 'ec', group: 'soil', label: 'EC', color: '#2563eb', unit: 'mS/cm' }
+            ];
+
+            const series = seriesConfig.map((config) => {
+                const range = getRangeForMetric(config.group, config.key);
+                const values = rows
+                    .map((row, index) => ({
+                        date: row.date,
+                        value: normalizeMetricValue(config.group, config.key, row[config.field]),
+                        index
+                    }))
+                    .filter((entry) => Number.isFinite(entry.value));
+
+                return { ...config, range, values };
+            }).filter((item) => item.values.length >= 2);
+
+            if (!rows.length || !series.length) {
+                return `<div class="rayat-luxury-dashboard-chart-empty">${t('luxuryDashEmptyTrend')}</div>`;
+            }
+
+            const width = 640;
+            const height = 240;
+            const chartLeft = 48;
+            const chartRight = 620;
+            const chartTop = 26;
+            const chartBottom = 184;
+            const rowsSpan = Math.max(rows.length - 1, 1);
+            const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+            const dateLabels = [rows[0], rows[Math.floor(rows.length / 2)], rows[rows.length - 1]].filter(Boolean);
+
+            const renderSeriesPath = (item) => {
+                const values = item.values.map((entry) => entry.value);
+                const minValue = Math.min(...values);
+                const maxValue = Math.max(...values);
+                const rangeMin = Number.isFinite(item.range?.min) ? item.range.min : minValue;
+                const rangeMax = Number.isFinite(item.range?.max) ? item.range.max : maxValue;
+                const span = rangeMax - rangeMin || (maxValue - minValue) || 1;
+                const path = item.values.map((entry, index) => {
+                    const percent = clamp(((entry.value - rangeMin) / span) * 100, 0, 100);
+                    const x = chartLeft + ((chartRight - chartLeft) * entry.index / rowsSpan);
+                    const y = chartBottom - ((percent / 100) * (chartBottom - chartTop));
+                    return `${index ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+                }).join(' ');
+
+                return `<path d="${path}" class="rayat-luxury-dashboard-chart-line rayat-luxury-dashboard-chart-line--multi" style="--series-color:${item.color}"></path>`;
+            };
+
+            return `
+                <div class="rayat-luxury-dashboard-chart-wrap">
+                    <div class="rayat-luxury-dashboard-chart-legend">
+                        ${series.map((item) => `<span><i style="background:${item.color}"></i>${escapeHtml(item.label)} ${item.unit ? `(${escapeHtml(item.unit)})` : ''}</span>`).join('')}
+                    </div>
+                    <svg class="rayat-luxury-dashboard-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(t('luxuryDashTrendTitle'))}">
+                        ${[100, 75, 50, 25, 0].map((label) => {
+                            const y = chartBottom - ((label / 100) * (chartBottom - chartTop));
+                            return `<line x1="${chartLeft}" x2="${chartRight}" y1="${y}" y2="${y}" class="rayat-luxury-dashboard-chart-grid"></line><text x="8" y="${y + 4}" class="rayat-luxury-dashboard-chart-label">${label}</text>`;
+                        }).join('')}
+                        ${series.map(renderSeriesPath).join('')}
+                        ${dateLabels.map((row) => {
+                            const x = chartLeft + ((chartRight - chartLeft) * rows.indexOf(row) / rowsSpan);
+                            return `<text x="${x}" y="222" text-anchor="middle" class="rayat-luxury-dashboard-chart-date">${escapeHtml(formatLocalizedDate(row.date))}</text>`;
+                        }).join('')}
+                    </svg>
+                </div>
+            `;
+        }
+
+        function formatHistoryDateInputValue(date) {
+            const value = date instanceof Date ? date : new Date(date);
+            if (Number.isNaN(value.getTime())) {
+                return '';
+            }
+
+            return value.toISOString().split('T')[0];
+        }
+
+        function buildLuxuryHistoryPreviewRows() {
+            const rows = [];
+            const now = new Date();
+            now.setSeconds(0, 0);
+            const totalRows = 2384;
+
+            for (let index = 0; index < totalRows; index += 1) {
+                const date = new Date(now.getTime() - (index * 30 * 60 * 1000));
+                const wave = Math.sin(index / 8);
+                const softWave = Math.cos(index / 17);
+                const row = createHistoryRow(date);
+                row.climaTemp = 25.8 - Math.min(index, 42) * 0.035 + wave * 0.22;
+                row.humidity = 62.4 + Math.min(index, 55) * 0.11 + softWave * 0.35;
+                row.co2 = 612 - Math.min(index, 72) * 2.2 + wave * 7;
+                row.temperature = 24.6 - Math.min(index, 80) * 0.09 + softWave * 0.18;
+                row.terreno = 81.4 + Math.min(index, 70) * 0.18 + wave * 0.8;
+                row.ec = 1.82 - Math.min(index, 55) * 0.008 + softWave * 0.018;
+                row.nitrogen = 156 - Math.min(index, 80) * 0.9 + wave * 3;
+                row.phosphorus = 28.4 - Math.min(index, 62) * 0.18 + softWave * 0.35;
+                row.potassium = 312 - Math.min(index, 75) * 1.25 + wave * 8;
+                row.pH = 6.43 - Math.min(index, 58) * 0.006 + softWave * 0.015;
+                row.status = 'statusNormal';
+                row.__preview = true;
+                rows.push(row);
+            }
+
+            return rows;
+        }
+
+        function hasLuxuryHistoryMetricValue(rows, field, group, key) {
+            return rows.some((row) => Number.isFinite(normalizeMetricValue(group, key, row?.[field])));
+        }
+
+        function isLuxuryHistoryMetricInstalled(metrics, key, rows, field, group) {
+            const metric = metrics.find((item) => item.key === key);
+            if (metric?.installed === false) {
+                return false;
+            }
+
+            if (metric) {
+                return true;
+            }
+
+            return hasLuxuryHistoryMetricValue(rows, field, group, key);
+        }
+
+        function getLuxuryHistoryColumns(soilMetrics, climateMetrics, rows) {
+            const columns = [
+                { id: 'date', label: 'DATE / HEURE', type: 'date' }
+            ];
+
+            const addMetricColumn = (enabled, column) => {
+                if (enabled) {
+                    columns.push(column);
+                }
+            };
+
+            addMetricColumn(isLuxuryHistoryMetricInstalled(climateMetrics, 'temperature', rows, 'climaTemp', 'climate'), {
+                id: 'tempAir',
+                label: 'TEMP AIR',
+                unit: '(°C)',
+                field: 'climaTemp',
+                group: 'climate',
+                key: 'temperature'
+            });
+            addMetricColumn(isLuxuryHistoryMetricInstalled(climateMetrics, 'humidity', rows, 'humidity', 'climate'), {
+                id: 'humAir',
+                label: 'HUM AIR',
+                unit: '(%)',
+                field: 'humidity',
+                group: 'climate',
+                key: 'humidity'
+            });
+            addMetricColumn(isLuxuryHistoryMetricInstalled(climateMetrics, 'co2', rows, 'co2', 'climate'), {
+                id: 'co2',
+                label: 'CO₂',
+                unit: '(ppm)',
+                field: 'co2',
+                group: 'climate',
+                key: 'co2'
+            });
+            addMetricColumn(isLuxuryHistoryMetricInstalled(soilMetrics, 'temperature', rows, 'temperature', 'soil'), {
+                id: 'tempSoil',
+                label: 'TEMP SOL',
+                unit: '(°C)',
+                field: 'temperature',
+                group: 'soil',
+                key: 'temperature'
+            });
+            addMetricColumn(isLuxuryHistoryMetricInstalled(soilMetrics, 'moisture', rows, 'terreno', 'soil'), {
+                id: 'humSoil',
+                label: 'HUM SOL',
+                unit: '(%)',
+                field: 'terreno',
+                group: 'soil',
+                key: 'moisture'
+            });
+            addMetricColumn(isLuxuryHistoryMetricInstalled(soilMetrics, 'ec', rows, 'ec', 'soil'), {
+                id: 'ec',
+                label: 'EC',
+                unit: '(mS/cm)',
+                field: 'ec',
+                group: 'soil',
+                key: 'ec'
+            });
+            addMetricColumn(isLuxuryHistoryMetricInstalled(soilMetrics, 'nitrogen', rows, 'nitrogen', 'soil'), {
+                id: 'nitrogen',
+                label: 'N',
+                unit: '(ppm)',
+                field: 'nitrogen',
+                group: 'soil',
+                key: 'nitrogen'
+            });
+            addMetricColumn(isLuxuryHistoryMetricInstalled(soilMetrics, 'phosphorus', rows, 'phosphorus', 'soil'), {
+                id: 'phosphorus',
+                label: 'P',
+                unit: '(ppm)',
+                field: 'phosphorus',
+                group: 'soil',
+                key: 'phosphorus'
+            });
+            addMetricColumn(isLuxuryHistoryMetricInstalled(soilMetrics, 'potassium', rows, 'potassium', 'soil'), {
+                id: 'potassium',
+                label: 'K',
+                unit: '(ppm)',
+                field: 'potassium',
+                group: 'soil',
+                key: 'potassium'
+            });
+            addMetricColumn(isLuxuryHistoryMetricInstalled(soilMetrics, 'pH', rows, 'pH', 'soil'), {
+                id: 'pH',
+                label: 'pH',
+                unit: '',
+                field: 'pH',
+                group: 'soil',
+                key: 'pH'
+            });
+
+            columns.push({ id: 'status', label: 'STATUT', type: 'status' });
+            return columns;
+        }
+
+        function getLuxuryHistoryValueLevel(row, column) {
+            if (!column?.group || !column?.key) {
+                return 'normal';
+            }
+
+            return getMetricLevel(column.group, column.key, row?.[column.field]);
+        }
+
+        function getLuxuryHistoryRowLevel(row, columns) {
+            const levels = columns
+                .filter((column) => column.group && column.key)
+                .map((column) => getLuxuryHistoryValueLevel(row, column))
+                .filter((level) => level !== 'unavailable');
+
+            return getOverallLevel(levels);
+        }
+
+        function formatLuxuryHistoryCellValue(row, column) {
+            if (column.type === 'date') {
+                return `
+                    <strong>${escapeHtml(formatLocalizedDate(row.date))}</strong>
+                    <span>${escapeHtml(formatLocalizedTime(row.date))}</span>
+                `;
+            }
+
+            if (column.type === 'status') {
+                return '';
+            }
+
+            return escapeHtml(formatHistoryNumber(row?.[column.field], {
+                group: column.group,
+                key: column.key
+            }));
+        }
+
+        function renderLuxuryHistoryStatus(level) {
+            return `
+                <span class="rayat-history-status ${getLuxuryDashboardStatusClass(level)}">
+                    <i></i>${escapeHtml(getAlertBadgeLabel(level))}
+                </span>
+            `;
+        }
+
+        function renderLuxuryHistoryPeriodControls() {
+            const periods = [
+                { key: '24h', label: '24h' },
+                { key: '7d', label: '7 jours' },
+                { key: '30d', label: '30 jours' },
+                { key: '90d', label: '90 jours' },
+                { key: 'custom', label: 'Personnalisé' }
+            ];
+            const { start, end } = getFilterRange();
+
+            return `
+                <div class="rayat-history-actions">
+                    <div class="rayat-history-periods" role="group" aria-label="Période historique">
+                        ${periods.map((period) => `
+                            <button type="button" class="rayat-history-period ${filterState.period === period.key ? 'is-active' : ''}" onclick="setFilterPeriod('${period.key}')">
+                                ${escapeHtml(period.label)}${period.key === 'custom' ? getLuxuryDashboardIcon('calendar') : ''}
+                            </button>
+                        `).join('')}
+                    </div>
+                    <button type="button" class="rayat-history-export" onclick="exportCSV()">
+                        ${getLuxuryDashboardIcon('download')}<span>Télécharger CSV</span>
+                    </button>
+                    ${filterState.period === 'custom' ? `
+                        <div class="rayat-history-custom">
+                            <label>
+                                <span>${t('luxuryDashDateFrom')}</span>
+                                <input type="date" id="startDate" value="${formatHistoryDateInputValue(start)}">
+                            </label>
+                            <label>
+                                <span>${t('luxuryDashDateTo')}</span>
+                                <input type="date" id="endDate" value="${formatHistoryDateInputValue(end)}">
+                            </label>
+                            <button type="button" onclick="setCustomFilter()">${t('luxuryDashApply')}</button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function renderLuxuryHistoryPagination(totalRows, pageSize) {
+            const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
+            historyTablePage = Math.min(Math.max(historyTablePage, 1), pageCount);
+            const page = historyTablePage;
+            const startIndex = totalRows ? ((page - 1) * pageSize) + 1 : 0;
+            const endIndex = Math.min(page * pageSize, totalRows);
+            const pages = [1, 2, 3, pageCount]
+                .filter((value, index, list) => value >= 1 && value <= pageCount && list.indexOf(value) === index);
+            const visiblePages = page > 3 && page < pageCount
+                ? [1, page - 1, page, page + 1, pageCount].filter((value, index, list) => value >= 1 && value <= pageCount && list.indexOf(value) === index)
+                : pages;
+
+            return `
+                <div class="rayat-history-pagination">
+                    <p>Affichage : ${startIndex}–${endIndex} sur ${totalRows.toLocaleString('fr-FR')} mesures</p>
+                    <div class="rayat-history-page-list">
+                        <button type="button" ${page <= 1 ? 'disabled' : ''} onclick="setHistoryTablePage(${page - 1})">«</button>
+                        ${visiblePages.map((pageNumber, index) => `
+                            ${index > 0 && pageNumber - visiblePages[index - 1] > 1 ? '<span>...</span>' : ''}
+                            <button type="button" class="${pageNumber === page ? 'is-active' : ''}" onclick="setHistoryTablePage(${pageNumber})">${pageNumber}</button>
+                        `).join('')}
+                        <button type="button" ${page >= pageCount ? 'disabled' : ''} onclick="setHistoryTablePage(${page + 1})">»</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderLuxuryDashboardHistoricalMeasurements(soilMetrics, climateMetrics) {
+            const realRows = getFilteredHistory()
+                .filter((row) => row?.date instanceof Date && !Number.isNaN(row.date.getTime()))
+                .sort((a, b) => b.date - a.date);
+            const rows = realRows.length ? realRows : buildLuxuryHistoryPreviewRows();
+            const columns = getLuxuryHistoryColumns(soilMetrics, climateMetrics, rows);
+            const pageSize = 50;
+            const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+            historyTablePage = Math.min(Math.max(historyTablePage, 1), pageCount);
+            const offset = (historyTablePage - 1) * pageSize;
+            const pageRows = rows.slice(offset, offset + pageSize);
+
+            return `
+                <div class="rayat-history-card">
+                    <div class="rayat-history-header">
+                        <div>
+                            <h2>Historique des mesures</h2>
+                            <p>Consultez l'évolution détaillée de tous les paramètres de votre culture.</p>
+                        </div>
+                        ${renderLuxuryHistoryPeriodControls()}
+                    </div>
+                    ${historyState.loading ? `<div class="rayat-history-empty">${t('luxuryDashLoadingHistory')}</div>` : `
+                        <div class="rayat-history-table-shell">
+                            <table class="rayat-history-table">
+                                <thead>
+                                    <tr>
+                                        ${columns.map((column) => `
+                                            <th class="${column.type === 'date' ? 'is-date' : ''}">
+                                                <span>${escapeHtml(column.label)}</span>
+                                                ${column.unit ? `<small>${escapeHtml(column.unit)}</small>` : ''}
+                                            </th>
+                                        `).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${pageRows.map((row) => {
+                                        const rowLevel = getLuxuryHistoryRowLevel(row, columns);
+                                        return `
+                                            <tr>
+                                                ${columns.map((column) => {
+                                                    if (column.type === 'status') {
+                                                        return `<td>${renderLuxuryHistoryStatus(rowLevel)}</td>`;
+                                                    }
+
+                                                    const level = column.type === 'date' ? 'normal' : getLuxuryHistoryValueLevel(row, column);
+                                                    return `<td class="${column.type === 'date' ? 'rayat-history-date-cell' : `rayat-history-value ${getLuxuryDashboardStatusClass(level)}`}">${formatLuxuryHistoryCellValue(row, column)}</td>`;
+                                                }).join('')}
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        ${renderLuxuryHistoryPagination(rows.length, pageSize)}
+                    `}
+                </div>
+            `;
+        }
+
+        function renderLuxuryDashboardHistoryTable() {
+            const rows = [...getFilteredHistory()].reverse();
+            if (!rows.length) {
+                return `<div class="rayat-luxury-dashboard-empty-row">${historyState.loading ? t('luxuryDashLoadingHistory') : t('luxuryDashHistoricalEmpty')}</div>`;
+            }
+
+            return `
+                <div class="rayat-luxury-dashboard-history-scroll">
+                    <table class="rayat-luxury-dashboard-history-table">
+                        <thead>
+                            <tr>
+                                <th>${t('time')}</th>
+                                <th>${t('sensorSoF1')}</th>
+                                <th>${t('sensorSoF2')}</th>
+                                <th>EC</th>
+                                <th>pH</th>
+                                <th>${t('status')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map((row) => {
+                                const levels = [
+                                    getMetricLevel('soil', 'moisture', row.terreno),
+                                    getMetricLevel('soil', 'temperature', row.temperature),
+                                    getMetricLevel('soil', 'ec', row.ec),
+                                    getMetricLevel('soil', 'pH', row.pH)
+                                ];
+                                const level = getOverallLevel(levels);
+                                return `
+                                    <tr>
+                                        <td><strong>${formatLocalizedDate(row.date)}</strong><span>${formatLocalizedTime(row.date)}</span></td>
+                                        <td>${formatHistoryNumber(row.terreno, { group: 'soil', key: 'moisture' })}%</td>
+                                        <td>${formatHistoryNumber(row.temperature, { group: 'soil', key: 'temperature' })} °C</td>
+                                        <td>${formatHistoryNumber(row.ec, { group: 'soil', key: 'ec' })}</td>
+                                        <td>${formatHistoryNumber(row.pH, { group: 'soil', key: 'pH' })}</td>
+                                        <td><span class="rayat-luxury-dashboard-pill ${getLuxuryDashboardStatusClass(level)}">${getAlertBadgeLabel(level)}</span></td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function renderLuxuryDashboardRecommendations(metrics) {
+            const moisture = getLuxuryDashboardMetric(metrics, 'moisture');
+            const nitrogen = getLuxuryDashboardMetric(metrics, 'nitrogen');
+            const healthLevel = getOverallLevel(metrics.filter((metric) => metric.available).map((metric) => metric.state.level));
+            const items = [
+                {
+                    icon: 'drop',
+                    title: t('luxuryDashIrrigationAdvice'),
+                    detail: moisture.available && moisture.state.level === 'normal' ? t('luxuryDashIrrigationStable') : t('luxuryDashIrrigationReview'),
+                    level: moisture.available ? moisture.state.level : 'unavailable'
+                },
+                {
+                    icon: 'alert',
+                    title: t('luxuryDashHydricRisk'),
+                    detail: moisture.available && moisture.state.level === 'normal' ? t('luxuryDashHydricStable') : t('luxuryDashHydricWarning'),
+                    level: moisture.available ? moisture.state.level : 'unavailable'
+                },
+                {
+                    icon: 'leaf',
+                    title: t('luxuryDashNutritionAdvice'),
+                    detail: nitrogen.available && nitrogen.state.level === 'normal' ? t('luxuryDashNutritionStable') : t('luxuryDashNutritionReview'),
+                    level: nitrogen.available ? nitrogen.state.level : healthLevel
+                }
+            ];
+
+            return items.map((item) => {
+                const priority = item.level === 'alert'
+                    ? t('luxuryDashPriorityHigh')
+                    : (item.level === 'attention' ? t('luxuryDashPriorityMedium') : t('luxuryDashPriorityLow'));
+                return `
+                    <article class="rayat-luxury-dashboard-recommendation ${getLuxuryDashboardStatusClass(item.level)}">
+                        <span class="rayat-luxury-dashboard-recommendation-icon">${getLuxuryDashboardIcon(item.icon)}</span>
+                        <div>
+                            <h4>${item.title}</h4>
+                            <p>${item.detail}</p>
+                            <small>${priority}</small>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        function renderLuxuryDashboardCropSelect() {
+            const selectedCrop = getSelectedCropOption();
+            return `
+                <label class="rayat-luxury-dashboard-crop">
+                    <span>${t('cropSelectorTitle')}</span>
+                    <select onchange="setUserCrop(this.value)" aria-label="${escapeHtml(t('cropSelectorTitle'))}">
+                        ${CROP_OPTIONS.map((option) => `<option value="${option.value}" ${selectedCrop.value === option.value ? 'selected' : ''}>${t(option.labelKey)}</option>`).join('')}
+                    </select>
+                </label>
+            `;
+        }
+
+        function renderLuxuryOnlineDashboardPage() {
+            if (!normalizeDashboardSensorKey(selectedSensor)) {
+                selectedSensor = 'terreno';
+            }
+
+            const soilMetrics = getLuxuryDashboardSoilMetrics();
+            const climateMetrics = getLuxuryDashboardClimateMetrics();
+            const moisture = getLuxuryDashboardMetric(soilMetrics, 'moisture');
+            const soilTemperature = getLuxuryDashboardMetric(soilMetrics, 'temperature');
+            const soilEc = getLuxuryDashboardMetric(soilMetrics, 'ec');
+            const soilPh = getLuxuryDashboardMetric(soilMetrics, 'pH');
+            const healthIndex = getLuxuryDashboardHealthIndex(soilMetrics);
+            const statusMeta = getDemoSectionStatusMeta('terreno');
+            const isOnline = statusMeta.className === 'is-online';
+            const usesDemoFallback = soilMetrics.some((metric) => metric.usesFallback) || climateMetrics.some((metric) => metric.usesFallback);
+            const availableSensors = soilMetrics.filter((metric) => metric.available).length;
+            const onlineSensors = isOnline ? availableSensors : 0;
+            const alarms = soilMetrics.filter((metric) => metric.available && metric.state.level !== 'normal');
+            const displayUserName = user?.first_name || user?.name || t('luxuryDashUserName');
+            const climateTemperature = getLuxuryDashboardMetric(climateMetrics, 'temperature');
+            const climateHumidity = getLuxuryDashboardMetric(climateMetrics, 'humidity');
+            const wind = getLuxuryDashboardMetric(climateMetrics, 'windSpeed');
+            const exportAllowed = !isAuthenticated() || !isCustomerRole(currentRole) || hasCustomerPermission('export_csv');
+            const iconByMetric = {
+                moisture: 'drop',
+                temperature: 'thermometer',
+                humidity: 'drop',
+                ec: 'bolt',
+                pH: 'flask',
+                nitrogen: 'nutrient',
+                phosphorus: 'nutrient',
+                potassium: 'leaf',
+                co2: 'weather',
+                organicMatter: 'leaf'
+            };
+            const dashboardLanguageOptions = [
+                { lang: 'it', code: 'IT' },
+                { lang: 'fr', code: 'FR' },
+                { lang: 'en', code: 'EN' },
+                { lang: 'ar', code: 'AR' },
+                { lang: 'zgh', code: 'ZGH' }
+            ];
+
+            const metricLabel = (metric) => metric.key === 'organicMatter' ? t('luxuryDashOrganicMatter') : t(metric.label);
+            const metricValue = (metric) => metric.available ? `${formatMetricValue(metric.value)}${metric.unit ? ` ${metric.unit}` : ''}` : '--';
+            const metricStatusLabel = (metric) => metric.available ? metric.state.label : t('luxuryDashUnavailableStatus');
+            const metricStatusClass = (metric) => metric.available ? getLuxuryDashboardStatusClass(metric.state.level) : 'is-unavailable';
+            const climateMetricValue = (metric) => metric.available ? `${formatMetricValue(metric.value)}${metric.unit ? ` ${metric.unit}` : ''}` : '--';
+            const climateMetricStatus = (metric) => metric.available ? t('statusNormal') : t('luxuryDashUnavailableStatus');
+            const nowLabel = statusMeta.timestamp || t('luxuryDashNoMeasuredValue');
+            const dashboardSensorOrder = {
+                soil: ['moisture', 'temperature', 'ec', 'pH', 'nitrogen', 'phosphorus', 'potassium'],
+                climate: ['temperature', 'humidity', 'co2']
+            };
+            const climateLabelByKey = {
+                temperature: t('tempAmbient'),
+                humidity: t('relHumidity'),
+                co2: t('co2')
+            };
+            const historyFieldBySensorMetric = {
+                soil: {
+                    moisture: 'terreno',
+                    temperature: 'temperature',
+                    ec: 'ec',
+                    pH: 'pH',
+                    nitrogen: 'nitrogen',
+                    phosphorus: 'phosphorus',
+                    potassium: 'potassium'
+                },
+                climate: {
+                    temperature: 'climaTemp',
+                    humidity: 'humidity',
+                    co2: 'co2'
+                }
+            };
+            const createDashboardSensorMetric = (group, metric) => {
+                const value = normalizeMetricValue(group, metric.key, metric.value);
+                const range = getRangeForMetric(group, metric.key);
+                const available = metric.installed !== false && Number.isFinite(value);
+                const state = available
+                    ? getMetricState(value, range)
+                    : { level: 'unavailable', label: t('luxuryDashUnavailableStatus') };
+
+                return {
+                    ...metric,
+                    group,
+                    value,
+                    range,
+                    available,
+                    state,
+                    unit: getMetricUnit(group, metric.key, metric.unit || metric.unita || ''),
+                    displayLabel: group === 'climate' ? (climateLabelByKey[metric.key] || t(metric.label)) : metricLabel(metric),
+                    iconName: iconByMetric[metric.key] || (group === 'climate' ? 'weather' : 'leaf')
+                };
+            };
+            const sortSensorMetrics = (group, metrics) => metrics
+                .filter((metric) => dashboardSensorOrder[group].includes(metric.key))
+                .sort((a, b) => dashboardSensorOrder[group].indexOf(a.key) - dashboardSensorOrder[group].indexOf(b.key))
+                .map((metric) => createDashboardSensorMetric(group, metric));
+            const dashboardSensorMetrics = [
+                ...sortSensorMetrics('soil', soilMetrics),
+                ...sortSensorMetrics('climate', climateMetrics)
+            ];
+            const conditionItems = [
+                { icon: 'drop', label: t('luxuryDashRelativeHumidity'), value: climateMetricValue(climateHumidity), status: climateMetricStatus(climateHumidity), level: climateHumidity.available ? 'normal' : 'unavailable' },
+                { icon: 'thermometer', label: t('luxuryDashAirTemperature'), value: climateMetricValue(climateTemperature), status: climateMetricStatus(climateTemperature), level: climateTemperature.available ? 'normal' : 'unavailable' },
+                { icon: 'thermometer', label: t('luxuryDashSoilTemperature'), value: metricValue(soilTemperature), status: metricStatusLabel(soilTemperature), level: soilTemperature.state.level },
+                { icon: 'flask', label: t('luxuryDashSoilPh'), value: metricValue(soilPh), status: metricStatusLabel(soilPh), level: soilPh.state.level },
+                { icon: 'bolt', label: t('luxuryDashSoilEc'), value: metricValue(soilEc), status: metricStatusLabel(soilEc), level: soilEc.state.level }
+            ];
+            const activityRows = alarms.length
+                ? alarms.map((metric) => ({
+                    icon: iconByMetric[metric.key] || 'alert',
+                    title: t(metric.label),
+                    detail: buildOptimalRangeLabel(metric.range, 'range'),
+                    time: nowLabel,
+                    level: metric.state.level,
+                    status: metric.state.label
+                }))
+                : [{
+                    icon: 'wifi',
+                    title: t('luxuryDashAllSensorsOnline'),
+                    detail: `${availableSensors}/${soilMetrics.length} ${t('luxuryDashOperating').toLowerCase()}`,
+                    time: nowLabel,
+                    level: isOnline ? 'normal' : 'unavailable',
+                    status: isOnline ? t('statusNormal') : statusMeta.label
+                }];
+
+            const renderMetric = (metric) => `
+                <article class="rayat-luxury-dashboard-soil-metric ${metricStatusClass(metric)}">
+                    <span>${getLuxuryDashboardIcon(iconByMetric[metric.key] || 'leaf')}</span>
+                    <div>
+                        <small>${metricLabel(metric)}</small>
+                        <strong>${metric.available ? formatMetricValue(metric.value) : '--'} <em>${metric.unit}</em></strong>
+                        <i class="${metricStatusClass(metric)}">${metricStatusLabel(metric)}</i>
+                    </div>
+                </article>
+            `;
+            const getMetricDirection = (metric) => {
+                const value = normalizeMetricValue('soil', metric.key, metric.value);
+                if (!metric.available || !metric.range || !Number.isFinite(value)) return 'unavailable';
+                if (value < metric.range.min) return 'low';
+                if (value > metric.range.max) return 'high';
+                return 'normal';
+            };
+            const getVisualMetricCopy = (metric) => {
+                const level = metric.available ? metric.state.level : 'unavailable';
+                const direction = getMetricDirection(metric);
+                let titleKey = 'sensorVisualNormalTitle';
+                let actionKey = 'sensorVisualNormalAction';
+
+                if (level === 'unavailable') {
+                    titleKey = 'sensorVisualUnavailableTitle';
+                    actionKey = 'sensorVisualUnavailableAction';
+                } else if (metric.key === 'moisture' && direction === 'low') {
+                    titleKey = 'sensorVisualMoistureLowTitle';
+                    actionKey = 'sensorVisualMoistureLowAction';
+                } else if (metric.key === 'moisture' && direction === 'high') {
+                    titleKey = 'sensorVisualMoistureHighTitle';
+                    actionKey = 'sensorVisualMoistureHighAction';
+                } else if (level === 'alert') {
+                    titleKey = direction === 'low'
+                        ? 'sensorVisualLowAlertTitle'
+                        : (direction === 'high' ? 'sensorVisualHighAlertTitle' : 'sensorVisualAlertTitle');
+                    actionKey = 'sensorVisualAlertAction';
+                } else if (level === 'attention') {
+                    titleKey = direction === 'low'
+                        ? 'sensorVisualLowAttentionTitle'
+                        : (direction === 'high' ? 'sensorVisualHighAttentionTitle' : 'sensorVisualAttentionTitle');
+                    actionKey = 'sensorVisualAttentionAction';
+                }
+
+                const metricName = metricLabel(metric);
+                return {
+                    title: formatTemplate(t(titleKey), { metric: metricName }),
+                    action: formatTemplate(t(actionKey), { metric: metricName })
+                };
+            };
+            const renderSensorCardModeToggle = () => `
+                <div class="rayat-luxury-dashboard-sensor-mode-toggle" role="group" aria-label="${escapeHtml(t('sensorCardModeLabel'))}">
+                    <button type="button" class="${currentSensorCardMode === 'technical' ? 'is-active' : ''}" onclick="setSensorCardMode('technical')">${t('sensorCardModeTechnical')}</button>
+                    <button type="button" class="${currentSensorCardMode === 'visual' ? 'is-active' : ''}" onclick="setSensorCardMode('visual')">${t('sensorCardModeVisual')}</button>
+                </div>
+            `;
+            const renderDashboardProfileDropdown = () => `
+                <div class="rayat-luxury-dashboard-profile-dropdown ${isLuxuryDashboardProfileMenuOpen ? 'is-open' : ''}" role="menu" aria-label="${escapeHtml(displayUserName)}">
+                    <div class="rayat-luxury-dashboard-profile-dropdown-section">
+                        <span class="rayat-luxury-dashboard-profile-dropdown-label">${t('sensorCardModeLabel')}</span>
+                        ${renderSensorCardModeToggle()}
+                    </div>
+                    <div class="rayat-luxury-dashboard-profile-dropdown-section">
+                        <span class="rayat-luxury-dashboard-profile-dropdown-label">${t('dashboardProfileLanguage')}</span>
+                        <div class="rayat-luxury-dashboard-profile-language-grid">
+                            ${dashboardLanguageOptions.map((option) => `
+                                <button type="button" class="${currentLang === option.lang ? 'is-active' : ''}" onclick="setLanguage('${option.lang}')">${option.code}</button>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <button type="button" class="rayat-luxury-dashboard-profile-dropdown-action" onclick="setView('profilo')" role="menuitem">
+                        ${getLuxuryDashboardIcon('settings')}<span>${t('dashboardProfileSettings')}</span>
+                    </button>
+                    <button type="button" class="rayat-luxury-dashboard-profile-dropdown-action rayat-luxury-dashboard-profile-dropdown-action--muted" onclick="setView('home')" role="menuitem">
+                        ${getLuxuryDashboardIcon('history')}<span>${t('dashboardProfileExitDemo')}</span>
+                    </button>
+                </div>
+            `;
+            const renderVisualMetric = (metric) => {
+                const copy = getVisualMetricCopy(metric);
+                return `
+                    <article class="rayat-luxury-dashboard-visual-card ${metricStatusClass(metric)}">
+                        <span class="rayat-luxury-dashboard-visual-icon">${getLuxuryDashboardIcon(iconByMetric[metric.key] || 'leaf')}</span>
+                        <div class="rayat-luxury-dashboard-visual-copy">
+                            <small>${metricLabel(metric)}</small>
+                            <strong>${escapeHtml(copy.title)}</strong>
+                            <p><b>${t('sensorVisualAction')}:</b> ${escapeHtml(copy.action)}</p>
+                            ${metric.available ? `<em>${t('sensorVisualValue')}: ${metricValue(metric)}</em>` : ''}
+                        </div>
+                    </article>
+                `;
+            };
+            const getProfessionalTrendValues = (metric) => {
+                if (!historyState.usesLiveData) {
+                    return [];
+                }
+                const field = historyFieldBySensorMetric[metric.group]?.[metric.key];
+                if (!field) {
+                    return [];
+                }
+
+                return getFilteredHistory()
+                    .slice(-10)
+                    .map((row, index) => ({
+                        index,
+                        value: normalizeMetricValue(metric.group, metric.key, row?.[field])
+                    }))
+                    .filter((entry) => Number.isFinite(entry.value));
+            };
+            const renderProfessionalMiniTrend = (metric) => {
+                const values = getProfessionalTrendValues(metric);
+                if (values.length < 3) {
+                    return `<span class="rayat-luxury-dashboard-mini-trend rayat-luxury-dashboard-mini-trend--empty">${t('sensorProfessionalHistoryUnavailable')}</span>`;
+                }
+
+                const width = 112;
+                const height = 42;
+                const minValue = Math.min(...values.map((entry) => entry.value));
+                const maxValue = Math.max(...values.map((entry) => entry.value));
+                const span = maxValue - minValue || 1;
+                const points = values.map((entry, index) => {
+                    const x = 6 + ((width - 12) * index / (values.length - 1));
+                    const y = height - 6 - (((entry.value - minValue) / span) * (height - 12));
+                    return [x, y];
+                });
+                const linePoints = points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+                const areaPoints = `6,${height - 5} ${linePoints} ${width - 6},${height - 5}`;
+                return `
+                    <svg class="rayat-luxury-dashboard-mini-trend" viewBox="0 0 ${width} ${height}" aria-hidden="true">
+                        <polygon points="${areaPoints}" class="rayat-luxury-dashboard-mini-trend-area"></polygon>
+                        <polyline points="${linePoints}" class="rayat-luxury-dashboard-mini-trend-line"></polyline>
+                    </svg>
+                `;
+            };
+            const renderProfessionalSensorCard = (metric) => {
+                const statusClass = metricStatusClass(metric);
+                const stateLabel = metricStatusLabel(metric);
+                const value = metric.available ? formatMetricValue(metric.value) : '--';
+                const unit = metric.available && metric.unit ? metric.unit : '';
+                return `
+                    <article class="rayat-luxury-dashboard-professional-card ${statusClass}" data-metric-key="${metric.group}:${metric.key}">
+                        <div class="rayat-luxury-dashboard-professional-head">
+                            <span class="rayat-luxury-dashboard-professional-icon">${getLuxuryDashboardIcon(metric.iconName)}</span>
+                            <strong>${metric.displayLabel}</strong>
+                        </div>
+                        <div class="rayat-luxury-dashboard-professional-value">
+                            <span>${value}</span>
+                            ${unit ? `<em>${unit}</em>` : ''}
+                        </div>
+                        <div class="rayat-luxury-dashboard-professional-footer">
+                            <span class="rayat-luxury-dashboard-professional-status">
+                                <i class="rayat-luxury-dashboard-pulse-dot ${statusClass}" aria-hidden="true"></i>
+                                ${stateLabel}
+                            </span>
+                            ${renderProfessionalMiniTrend(metric)}
+                        </div>
+                    </article>
+                `;
+            };
+            const renderSensorCardModeContent = () => {
+                const isProfessional = currentSensorCardMode === 'technical';
+                const modeTitle = isProfessional ? t('sensorProfessionalModeTitle') : t('sensorAssistedModeTitle');
+                const modeSubtitle = isProfessional ? t('sensorProfessionalModeSubtitle') : t('sensorAssistedModeSubtitle');
+                const grid = isProfessional
+                    ? `<div class="rayat-luxury-dashboard-professional-grid">${dashboardSensorMetrics.map(renderProfessionalSensorCard).join('')}</div>`
+                    : `<div class="rayat-luxury-dashboard-assisted-grid">${dashboardSensorMetrics.map((metric) => renderMetricCard(metric.group, metric)).join('')}</div>`;
+
+                return `
+                    <div class="rayat-luxury-dashboard-sensor-mode-heading">
+                        <span>${modeTitle}</span>
+                        <p>${modeSubtitle}</p>
+                    </div>
+                    ${grid}
+                `;
+            };
+
+            return `
+                <main class="rayat-luxury-dashboard-page">
+                    <button type="button" class="rayat-luxury-dashboard-sidebar-backdrop ${isLuxuryDashboardSidebarOpen ? 'is-open' : ''}" onclick="toggleLuxuryDashboardSidebar(false)" aria-label="${escapeHtml(t('mobileMenuClose'))}"></button>
+                    <aside class="rayat-luxury-dashboard-sidebar ${isLuxuryDashboardSidebarOpen ? 'is-open' : ''}">
+                        <button type="button" class="rayat-luxury-dashboard-brand" onclick="setView('home')" aria-label="${escapeHtml(t('home'))}">
+                            <img src="/assets/logo/logo-green.svg" alt="Rayat">
+                            <div><strong>RAYAT</strong><span>SMART MONITORING</span></div>
+                        </button>
+                        <nav class="rayat-luxury-dashboard-nav" aria-label="${escapeHtml(t('luxuryDashMenuDashboard'))}">
+                            <button class="is-active" type="button" data-dashboard-target="rayat-luxury-dashboard-top" onclick="scrollLuxuryDashboardSection('rayat-luxury-dashboard-top')">${getLuxuryDashboardIcon('calendar')}<span>${t('demoLive')}</span></button>
+                            <button type="button" data-dashboard-target="rayat-luxury-dashboard-kpis" onclick="scrollLuxuryDashboardSection('rayat-luxury-dashboard-kpis')">${getLuxuryDashboardIcon('dashboard')}<span>${t('luxuryDashMenuDashboard')}</span></button>
+                            <button type="button" data-dashboard-target="rayat-luxury-dashboard-map-section" onclick="scrollLuxuryDashboardSection('rayat-luxury-dashboard-map-section')">${getLuxuryDashboardIcon('pin')}<span>${t('luxuryDashMapShort')}</span></button>
+                            <button type="button" data-dashboard-target="rayat-luxury-dashboard-sensors" onclick="scrollLuxuryDashboardSection('rayat-luxury-dashboard-sensors')">${getLuxuryDashboardIcon('sensors')}<span>${t('luxuryDashMenuSensors')}</span></button>
+                            <button type="button" data-dashboard-target="rayat-luxury-dashboard-activities" onclick="scrollLuxuryDashboardSection('rayat-luxury-dashboard-activities')">${getLuxuryDashboardIcon('alert')}<span>${t('luxuryDashMenuAlarmSingular')}</span></button>
+                            <button type="button" data-dashboard-target="rayat-luxury-dashboard-recommendations" onclick="scrollLuxuryDashboardSection('rayat-luxury-dashboard-recommendations')">${getLuxuryDashboardIcon('bolt')}<span>${t('luxuryDashMenuRecommendations')}</span></button>
+                            <button type="button" data-dashboard-target="rayat-luxury-dashboard-reports" onclick="scrollLuxuryDashboardSection('rayat-luxury-dashboard-reports')">${getLuxuryDashboardIcon('report')}<span>${t('luxuryDashMenuReports')}</span></button>
+                            <button type="button" data-dashboard-target="rayat-luxury-dashboard-trend" onclick="scrollLuxuryDashboardSection('rayat-luxury-dashboard-trend')">${getLuxuryDashboardIcon('history')}<span>${t('luxuryDashMenuHistory')}</span></button>
+                        </nav>
+                    </aside>
+                    <section id="rayat-luxury-dashboard-top" class="rayat-luxury-dashboard-main">
+                        ${renderSubscriptionWarningBanner()}
+                        <header class="rayat-luxury-dashboard-header">
+                            <div>
+                                <h1>${t('luxuryDashDemoPageTitle')}</h1>
+                                <p>${t('luxuryDashDemoPageSubtitle')}</p>
+                            </div>
+                            <div class="rayat-luxury-dashboard-header-actions">
+                                <button type="button" class="rayat-luxury-dashboard-mobile-toggle" onclick="toggleLuxuryDashboardSidebar(true)" aria-label="${escapeHtml(t('navMenu'))}" aria-expanded="${isLuxuryDashboardSidebarOpen}">
+                                    ${getLuxuryDashboardIcon('dashboard')}
+                                </button>
+                                <button type="button" class="rayat-luxury-dashboard-top-icon">${getLuxuryDashboardIcon('bell')}</button>
+                                <button type="button" class="rayat-luxury-dashboard-top-icon">${getLuxuryDashboardIcon('question')}</button>
+                                <div class="rayat-luxury-dashboard-profile-menu" onclick="event.stopPropagation()">
+                                    <button type="button" class="rayat-luxury-dashboard-profile" onclick="toggleLuxuryDashboardProfileMenu(null, event)" aria-expanded="${isLuxuryDashboardProfileMenuOpen}" aria-haspopup="menu">
+                                        <span>${escapeHtml((displayUserName || 'MT').slice(0, 2).toUpperCase())}</span>
+                                        <div><strong>${escapeHtml(displayUserName)}</strong><small>${t('demoLive')}</small></div>
+                                    </button>
+                                    ${renderDashboardProfileDropdown()}
+                                </div>
+                            </div>
+                        </header>
+                        <div class="rayat-luxury-dashboard-live-meta">
+                            <button class="rayat-luxury-dashboard-refresh ${isRefreshingData ? 'is-loading' : ''}" type="button" onclick="refreshData()" ${isRefreshingData ? 'disabled' : ''} aria-label="${escapeHtml(t('refreshDataAction'))}">
+                                ${getLuxuryDashboardIcon('refresh')}
+                            </button>
+                            <span class="rayat-luxury-dashboard-online ${statusMeta.className}">${statusMeta.label}</span>
+                            <span>${t('luxuryDashLastUpdateShort')}: <strong>${nowLabel}</strong></span>
+                            ${usesDemoFallback ? `<span class="rayat-luxury-dashboard-demo-pill">${t('luxuryDashDemoFallback')}</span>` : ''}
+                        </div>
+                        <section class="rayat-luxury-dashboard-kpis" id="rayat-luxury-dashboard-kpis">
+                            <article>${getLuxuryDashboardIcon('leaf')}<div><span>${t('luxuryDashHealthIndex')}</span><strong>${Number.isFinite(healthIndex) ? healthIndex : '--'} <small>/100</small></strong><em class="${Number.isFinite(healthIndex) && healthIndex >= 85 ? 'is-normal' : 'is-attention'}">${Number.isFinite(healthIndex) && healthIndex >= 85 ? t('luxuryDashExcellent') : t('luxuryDashToMonitor')}</em></div></article>
+                            <article>${getLuxuryDashboardIcon('wifi')}<div><span>${t('luxuryDashSensorsOnline')}</span><strong>${onlineSensors} <small>/ ${soilMetrics.length}</small></strong><em class="${isOnline ? 'is-normal' : 'is-alert'}">${isOnline ? t('luxuryDashAllOnline') : statusMeta.label}</em></div></article>
+                            <article>${getLuxuryDashboardIcon('clock')}<div><span>${t('luxuryDashLastUpdateCard')}</span><strong>${nowLabel}</strong><em class="${isOnline ? 'is-normal' : 'is-alert'}">${isOnline ? t('luxuryDashRealtimeData') : statusMeta.label}</em></div></article>
+                            <article>${getLuxuryDashboardIcon('alert')}<div><span>${t('luxuryDashActiveAlarms')}</span><strong>${alarms.length}</strong><em class="${alarms.length ? 'is-alert' : 'is-normal'}">${alarms.length ? t('luxuryDashToMonitor') : t('luxuryDashNoAlert')}</em></div></article>
+                        </section>
+                        <section class="rayat-luxury-dashboard-map-layout">
+                            <article class="rayat-luxury-dashboard-card rayat-luxury-dashboard-map-card" id="rayat-luxury-dashboard-map-section">
+                                <div class="rayat-luxury-dashboard-card-head">
+                                    <h2>${t('luxuryDashMapTitle')}</h2>
+                                    <div>
+                                        <span>${t('luxuryDashSatellite')}</span>
+                                        <button type="button" class="rayat-luxury-dashboard-map-action">${getLuxuryDashboardIcon('expand')}</button>
+                                    </div>
+                                </div>
+                                <div id="rayat-luxury-dashboard-map" class="rayat-luxury-dashboard-map" aria-label="${escapeHtml(t('luxuryDashMapTitle'))}"></div>
+                                <div class="rayat-luxury-dashboard-map-footer">
+                                    <span>${getLuxuryDashboardIcon('pin')}${t('luxuryDashFieldInfo')}</span>
+                                    <strong>${t('luxuryDashCropHealth')}: ${Number.isFinite(healthIndex) ? `${healthIndex}/100` : '--'}</strong>
+                                </div>
+                            </article>
+                        </section>
+                        <section class="rayat-luxury-dashboard-primary">
+                            <article class="rayat-luxury-dashboard-card rayat-luxury-dashboard-sensor-status" id="rayat-luxury-dashboard-sensors">
+                                <div class="rayat-luxury-dashboard-card-head"><h2>${t('luxuryDashSensorStatus')}</h2><button type="button">${t('luxuryDashViewDetails')}</button></div>
+                                ${soilMetrics.map((metric) => `
+                                    <div class="rayat-luxury-dashboard-sensor-row">
+                                        <span>${getLuxuryDashboardIcon(iconByMetric[metric.key] || 'leaf')}${metricLabel(metric)}</span>
+                                        <b class="${isOnline && metric.available ? 'is-normal' : 'is-unavailable'}"><i></i>${isOnline && metric.available ? statusMeta.label : t('luxuryDashUnavailableStatus')}</b>
+                                    </div>
+                                `).join('')}
+                            </article>
+                            <article class="rayat-luxury-dashboard-card rayat-luxury-dashboard-recommendations" id="rayat-luxury-dashboard-recommendations">
+                                <div class="rayat-luxury-dashboard-card-head"><h2>${t('luxuryDashRecommendations')}</h2><button type="button">${t('luxuryDashViewAll')}</button></div>
+                                ${renderLuxuryDashboardRecommendations(soilMetrics)}
+                            </article>
+                        </section>
+                        <article class="rayat-luxury-dashboard-card rayat-luxury-dashboard-conditions" id="rayat-luxury-dashboard-conditions">
+                            <div class="rayat-luxury-dashboard-card-head"><h2>${t('luxuryDashCurrentConditions')}</h2></div>
+                            <div class="rayat-luxury-dashboard-condition-grid">
+                                ${conditionItems.map((item) => `
+                                    <div class="rayat-luxury-dashboard-condition ${getLuxuryDashboardStatusClass(item.level)}">
+                                        <span>${getLuxuryDashboardIcon(item.icon)}</span>
+                                        <small>${item.label}</small>
+                                        <strong>${item.value}</strong>
+                                        <em>${item.status}</em>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </article>
+                        <section class="rayat-luxury-dashboard-secondary">
+                            <article class="rayat-luxury-dashboard-card rayat-luxury-dashboard-trend rayat-history-measures" id="rayat-luxury-dashboard-trend">
+                                ${renderLuxuryDashboardHistoricalMeasurements(soilMetrics, climateMetrics)}
+                            </article>
+                            <article class="rayat-luxury-dashboard-card rayat-luxury-dashboard-soil" id="rayat-luxury-dashboard-sensor-cards">
+                                <div class="rayat-luxury-dashboard-card-head"><h2>${t('sensorCardsSectionTitle')}</h2></div>
+                                ${renderSensorCardModeContent()}
+                            </article>
+                        </section>
+                        <section class="rayat-luxury-dashboard-bottom">
+                            <article class="rayat-luxury-dashboard-card rayat-luxury-dashboard-activities" id="rayat-luxury-dashboard-activities">
+                                <div class="rayat-luxury-dashboard-card-head"><h2>${t('luxuryDashRecentActivities')}</h2></div>
+                                ${activityRows.map((activity) => `
+                                    <div class="rayat-luxury-dashboard-activity-row">
+                                        <span>${getLuxuryDashboardIcon(activity.icon)}</span>
+                                        <div><strong>${activity.title}</strong><small>${activity.detail}</small></div>
+                                        <time>${activity.time}</time>
+                                    </div>
+                                `).join('')}
+                            </article>
+                            <article class="rayat-luxury-dashboard-card rayat-luxury-dashboard-reports" id="rayat-luxury-dashboard-reports">
+                                <div class="rayat-luxury-dashboard-card-head"><h2>${t('luxuryDashQuickReports')}</h2></div>
+                                <p>${t('luxuryDashQuickReportsSubtitle')}</p>
+                                <div class="rayat-luxury-dashboard-report-actions">
+                                    <div class="rayat-luxury-dashboard-report-tile">${getLuxuryDashboardIcon('calendar')}<span>${t('luxuryDashTodayData')}</span></div>
+                                    <div class="rayat-luxury-dashboard-report-tile">${getLuxuryDashboardIcon('calendar')}<span>${t('luxuryDashWeeklyReport')}</span></div>
+                                    <div class="rayat-luxury-dashboard-report-tile">${getLuxuryDashboardIcon('analytics')}<span>${t('luxuryDashMonthlyAnalysis')}</span></div>
+                                    <button type="button" onclick="${exportAllowed ? 'exportCSV()' : ''}" ${exportAllowed ? '' : 'disabled'}>${getLuxuryDashboardIcon('download')}<span>${t('luxuryDashDownloadCsv')}</span></button>
+                                </div>
+                            </article>
+                        </section>
+                        <article class="rayat-luxury-dashboard-card rayat-luxury-dashboard-verified" id="rayat-luxury-dashboard-history">
+                            <span>${getLuxuryDashboardIcon('shield')}</span>
+                            <div><strong>${t('luxuryDashVerifiedTitle')}</strong><small>${t('luxuryDashVerifiedText')}</small></div>
+                            <button type="button" onclick="scrollLuxuryDashboardSection('rayat-luxury-dashboard-map-section')">${t('luxuryDashLearnRayat')}<span>&rarr;</span></button>
+                        </article>
+                    </section>
+                </main>
+            `;
+        }
+
+        function initLuxuryDashboardMap() {
+            const container = document.getElementById('rayat-luxury-dashboard-map');
+            if (!container || typeof L === 'undefined') {
+                return;
+            }
+
+            if (luxuryDashboardMap) {
+                luxuryDashboardMap.remove();
+                luxuryDashboardMap = null;
+            }
+
+            const bananaFarm = mockClients.find((client) => client.crop === 'Banane' && client.locality === 'Taroudant') || { lat: 30.4277, lng: -8.8755 };
+            const center = [bananaFarm.lat, bananaFarm.lng];
+            luxuryDashboardMap = L.map(container, {
+                zoomControl: false,
+                attributionControl: false,
+                scrollWheelZoom: false
+            }).setView(center, 16);
+
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 20
+            }).addTo(luxuryDashboardMap);
+            L.control.zoom({ position: 'bottomright' }).addTo(luxuryDashboardMap);
+
+            const boundary = [
+                [center[0] + 0.0022, center[1] - 0.0034],
+                [center[0] + 0.0026, center[1] + 0.0011],
+                [center[0] + 0.0015, center[1] + 0.0037],
+                [center[0] - 0.0018, center[1] + 0.0032],
+                [center[0] - 0.0026, center[1] - 0.0005],
+                [center[0] - 0.0013, center[1] - 0.0039]
+            ];
+            const polygon = L.polygon(boundary, {
+                color: '#fafaf7',
+                weight: 3,
+                opacity: 0.95,
+                fillColor: '#2d6a4f',
+                fillOpacity: 0.35
+            });
+
+            if (L.Control && typeof L.Control.Draw === 'function' && typeof L.FeatureGroup === 'function') {
+                const editableLayers = new L.FeatureGroup([polygon]);
+                luxuryDashboardMap.addLayer(editableLayers);
+                luxuryDashboardMap.addControl(new L.Control.Draw({
+                    edit: { featureGroup: editableLayers },
+                    draw: { marker: false, circle: false, circlemarker: false, rectangle: false, polyline: false }
+                }));
+            } else {
+                polygon.addTo(luxuryDashboardMap);
+            }
+
+            const healthIndex = getLuxuryDashboardHealthIndex(getLuxuryDashboardSoilMetrics());
+            const label = `
+                <div class="rayat-luxury-dashboard-map-marker">
+                    <span>${t('luxuryDashCropHealth')}</span>
+                    <strong>${Number.isFinite(healthIndex) ? `${healthIndex}/100` : '--'}</strong>
+                </div>
+            `;
+            L.marker(center, {
+                icon: L.divIcon({
+                    className: 'rayat-luxury-dashboard-marker-shell',
+                    html: label,
+                    iconSize: [132, 58],
+                    iconAnchor: [66, 29]
+                })
+            }).addTo(luxuryDashboardMap);
+            window.setTimeout(() => luxuryDashboardMap?.invalidateSize(), 0);
+        }
+
+        function renderDemoPage() {
+            return renderLuxuryOnlineDashboardPage();
+        }
+
+        function renderPerliteTrackPage() {
+            if (!canAccessPerliteTrack()) {
+                return renderLoginPage();
+            }
+
+            selectedSensor = 'terreno';
+            const soilMetrics = getLuxuryDashboardSoilMetrics();
+            const statusMeta = getDemoSectionStatusMeta('terreno');
+            const isOnline = statusMeta.className === 'is-online';
+            const nowLabel = statusMeta.timestamp || t('luxuryDashNoMeasuredValue');
+            const iconByMetric = {
+                moisture: 'drop',
+                ec: 'bolt',
+                temperature: 'thermometer'
+            };
+            const perliteRanges = {
+                moisture: {
+                    min: 55,
+                    max: 75,
+                    unit: '%',
+                    label: 'Range indicativo per coltura fuori suolo'
+                },
+                ec: {
+                    min: 2,
+                    max: 3.5,
+                    unit: 'mS/cm',
+                    label: 'Range indicativo per substrato perlite'
+                },
+                temperature: {
+                    min: 18,
+                    max: 26,
+                    unit: '°C',
+                    label: 'Range indicativo per pomodoro in serra'
+                }
+            };
+            const formatPerliteRangeLabel = (metric) => {
+                const rangeMeta = perliteRanges[metric.key];
+                if (!rangeMeta || !Number.isFinite(rangeMeta.min) || !Number.isFinite(rangeMeta.max)) {
+                    return 'Range indicativo per substrato perlite';
+                }
+                return `${rangeMeta.label}: ${formatMetricValue(rangeMeta.min)} - ${formatMetricValue(rangeMeta.max)} ${rangeMeta.unit}`;
+            };
+            const metrics = RAYAT_PERLITE_SENSOR_METRICS.map((definition) => {
+                const sourceMetric = soilMetrics.find((metric) => metric.key === definition.key) || definition;
+                const value = normalizeMetricValue('soil', definition.key, sourceMetric.value);
+                const range = perliteRanges[definition.key] || getRangeForMetric('soil', definition.key);
+                const available = sourceMetric.installed !== false && Number.isFinite(value);
+                const state = available
+                    ? getMetricState(value, range)
+                    : { level: 'unavailable', label: t('luxuryDashUnavailableStatus') };
+
+                return {
+                    ...definition,
+                    value,
+                    range,
+                    available,
+                    state,
+                    unit: getMetricUnit('soil', definition.key, sourceMetric.unit || definition.unit),
+                    iconName: iconByMetric[definition.key] || 'leaf'
+                };
+            });
+            const alarms = metrics.filter((metric) => metric.available && metric.state.level !== 'normal');
+            const rows = [...getFilteredHistory()].reverse();
+            const metricStatusClass = (metric) => metric.available ? getLuxuryDashboardStatusClass(metric.state.level) : 'is-unavailable';
+            const metricStatusLabel = (metric) => metric.available ? metric.state.label : t('luxuryDashUnavailableStatus');
+            const renderMetric = (metric) => `
+                <article class="rayat-luxury-dashboard-professional-card ${metricStatusClass(metric)}" data-metric-key="soil:${metric.key}">
+                    <div class="rayat-luxury-dashboard-professional-head">
+                        <span class="rayat-luxury-dashboard-professional-icon">${getLuxuryDashboardIcon(metric.iconName)}</span>
+                        <strong>${escapeHtml(metric.label)}</strong>
+                    </div>
+                    <div class="rayat-luxury-dashboard-professional-value">
+                        <span>${metric.available ? formatMetricValue(metric.value) : '--'}</span>
+                        ${metric.unit ? `<em>${metric.unit}</em>` : ''}
+                    </div>
+                    <div class="rayat-luxury-dashboard-professional-footer">
+                        <span class="rayat-luxury-dashboard-professional-status">
+                            <i class="rayat-luxury-dashboard-pulse-dot ${metricStatusClass(metric)}" aria-hidden="true"></i>
+                            ${metricStatusLabel(metric)}
+                        </span>
+                    </div>
+                </article>
+            `;
+            const renderHistory = () => {
+                if (!rows.length) {
+                    return `<div class="rayat-luxury-dashboard-empty-row">${historyState.loading ? t('luxuryDashLoadingHistory') : t('luxuryDashHistoricalEmpty')}</div>`;
+                }
+
+                return `
+                    <div class="rayat-luxury-dashboard-history-scroll">
+                        <table class="rayat-luxury-dashboard-history-table">
+                            <thead>
+                                <tr>
+                                    <th>${t('time')}</th>
+                                    <th>Umidita substrato</th>
+                                    <th>EC substrato</th>
+                                    <th>Temperatura substrato</th>
+                                    <th>${t('status')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows.map((row) => {
+                                    const levels = [
+                                        getMetricLevel('soil', 'moisture', row.terreno),
+                                        getMetricLevel('soil', 'ec', row.ec),
+                                        getMetricLevel('soil', 'temperature', row.temperature)
+                                    ];
+                                    const level = getOverallLevel(levels);
+                                    return `
+                                        <tr>
+                                            <td><strong>${formatLocalizedDate(row.date)}</strong><span>${formatLocalizedTime(row.date)}</span></td>
+                                            <td>${formatHistoryNumber(row.terreno, { group: 'soil', key: 'moisture' })}%</td>
+                                            <td>${formatHistoryNumber(row.ec, { group: 'soil', key: 'ec' })}</td>
+                                            <td>${formatHistoryNumber(row.temperature, { group: 'soil', key: 'temperature' })} °C</td>
+                                            <td><span class="rayat-luxury-dashboard-pill ${getLuxuryDashboardStatusClass(level)}">${getAlertBadgeLabel(level)}</span></td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            };
+            const activityRows = alarms.length
+                ? alarms.map((metric) => ({
+                    icon: metric.iconName,
+                    title: metric.label,
+                    detail: formatPerliteRangeLabel(metric),
+                    time: nowLabel,
+                    level: metric.state.level,
+                    status: metric.state.label
+                }))
+                : [{
+                    icon: 'wifi',
+                    title: isOnline ? t('luxuryDashNoAlert') : 'Substrate Rayat',
+                    detail: isOnline ? 'Umidita substrato, EC substrato e temperatura substrato' : t('luxuryDashNoMeasuredValue'),
+                    time: nowLabel,
+                    level: isOnline ? 'normal' : 'unavailable',
+                    status: isOnline ? t('statusNormal') : statusMeta.label
+                }];
+
+            return `
+                <main class="rayat-luxury-dashboard-page">
+                    <section id="rayat-luxury-dashboard-top" class="rayat-luxury-dashboard-main">
+                        ${renderSubscriptionWarningBanner()}
+                        <header class="rayat-luxury-dashboard-header">
+                            <div>
+                                <h1>RAYAT perlite track</h1>
+                                <p>Monitoraggio Substrate Rayat per Barakah Perlite: umidita, EC e temperatura del substrato.</p>
+                            </div>
+                            <div class="rayat-luxury-dashboard-header-actions">
+                                <button type="button" class="rayat-luxury-dashboard-refresh ${isRefreshingData ? 'is-loading' : ''}" onclick="refreshData()" ${isRefreshingData ? 'disabled' : ''} aria-label="${escapeHtml(t('refreshDataAction'))}">
+                                    ${getLuxuryDashboardIcon('refresh')}
+                                </button>
+                                <button type="button" class="rayat-luxury-dashboard-top-icon" onclick="${hasPrivilegedAdminShortcut() ? 'goToAdminArea()' : "setView('profilo')"}">${getLuxuryDashboardIcon('settings')}</button>
+                            </div>
+                        </header>
+                        <div class="rayat-luxury-dashboard-live-meta">
+                            <span class="rayat-luxury-dashboard-online ${statusMeta.className}">${statusMeta.label}</span>
+                            <span>${t('luxuryDashLastUpdateShort')}: <strong>${nowLabel}</strong></span>
+                        </div>
+                        <section class="rayat-luxury-dashboard-kpis" id="rayat-luxury-dashboard-kpis">
+                            <article>${getLuxuryDashboardIcon('leaf')}<div><span>Customer</span><strong>DUROC</strong><em class="is-normal">Barakah Perlite Pilot Project</em></div></article>
+                            <article>${getLuxuryDashboardIcon('wifi')}<div><span>${t('luxuryDashSensorsOnline')}</span><strong>${isOnline ? metrics.filter((metric) => metric.available).length : 0} <small>/ ${metrics.length}</small></strong><em class="${isOnline ? 'is-normal' : 'is-alert'}">${isOnline ? t('luxuryDashAllOnline') : statusMeta.label}</em></div></article>
+                            <article>${getLuxuryDashboardIcon('clock')}<div><span>${t('luxuryDashLastUpdateCard')}</span><strong>${nowLabel}</strong><em class="${isOnline ? 'is-normal' : 'is-alert'}">${isOnline ? t('luxuryDashRealtimeData') : statusMeta.label}</em></div></article>
+                            <article>${getLuxuryDashboardIcon('alert')}<div><span>${t('luxuryDashActiveAlarms')}</span><strong>${alarms.length}</strong><em class="${alarms.length ? 'is-alert' : 'is-normal'}">${alarms.length ? t('luxuryDashToMonitor') : t('luxuryDashNoAlert')}</em></div></article>
+                        </section>
+                        <section class="rayat-perlite-sensor-section">
+                            <article class="rayat-luxury-dashboard-card rayat-luxury-dashboard-soil" id="rayat-luxury-dashboard-sensor-cards">
+                                <div class="rayat-luxury-dashboard-card-head"><h2>Substrate Rayat</h2></div>
+                                <div class="rayat-luxury-dashboard-professional-grid">
+                                    ${metrics.map(renderMetric).join('')}
+                                </div>
+                            </article>
+                        </section>
+                        <article class="rayat-luxury-dashboard-card rayat-perlite-alert-panel" id="rayat-luxury-dashboard-activities">
+                            <div class="rayat-perlite-alert-heading">
+                                <div>
+                                    <span>${t('activeAlertsTitle')}</span>
+                                    <h2>${t('activeAlertsSubtitle')}</h2>
+                                </div>
+                                <strong>${alarms.length}</strong>
+                            </div>
+                            <div class="rayat-perlite-alert-list">
+                                ${activityRows.map((activity) => `
+                                    <div class="rayat-perlite-alert-row ${getLuxuryDashboardStatusClass(activity.level)}">
+                                        <span class="rayat-perlite-alert-icon">${getLuxuryDashboardIcon(activity.icon)}</span>
+                                        <div>
+                                            <strong>${escapeHtml(activity.title)}</strong>
+                                            <small>${escapeHtml(activity.detail)}</small>
+                                        </div>
+                                        <b>${escapeHtml(activity.status)}</b>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </article>
+                        <article class="rayat-luxury-dashboard-card rayat-luxury-dashboard-trend rayat-history-measures" id="rayat-luxury-dashboard-history">
+                            <div class="rayat-luxury-dashboard-card-head"><h2>${t('history')}</h2></div>
+                            ${renderHistory()}
+                        </article>
+                    </section>
+                </main>
+            `;
+        }
+
         // Admin settings removed
 
         // Admin dashboard removed
@@ -6938,7 +13777,7 @@
                 region: 'Souss-Massa',
                 lastActive: 'Just now'
             })),
-            
+
             // Other Regions (National Presence)
             { id: 101, name: 'Casa-Horti', crop: 'Corn', lat: 33.5, lng: -7.6, online: true, locality: 'Bouskoura', region: 'Casablanca-Settat', lastActive: '20 min ago' },
             { id: 102, name: 'Rabat-Green', crop: 'Grapes', lat: 33.9, lng: -6.8, online: false, locality: 'Temara', region: 'Rabat-Sale-Kenitra', lastActive: 'Yesterday' },
@@ -7010,7 +13849,7 @@
         /* PATCH-02 — end */
 
         function render() {
-            if (currentView === 'home' || currentView === 'demo' || currentView === 'profilo') {
+            if (currentView === 'home' || currentView === 'demo' || currentView === 'perlite-track' || currentView === 'profilo') {
                 checkAlerts();
             }
             const app = document.getElementById('app');
@@ -7021,6 +13860,8 @@
                 'profilo': renderUserProfilePage,
                 'servizi': renderServiziPage,
                 'demo': renderDemoPage,
+                'dashboard': renderDemoPage,
+                'perlite-track': renderPerliteTrackPage,
                 'register': renderRegisterPage,
                 'contatti': renderContactPage,
                 'privacy': renderPrivacyPage,
@@ -7030,7 +13871,7 @@
 
             const viewFn = routes[currentView] || renderHomePage;
             app.innerHTML = `${viewFn()}${renderPublicWhatsappButton()}`;
-            syncBodyScrollLock();
+            syncPageScrollLock();
             syncAppShellState();
             syncStaticI18n();
 
@@ -7038,6 +13879,8 @@
             // Post-render initialization
             if (currentView === 'contatti') initContactMap();
             if (currentView === 'home') initHomeMap();
+            if (currentView === 'home') setTimeout(initLuxuryHomeSectionAnimations, 0);
+            if (currentView === 'demo') initLuxuryDashboardMap();
             if (currentView === 'register') {
                  // Map initialization for registration is handled inside renderRegisterPage
                  // but we can ensure it here too if needed.
@@ -7054,6 +13897,7 @@
         ensurePrivilegedAdminSession().then(() => {
             if (hadAdminShortcutOnLoad !== hasPrivilegedAdminShortcut() && currentView !== 'profilo') {
                 render();
+                requestViewData(currentView);
             }
         }).catch(() => {});
         currentView = getViewFromPath(window.location.pathname);
@@ -7086,7 +13930,7 @@
         // Hard sync live data.
         requestViewData(currentView);
         setInterval(() => {
-            if (currentView === 'demo') {
+            if (currentView === 'demo' || currentView === 'perlite-track') {
                 loadSensorData().catch(() => {});
                 if ((Date.now() - historyState.lastLoadedAt) >= 60000) {
                     loadHistoryData().catch(() => {});
@@ -7102,9 +13946,13 @@
         // Handle Android hardware back button and browser back
         window.onpopstate = function (event) {
             if (event.state && event.state.view) {
-                currentView = event.state.view;
+                currentView = normalizePublicDashboardView(event.state.view);
                 if (currentView === 'demo') {
                     syncDashboardSensorFromPath(window.location.pathname);
+                }
+                if (currentView === 'perlite-track' && !canAccessPerliteTrack()) {
+                    currentView = 'login';
+                    history.replaceState({ view: 'login' }, '', '/login');
                 }
                 render();
                 trackPageView(currentView);
@@ -7113,6 +13961,10 @@
                 currentView = getViewFromPath(window.location.pathname);
                 if (currentView === 'demo') {
                     syncDashboardSensorFromPath(window.location.pathname);
+                }
+                if (currentView === 'perlite-track' && !canAccessPerliteTrack()) {
+                    currentView = 'login';
+                    history.replaceState({ view: 'login' }, '', '/login');
                 }
                 render();
                 trackPageView(currentView);
@@ -7136,6 +13988,10 @@
             if (!event.target.closest('#rayat-profile-menu-shell')) {
                 closeProfileMenu();
             }
+
+            if (!event.target.closest('.rayat-luxury-dashboard-profile-menu')) {
+                closeLuxuryDashboardProfileMenu();
+            }
         });
 
         document.addEventListener('keydown', (event) => {
@@ -7147,29 +14003,36 @@
                 toggleMobileMenu(false);
             }
 
+            if (isLuxuryDashboardSidebarOpen) {
+                toggleLuxuryDashboardSidebar(false);
+            }
+
             document.getElementById('lang-menu')?.classList.add('hidden');
             closeProfileMenu();
+            closeLuxuryDashboardProfileMenu();
         });
 
         // RAYAT FIX - checkbox remember me + desktop scroll
         window.addEventListener('resize', () => {
-            if (window.innerWidth > 768 && isMobileMenuOpen) {
+            if (!isViewportAtMost(768) && isMobileMenuOpen) {
                 toggleMobileMenu(false);
+            } else if (!isViewportAtMost(900) && isLuxuryDashboardSidebarOpen) {
+                toggleLuxuryDashboardSidebar(false);
             } else {
-                syncBodyScrollLock();
+                syncPageScrollLock();
             }
             invalidateVisibleMaps();
         });
 
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
-                syncBodyScrollLock();
+                syncPageScrollLock();
                 invalidateVisibleMaps();
             }
         });
 
         window.addEventListener('pageshow', () => {
-            syncBodyScrollLock();
+            syncPageScrollLock();
         });
 
         // RAYAT FIX - mobile app ready optimization

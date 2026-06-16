@@ -12,6 +12,10 @@ const jwt = require('jsonwebtoken');
 const { query, getTableColumns } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { isPrivilegedAdminRole, normalizeAdminRole } = require('../utils/admin-auth');
+const {
+    buildCustomerAccessContext,
+    getCustomerAccessFlags
+} = require('../utils/customer-access');
 const { attachPasswordResetRoutes } = require('../utils/password-reset');
 const { isDatabaseUnavailableError, sendDatabaseAwareError } = require('../utils/database-http');
 const { sendNewClientRegistrationEmail } = require('../utils/registration-email');
@@ -53,6 +57,7 @@ function buildAuthToken(user) {
 
 async function getUserColumnFlags() {
     const columns = await getTableColumns('users');
+    const customerAccessFlags = await getCustomerAccessFlags();
     return {
         hasLastName: columns.has('last_name'),
         hasLanguage: columns.has('language'),
@@ -66,7 +71,9 @@ async function getUserColumnFlags() {
         hasProfilePhone: columns.has('profile_phone'),
         hasProfileDescription: columns.has('profile_description'),
         hasProfilePhoto: columns.has('profile_photo'),
-        hasProfileUpdatedAt: columns.has('profile_updated_at')
+        hasProfileUpdatedAt: columns.has('profile_updated_at'),
+        hasOwnerUserId: customerAccessFlags.hasOwnerUserId,
+        hasCustomerRole: customerAccessFlags.hasCustomerRole
     };
 }
 
@@ -80,6 +87,30 @@ function buildPersistedProfilePayload(user = {}) {
         profile_description: user.profile_description ?? null,
         profile_photo: user.profile_photo ?? null,
         profile_updated_at: user.profile_updated_at ?? null
+    };
+}
+
+function buildResolvedAuthUserPayload(user = {}, flags) {
+    const customerAccess = buildCustomerAccessContext(user, flags);
+
+    return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        last_name: user.last_name || null,
+        language: user.language || null,
+        role: normalizeAdminRole(user.role),
+        active: user.active,
+        payment_status: user.payment_status || null,
+        subscription_expiry: user.subscription_expiry || null,
+        registration_status: user.registration_status || null,
+        approved_at: user.approved_at || null,
+        client_code: user.client_code || null,
+        owner_user_id: customerAccess.owner_user_id,
+        customer_role: customerAccess.customer_role,
+        permissions: customerAccess.permissions,
+        is_primary_account: customerAccess.is_primary_account,
+        scope_owner_user_id: customerAccess.scope_owner_user_id
     };
 }
 
@@ -128,6 +159,8 @@ async function fetchCurrentUserProfile(userId, flags) {
             ${optionalUserColumn(flags.hasLanguage, 'language')},
             role,
             active,
+            ${optionalUserColumn(flags.hasOwnerUserId, 'owner_user_id')},
+            ${optionalUserColumn(flags.hasCustomerRole, 'customer_role')},
             ${optionalUserColumn(flags.hasPaymentStatus, 'payment_status')},
             ${optionalUserColumn(flags.hasSubscriptionExpiry, 'subscription_expiry')},
             ${optionalUserColumn(flags.hasRegistrationStatus, 'registration_status')},
@@ -332,6 +365,14 @@ async function createRegisteredClient(payload, options = {}) {
         columns.push('client_code');
         values.push(clientCode);
     }
+    if (flags.hasOwnerUserId) {
+        columns.push('owner_user_id');
+        values.push(null);
+    }
+    if (flags.hasCustomerRole) {
+        columns.push('customer_role');
+        values.push('owner');
+    }
     if (flags.hasRegistrationStatus) {
         columns.push('registration_status');
         values.push(options.registrationStatus || 'new');
@@ -375,6 +416,11 @@ async function createRegisteredClient(payload, options = {}) {
         longitude,
         client_code: clientCode,
         role: 'client',
+        owner_user_id: null,
+        customer_role: 'owner',
+        permissions: buildCustomerAccessContext({ id: result.insertId, role: 'client', owner_user_id: null, customer_role: 'owner' }, flags).permissions,
+        is_primary_account: true,
+        scope_owner_user_id: result.insertId,
         active: false,
         payment_status: flags.hasPaymentStatus ? 'non_pagato' : null,
         subscription_expiry: flags.hasSubscriptionExpiry ? null : null,
@@ -436,6 +482,7 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Credenziali non valide' });
         }
 
+        const flags = await getUserColumnFlags();
         const normalizedRole = normalizeAdminRole(user.role);
         const token = buildAuthToken({
             id: user.id,
@@ -446,19 +493,7 @@ router.post('/login', async (req, res) => {
 
         res.json({
             token,
-            user: {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                last_name: user.last_name || null,
-                language: user.language,
-                role: normalizedRole,
-                active: user.active,
-                payment_status: user.payment_status || null,
-                subscription_expiry: user.subscription_expiry || null,
-                registration_status: user.registration_status || null,
-                approved_at: user.approved_at || null
-            }
+            user: buildResolvedAuthUserPayload(user, flags)
         });
     } catch (error) {
         console.error('Login error:', error);
@@ -483,18 +518,7 @@ router.get('/me', authenticateToken, async (req, res) => {
 
         res.json({
             success: true,
-            id: currentUser.id,
-            email: currentUser.email,
-            name: currentUser.name,
-            last_name: currentUser.last_name || null,
-            language: currentUser.language || null,
-            role: normalizeAdminRole(currentUser.role),
-            active: currentUser.active,
-            payment_status: currentUser.payment_status || null,
-            subscription_expiry: currentUser.subscription_expiry || null,
-            registration_status: currentUser.registration_status || null,
-            approved_at: currentUser.approved_at || null,
-            client_code: currentUser.client_code || null,
+            ...buildResolvedAuthUserPayload(currentUser, flags),
             ...buildPersistedProfilePayload(currentUser)
         });
     } catch (error) {

@@ -84,85 +84,130 @@ function readSignedRegister(value) {
     return value > 0x7FFF ? value - 0x10000 : value;
 }
 
-const FRAME_LAYOUTS = {
-    1: [
-        {
-            type: 'clima',
-            subtype: 'clima_temperature',
-            name: 'Sensore Temperatura',
-            unit: '°C',
-            scale: 0.1,
-            signed: true
-        },
-        {
-            type: 'clima',
-            subtype: 'clima_humidity',
-            name: 'Sensore Umidita',
-            unit: '%',
-            scale: 0.1
-        }
-    ],
-    2: [
-        {
-            type: 'clima',
-            subtype: 'clima_co2',
-            name: 'Sensore CO2',
-            unit: 'ppm',
-            scale: 1
-        }
-    ],
-    3: [
+const SUBSTRATE_3_REGISTER_LAYOUT = {
+    name: 'substrate_3_register',
+    readings: [
         {
             type: 'terreno',
             subtype: 'terreno_temperature',
-            name: 'Sensore Temperatura Terreno',
+            name: 'Sensore Temperatura Substrato',
             unit: '°C',
-            scale: 0.1,
+            scale: 0.01,
             signed: true
         },
         {
             type: 'terreno',
             subtype: 'terreno_moisture',
-            name: 'Sensore Umidita Terreno',
+            name: 'Sensore Umidita Substrato',
             unit: '%',
-            scale: 0.1
+            scale: 0.01
         },
         {
             type: 'terreno',
             subtype: 'terreno_ec',
-            name: 'Sensore EC Terreno',
+            name: 'Sensore EC Substrato',
             unit: 'dS/m',
             scale: 0.001
-        },
-        {
-            type: 'terreno',
-            subtype: 'terreno_n',
-            name: 'Sensore Azoto',
-            unit: 'ppm',
-            scale: 1
-        },
-        {
-            type: 'terreno',
-            subtype: 'terreno_p',
-            name: 'Sensore Fosforo',
-            unit: 'ppm',
-            scale: 1
-        },
-        {
-            type: 'terreno',
-            subtype: 'terreno_k',
-            name: 'Sensore Potassio',
-            unit: 'ppm',
-            scale: 1
-        },
-        {
-            type: 'terreno',
-            subtype: 'terreno_ph',
-            name: 'Sensore pH Terreno',
-            unit: 'pH',
-            scale: 0.01
         }
     ]
+};
+
+const FRAME_LAYOUTS = {
+    1: {
+        2: {
+            name: 'climate_temperature_humidity',
+            readings: [
+                {
+                    type: 'clima',
+                    subtype: 'clima_temperature',
+                    name: 'Sensore Temperatura',
+                    unit: '°C',
+                    scale: 0.1,
+                    signed: true
+                },
+                {
+                    type: 'clima',
+                    subtype: 'clima_humidity',
+                    name: 'Sensore Umidita',
+                    unit: '%',
+                    scale: 0.1
+                }
+            ]
+        },
+        3: SUBSTRATE_3_REGISTER_LAYOUT
+    },
+    2: {
+        1: {
+            name: 'climate_co2',
+            readings: [
+                {
+                    type: 'clima',
+                    subtype: 'clima_co2',
+                    name: 'Sensore CO2',
+                    unit: 'ppm',
+                    scale: 1
+                }
+            ]
+        }
+    },
+    3: {
+        3: SUBSTRATE_3_REGISTER_LAYOUT,
+        7: {
+            name: 'soil_7_in_1',
+            readings: [
+                {
+                    type: 'terreno',
+                    subtype: 'terreno_temperature',
+                    name: 'Sensore Temperatura Terreno',
+                    unit: '°C',
+                    scale: 0.1,
+                    signed: true
+                },
+                {
+                    type: 'terreno',
+                    subtype: 'terreno_moisture',
+                    name: 'Sensore Umidita Terreno',
+                    unit: '%',
+                    scale: 0.1
+                },
+                {
+                    type: 'terreno',
+                    subtype: 'terreno_ec',
+                    name: 'Sensore EC Terreno',
+                    unit: 'dS/m',
+                    scale: 0.001
+                },
+                {
+                    type: 'terreno',
+                    subtype: 'terreno_n',
+                    name: 'Sensore Azoto',
+                    unit: 'ppm',
+                    scale: 1
+                },
+                {
+                    type: 'terreno',
+                    subtype: 'terreno_p',
+                    name: 'Sensore Fosforo',
+                    unit: 'ppm',
+                    scale: 1
+                },
+                {
+                    type: 'terreno',
+                    subtype: 'terreno_k',
+                    name: 'Sensore Potassio',
+                    unit: 'ppm',
+                    scale: 1
+                },
+                {
+                    type: 'terreno',
+                    subtype: 'terreno_ph',
+                    name: 'Sensore pH Terreno',
+                    unit: 'pH',
+                    scale: 0.01
+                }
+            ]
+        }
+    }
 };
 
 function decodeModbusTelemetryFrame(buffer) {
@@ -175,7 +220,7 @@ function decodeModbusTelemetryFrame(buffer) {
     const byteCount = buffer[2];
     const expectedLength = 3 + byteCount + 2;
 
-    if (functionCode !== 0x03) {
+    if (functionCode !== 0x03 && functionCode !== 0x04) {
         throw new Error(`Function code Modbus non supportato: ${functionCode}`);
     }
 
@@ -191,13 +236,15 @@ function decodeModbusTelemetryFrame(buffer) {
         throw new Error(`CRC non valido per lo slave ${slaveId}`);
     }
 
-    const layout = FRAME_LAYOUTS[slaveId];
+    const registerCount = byteCount / 2;
+    const layout = FRAME_LAYOUTS[slaveId]?.[registerCount];
     if (!layout) {
-        throw new Error(`Slave Modbus non supportato: ${slaveId}`);
-    }
-
-    if (byteCount !== layout.length * 2) {
-        throw new Error(`Numero registri inatteso per lo slave ${slaveId}: ${byteCount / 2}`);
+        const supportedCounts = Object.keys(FRAME_LAYOUTS[slaveId] || {}).join(', ');
+        throw new Error(
+            supportedCounts
+                ? `Numero registri inatteso per lo slave ${slaveId}: ${registerCount}. Attesi: ${supportedCounts}`
+                : `Slave Modbus non supportato: ${slaveId}`
+        );
     }
 
     const registers = [];
@@ -205,7 +252,7 @@ function decodeModbusTelemetryFrame(buffer) {
         registers.push(buffer.readUInt16BE(offset));
     }
 
-    const readings = layout.map((definition, index) => {
+    const readings = layout.readings.map((definition, index) => {
         const rawValue = registers[index];
         const sourceValue = definition.signed ? readSignedRegister(rawValue) : rawValue;
         const value = Number((sourceValue * definition.scale).toFixed(definition.scale < 1 ? 3 : 0));
@@ -220,6 +267,7 @@ function decodeModbusTelemetryFrame(buffer) {
                 protocol: 'modbus_rtu',
                 slave_id: slaveId,
                 function_code: functionCode,
+                layout: layout.name,
                 register_index: index,
                 raw_register: rawValue
             }
@@ -230,6 +278,7 @@ function decodeModbusTelemetryFrame(buffer) {
         protocol: 'modbus_rtu',
         slaveId,
         functionCode,
+        layout: layout.name,
         registerCount: registers.length,
         registers,
         rawHex: buffer.toString('hex'),

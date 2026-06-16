@@ -5,9 +5,10 @@
  * as a hosted PWA now and inside Capacitor later without rebuilding.
  */
 window.RAYAT_RUNTIME_CONFIG = {
-    productionApiBaseUrl: 'https://rayat.ma/api',
+    apiBaseUrl: '/api',
+    productionApiBaseUrl: 'https://www.rayat.ma/api',
     useDevelopmentApiOnLocalhost: false,
-    publicSiteUrl: 'https://rayat.ma',
+    publicSiteUrl: 'https://www.rayat.ma',
     analyticsDomain: 'rayat.ma',
     enablePlausible: true
 };

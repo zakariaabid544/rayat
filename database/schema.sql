@@ -31,6 +31,8 @@ CREATE TABLE users (
   verification_code VARCHAR(10),
   is_verified BOOLEAN DEFAULT FALSE,
   role ENUM('admin', 'farmer', 'client', 'super_admin', 'operator', 'operator_admin') DEFAULT 'client',
+  owner_user_id INT NULL,
+  customer_role VARCHAR(32) DEFAULT 'owner',
   client_code VARCHAR(20),
   payment_status ENUM('pagato','non_pagato') DEFAULT 'non_pagato',
   payment_date DATETIME NULL,
@@ -43,10 +45,12 @@ CREATE TABLE users (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_email (email),
   INDEX idx_role (role),
+  INDEX idx_users_owner_user_id (owner_user_id),
   INDEX idx_users_role_active_created (role, active, created_at),
   INDEX idx_users_client_code (client_code),
   INDEX idx_users_location_name (location_name),
-  INDEX idx_users_registration_feed (registration_source, registration_status, created_at)
+  INDEX idx_users_registration_feed (registration_source, registration_status, created_at),
+  FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================

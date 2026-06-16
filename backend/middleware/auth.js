@@ -1,10 +1,35 @@
 const jwt = require('jsonwebtoken');
 const { query, getTableColumns } = require('../config/database');
-const { normalizeAdminRole } = require('../utils/admin-auth');
+const { isPrivilegedAdminRole, normalizeAdminRole } = require('../utils/admin-auth');
+const {
+    hasCustomerPermission,
+    isCustomerPlatformRole,
+    resolveCustomerAccessContextByUserId,
+    resolveCustomerScope
+} = require('../utils/customer-access');
 const { sendDatabaseAwareError } = require('../utils/database-http');
 
+async function attachAuthenticatedUserContext(tokenUser) {
+    const resolvedUser = await resolveCustomerAccessContextByUserId(tokenUser.id);
+
+    if (!resolvedUser) {
+        return null;
+    }
+
+    return {
+        ...tokenUser,
+        role: normalizeAdminRole(resolvedUser.role || tokenUser.role),
+        active: resolvedUser.active,
+        owner_user_id: resolvedUser.owner_user_id,
+        customer_role: resolvedUser.customer_role,
+        permissions: resolvedUser.permissions,
+        is_primary_account: resolvedUser.is_primary_account,
+        scopeOwnerUserId: resolvedUser.scope_owner_user_id
+    };
+}
+
 // Middleware per verificare JWT token
-function authenticateToken(req, res, next) {
+async function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
@@ -12,36 +37,61 @@ function authenticateToken(req, res, next) {
         return res.status(401).json({ error: 'Token di autenticazione mancante' });
     }
 
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) {
-            return res.status(403).json({ error: 'Token non valido o scaduto' });
+    try {
+        const tokenUser = jwt.verify(token, process.env.JWT_SECRET);
+        const resolvedUser = await attachAuthenticatedUserContext(tokenUser);
+
+        if (!resolvedUser || resolvedUser.active === false) {
+            return res.status(403).json({ error: 'Utente non valido o disattivato' });
         }
 
-        req.user = {
-            ...user,
-            role: normalizeAdminRole(user.role)
-        }; // Aggiunge user info alla request
+        req.user = resolvedUser;
         next();
-    });
+    } catch (_error) {
+        return res.status(403).json({ error: 'Token non valido o scaduto' });
+    }
 }
 
 // Middleware opzionale per autenticazione (non blocca se manca token)
-function optionalAuth(req, res, next) {
+async function optionalAuth(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
     if (token) {
-        jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-            if (!err) {
-                req.user = {
-                    ...user,
-                    role: normalizeAdminRole(user.role)
-                };
+        try {
+            const tokenUser = jwt.verify(token, process.env.JWT_SECRET);
+            const resolvedUser = await attachAuthenticatedUserContext(tokenUser);
+            if (resolvedUser && resolvedUser.active !== false) {
+                req.user = resolvedUser;
             }
-        });
+        } catch (_error) {
+            // noop: optional auth should not block the request
+        }
     }
 
     next();
+}
+
+function requireCustomerPermission(permissionKey) {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Utente non autenticato' });
+        }
+
+        if (isPrivilegedAdminRole(req.user.role)) {
+            return next();
+        }
+
+        if (!isCustomerPlatformRole(req.user.role)) {
+            return res.status(403).json({ error: 'Accesso negato' });
+        }
+
+        if (!hasCustomerPermission(req.user, permissionKey)) {
+            return res.status(403).json({ error: 'Permessi insufficienti' });
+        }
+
+        return next();
+    };
 }
 
 // Middleware per bloccare utenti con abbonamento scaduto
@@ -57,7 +107,7 @@ async function checkSubscription(req, res, next) {
     }
 
     // Only customer accounts are subject to subscription checks
-    if (!['client', 'farmer'].includes(normalizedRole)) {
+    if (!isCustomerPlatformRole(normalizedRole)) {
         return next();
     }
 
@@ -87,7 +137,7 @@ async function checkSubscription(req, res, next) {
 
         const rows = await query(
             `SELECT ${selectedColumns.join(', ')} FROM users WHERE id = ?`,
-            [req.user.id]
+            [resolveCustomerScope(req.user)]
         );
         if (!rows.length) return res.status(404).json({ error: 'Utente non trovato' });
 
@@ -122,5 +172,6 @@ async function checkSubscription(req, res, next) {
 module.exports = {
     authenticateToken,
     optionalAuth,
-    checkSubscription
+    checkSubscription,
+    requireCustomerPermission
 };
