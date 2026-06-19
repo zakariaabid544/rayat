@@ -31,6 +31,10 @@ const {
     stopBaselineEvolutionJob
 } = require('./src/jobs/baselineEvolutionJob'); // RAYAT-FIX agro intelligence (Sprint 3.1 baseline evolution, default OFF)
 const {
+    startIntelligenceScoreJob,
+    stopIntelligenceScoreJob
+} = require('./src/jobs/intelligenceScoreJob'); // RAYAT-FIX agro intelligence (Sprint 4.1-4.2 intelligence score, default OFF)
+const {
     startStressMemoryJob,
     stopStressMemoryJob
 } = require('./src/jobs/stressMemoryJob'); // RAYAT-FIX agro intelligence (Sprint 3.2 stress memory, default OFF)
@@ -313,6 +317,7 @@ async function startServer() {
             startPatternDiscoveryJob();
             startIntelligenceChainJob();
             startBaselineEvolutionJob();
+            startIntelligenceScoreJob();
             startStressMemoryJob();
             startRecoveryMemoryJob();
             startBehavioralSignatureJob();
@@ -344,6 +349,7 @@ async function shutdownServer(signal) {
         stopPatternDiscoveryJob();
         stopIntelligenceChainJob();
         stopBaselineEvolutionJob();
+        stopIntelligenceScoreJob();
         stopStressMemoryJob();
         stopRecoveryMemoryJob();
         stopBehavioralSignatureJob();
