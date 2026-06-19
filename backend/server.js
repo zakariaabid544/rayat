@@ -67,6 +67,10 @@ const {
     stopHealthProfileJob
 } = require('./src/jobs/greenhouseHealthProfileJob'); // RAYAT-FIX agro intelligence (Sprint 3.6 health profile, default OFF)
 const {
+    startWeeklyReportJob,
+    stopWeeklyReportJob
+} = require('./src/jobs/weeklyReportJob'); // RAYAT-FIX agro intelligence (Sprint 5.1-5.2 weekly reports, default OFF)
+const {
     extractAdminSessionToken,
     isPrivilegedAdminRole,
     normalizeAdminRole
@@ -339,6 +343,7 @@ async function startServer() {
             startBehavioralSignatureJob();
             startKnowledgeConsolidationJob();
             startHealthProfileJob();
+            startWeeklyReportJob();
         } else {
             console.warn('[alert-job] Job notifiche non avviato: database non disponibile.');
             console.warn('[mqtt-direct] Ingest MQTT diretto non avviato: database non disponibile.');
@@ -374,6 +379,7 @@ async function shutdownServer(signal) {
         stopBehavioralSignatureJob();
         stopKnowledgeConsolidationJob();
         stopHealthProfileJob();
+        stopWeeklyReportJob();
         if (httpServer) {
             await new Promise((resolve) => httpServer.close(resolve));
         }
