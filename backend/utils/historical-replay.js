@@ -15,6 +15,7 @@ const { evaluateAnomaly } = require('./anomaly-analyzer');
 const { evaluateRegimeShift } = require('./regime-shift-analyzer');
 const { evaluateSensorDrift } = require('./sensor-drift-analyzer');
 const { assertLocalIdentity } = require('./intelligence-tenancy');
+const { ensureContextSchema } = require('./agronomic-context'); // Sprint 2.7C (context-aware replay)
 
 const RULE_VERSION = 's2.7b';
 const WINDOW_MINUTES = Number(process.env.AGRO_EVENTS_WINDOW_MIN || 180);
@@ -129,7 +130,7 @@ async function requestReplayCancel(replayId) {
 }
 
 // Replay storico. Opzioni: { from, to, batchSize, dryRun, rebuild, scope:{ownerUserId, deviceId} }
-async function runHistoricalReplay({ from, to, batchSize = DEFAULT_BATCH, dryRun = false, rebuild = false, scope = null } = {}) {
+async function runHistoricalReplay({ from, to, batchSize = DEFAULT_BATCH, dryRun = false, rebuild = false, scope = null, requireContext = false, tagContext = false } = {}) {
     if (!from || !to) { throw new Error('[replay] from/to obbligatori'); }
     const fromTs = toIso(from);
     const toTs = toIso(to);
@@ -140,6 +141,13 @@ async function runHistoricalReplay({ from, to, batchSize = DEFAULT_BATCH, dryRun
     const targetIds = [...targets.keys()];
     const summary = { replay_id: replayId, dry_run: dryRun, rebuild, target_sensors: targets.size, processed_readings: 0, reconstructed_events: 0, batches: 0, status: 'completed', cancelled: false };
     if (!targetIds.length) { summary.status = 'no_targets'; return summary; }
+
+    // FAIL-CLOSED contesto: se richiesto, nessuna lettura puo restare senza contesto agronomico (no scritture prima del check)
+    if (requireContext) {
+        const cov = await replayContextCoverage({ from: fromTs, to: toTs, scope });
+        if (cov.uncovered_readings > 0) { throw new Error(`[replay] fail-closed: ${cov.uncovered_readings}/${cov.total_readings} letture senza contesto agronomico (copri i gap prima del replay)`); }
+        summary.context_required = true;
+    }
 
     // checkpoint (skip in dry-run: nessuna scrittura)
     let run = null;
@@ -217,10 +225,65 @@ async function runHistoricalReplay({ from, to, batchSize = DEFAULT_BATCH, dryRun
 
     summary.processed_readings = processed;
     summary.reconstructed_events = events;
+    if (!dryRun && (requireContext || tagContext) && summary.status === 'completed') {
+        summary.context_tagged = await tagEventsContext(targetIds, fromTs, toTs, requireContext);
+    }
     if (!dryRun && summary.status === 'completed') {
         await query("UPDATE agro_replay_runs SET status = 'completed', updated_at = NOW() WHERE replay_id = ?", [replayId]);
     }
     return summary;
 }
 
-module.exports = { ensureReplaySchema, runHistoricalReplay, resolveTargets, requestReplayCancel, getRun, replayKey, RULE_VERSION, WINDOW_MINUTES };
+// Report di copertura del contesto sulla finestra (DRY-RUN: nessuna scrittura). Precedenza sensor > device.
+async function replayContextCoverage({ from, to, scope = null } = {}) {
+    await ensureContextSchema();
+    const fromTs = toIso(from); const toTs = toIso(to);
+    const targets = await resolveTargets({ scope });
+    const targetIds = [...targets.keys()];
+    if (!targetIds.length) { return { target_sensors: 0, total_readings: 0, covered_readings: 0, uncovered_readings: 0, production_readings: 0, non_production_readings: 0 }; }
+    const r = (await query(
+        `SELECT count(*) AS total,
+                count(*) FILTER (WHERE c.id IS NULL) AS uncovered,
+                count(*) FILTER (WHERE c.is_production) AS production,
+                count(*) FILTER (WHERE c.id IS NOT NULL AND NOT c.is_production) AS non_production
+         FROM sensor_readings sr
+         JOIN sensors s ON s.id = sr.sensor_id
+         LEFT JOIN LATERAL (
+            SELECT c.id, c.is_production FROM agro_context_segments c
+            WHERE c.device_id = s.device_id AND (c.sensor_id = sr.sensor_id OR c.sensor_id IS NULL)
+              AND c.valid_from <= sr.timestamp AND (c.valid_to IS NULL OR c.valid_to > sr.timestamp)
+            ORDER BY (c.sensor_id IS NULL) ASC, c.valid_from DESC LIMIT 1) c ON TRUE
+         WHERE sr.sensor_id = ANY(?) AND sr.timestamp >= CAST(? AS TIMESTAMPTZ) AND sr.timestamp <= CAST(? AS TIMESTAMPTZ)`,
+        [targetIds, fromTs, toTs]
+    ))[0];
+    const total = Number(r.total); const uncovered = Number(r.uncovered);
+    return { target_sensors: targets.size, total_readings: total, covered_readings: total - uncovered, uncovered_readings: uncovered, production_readings: Number(r.production), non_production_readings: Number(r.non_production) };
+}
+
+// Etichetta gli eventi ricostruiti col context_id risolto (sensor-level poi device-level). Fail-closed se richiesto.
+async function tagEventsContext(targetIds, fromTs, toTs, requireContext) {
+    await query(
+        `UPDATE agro_actions_detected AS ev SET context_id = c.id
+         FROM agro_context_segments c
+         WHERE ev.context_id IS NULL AND ev.sensor_id = ANY(?) AND ev.started_at >= CAST(? AS TIMESTAMPTZ) AND ev.started_at <= CAST(? AS TIMESTAMPTZ)
+           AND c.device_id = ev.device_id AND c.sensor_id = ev.sensor_id
+           AND c.valid_from <= ev.started_at AND (c.valid_to IS NULL OR c.valid_to > ev.started_at)`,
+        [targetIds, fromTs, toTs]
+    );
+    await query(
+        `UPDATE agro_actions_detected AS ev SET context_id = c.id
+         FROM agro_context_segments c
+         WHERE ev.context_id IS NULL AND ev.sensor_id = ANY(?) AND ev.started_at >= CAST(? AS TIMESTAMPTZ) AND ev.started_at <= CAST(? AS TIMESTAMPTZ)
+           AND c.device_id = ev.device_id AND c.sensor_id IS NULL
+           AND c.valid_from <= ev.started_at AND (c.valid_to IS NULL OR c.valid_to > ev.started_at)`,
+        [targetIds, fromTs, toTs]
+    );
+    const tagged = Number((await query(`SELECT count(*) c FROM agro_actions_detected WHERE sensor_id = ANY(?) AND started_at >= CAST(? AS TIMESTAMPTZ) AND started_at <= CAST(? AS TIMESTAMPTZ) AND context_id IS NOT NULL`, [targetIds, fromTs, toTs]))[0].c);
+    if (requireContext) {
+        const missing = Number((await query(`SELECT count(*) c FROM agro_actions_detected WHERE sensor_id = ANY(?) AND started_at >= CAST(? AS TIMESTAMPTZ) AND started_at <= CAST(? AS TIMESTAMPTZ) AND context_id IS NULL`, [targetIds, fromTs, toTs]))[0].c);
+        if (missing > 0) { throw new Error(`[replay] fail-closed: ${missing} eventi senza context_id`); }
+    }
+    return tagged;
+}
+
+module.exports = { ensureReplaySchema, runHistoricalReplay, resolveTargets, requestReplayCancel, getRun, replayKey, replayContextCoverage, tagEventsContext, RULE_VERSION, WINDOW_MINUTES };

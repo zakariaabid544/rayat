@@ -89,6 +89,7 @@ app.use('/api/sensors/update', iotLimiter);
 app.use('/api/sensors', require('./routes/sensors'));
 app.use('/api/iot/upload', iotLimiter);
 app.use('/api/iot', require('./routes/iot'));
+app.use('/api/admin/agro-contexts', require('./routes/agro-contexts')); // RAYAT-FIX agro intelligence (Sprint 2.7C agronomic contexts, super_admin only)
 app.use('/api/admin', require('./routes/admin'));
 
 const webRootPath = path.join(__dirname, '../web');
