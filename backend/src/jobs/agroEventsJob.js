@@ -13,6 +13,7 @@ const { evaluateAnomaly } = require('../../utils/anomaly-analyzer'); // Sprint 1
 const { evaluateRegimeShift } = require('../../utils/regime-shift-analyzer'); // Sprint 1.7 (additivo)
 const { evaluateSensorDrift } = require('../../utils/sensor-drift-analyzer'); // Sprint 1.8 (additivo)
 const { assertLocalIdentity } = require('../../utils/intelligence-tenancy');
+const { tagEventsContextWindow } = require('../../utils/agronomic-context'); // Sprint 2.7C (live context tagging)
 
 const CRON_EXPRESSION = process.env.AGRO_EVENTS_CRON || '*/15 * * * *';
 const WINDOW_MINUTES = Number(process.env.AGRO_EVENTS_WINDOW_MIN || 60);
@@ -129,6 +130,16 @@ async function runAgroEventsCycle({ dryRun = false } = {}) {
         } catch (error) {
             summary.errors += 1;
             console.error(`[agro-events] sensor ${s.id} failed:`, error.message);
+        }
+    }
+
+    // Sprint 2.7C (additivo): tagga gli eventi live appena prodotti col contesto agronomico attivo (se configurato).
+    if (!dryRun) {
+        try {
+            const fromTs = new Date(Date.now() - WINDOW_MINUTES * 60 * 1000).toISOString();
+            summary.context_tagged = await tagEventsContextWindow({ fromTs, toTs: new Date().toISOString() });
+        } catch (error) {
+            console.error('[agro-events] context tag failed:', error.message);
         }
     }
 

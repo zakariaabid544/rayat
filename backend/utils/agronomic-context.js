@@ -277,8 +277,34 @@ async function previewReadings(id, limit = 20) {
     return { context: c, total_readings: count.readings, sample };
 }
 
+// Tagga gli eventi (live o ricostruiti) col context_id risolto nella finestra [fromTs,toTs].
+// Precedenza sensor-level poi device-level. NON assegna mai un contesto "unknown": cio che resta NULL resta NULL
+// (e sara escluso dalla production intelligence dallo step successivo dei context-boundaries).
+async function tagEventsContextWindow({ fromTs, toTs }) {
+    await ensureContextSchema();
+    const f = toIso(fromTs); const t = toIso(toTs);
+    await query(
+        `UPDATE agro_actions_detected AS ev SET context_id = c.id
+         FROM agro_context_segments c
+         WHERE ev.context_id IS NULL AND ev.started_at >= CAST(? AS TIMESTAMPTZ) AND ev.started_at <= CAST(? AS TIMESTAMPTZ)
+           AND c.device_id = ev.device_id AND c.sensor_id = ev.sensor_id
+           AND c.valid_from <= ev.started_at AND (c.valid_to IS NULL OR c.valid_to > ev.started_at)`,
+        [f, t]
+    );
+    await query(
+        `UPDATE agro_actions_detected AS ev SET context_id = c.id
+         FROM agro_context_segments c
+         WHERE ev.context_id IS NULL AND ev.started_at >= CAST(? AS TIMESTAMPTZ) AND ev.started_at <= CAST(? AS TIMESTAMPTZ)
+           AND c.device_id = ev.device_id AND c.sensor_id IS NULL
+           AND c.valid_from <= ev.started_at AND (c.valid_to IS NULL OR c.valid_to > ev.started_at)`,
+        [f, t]
+    );
+    const r = await query(`SELECT count(*) c FROM agro_actions_detected WHERE context_id IS NOT NULL AND started_at >= CAST(? AS TIMESTAMPTZ) AND started_at <= CAST(? AS TIMESTAMPTZ)`, [f, t]);
+    return Number(r[0].c);
+}
+
 module.exports = {
-    ensureContextSchema, resolveAgronomicContext, validateContextPayload,
+    ensureContextSchema, resolveAgronomicContext, validateContextPayload, tagEventsContextWindow,
     createContext, updateContext, closeContext, deleteContext, getContext, listContexts,
     contextUsageCount, detectOverlaps, detectGaps, countReadingsForContext, usageStats, previewReadings,
     isNonProductionUsage, CULTIVATION, SITE, USAGE, NON_PRODUCTION_USAGE
