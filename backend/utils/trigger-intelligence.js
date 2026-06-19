@@ -5,6 +5,7 @@
 'use strict';
 const { query } = require('../config/database');
 const C = require('./intelligence-common');
+const { assertScopedIdentity, ensureScopedTenantSchema, fleetSafeEvidence, fleetSafeExamples } = require('./intelligence-tenancy');
 
 const RULE_VERSION = 's2.4-trigger';
 
@@ -59,6 +60,11 @@ async function ensureTriggerIntelligenceSchema() {
            scope_type VARCHAR(12) NOT NULL,
            greenhouse_scope INTEGER NULL,
            fleet_scope BOOLEAN NOT NULL DEFAULT FALSE,
+           owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+           device_id INTEGER NULL REFERENCES devices(id) ON DELETE CASCADE,
+           distinct_owner_count INTEGER NOT NULL DEFAULT 0,
+           distinct_device_count INTEGER NOT NULL DEFAULT 0,
+           fleet_eligible BOOLEAN NOT NULL DEFAULT FALSE,
            occurrences INTEGER NOT NULL DEFAULT 0,
            trigger_strength NUMERIC(4,3) NULL,
            trigger_severity NUMERIC(4,3) NULL,
@@ -80,6 +86,7 @@ async function ensureTriggerIntelligenceSchema() {
     );
     await query('CREATE INDEX IF NOT EXISTS idx_ti_scope ON agro_trigger_intelligence (scope_type, greenhouse_scope, trigger_type)');
     await query('CREATE INDEX IF NOT EXISTS idx_ti_score ON agro_trigger_intelligence (trigger_intelligence_score DESC)');
+    await ensureScopedTenantSchema('agro_trigger_intelligence');
 }
 
 async function loadRecoveryCosts() {
@@ -108,22 +115,35 @@ async function loadTriggers() {
     return query(
         `SELECT trigger_id, trigger_type, trigger_class, metric, consequent_event, occurrences, false_positive_rate,
                 lead_time_avg_hours, lead_time_variance, confidence, confidence_factors, supporting_examples,
-                scope_type, greenhouse_scope, fleet_scope, last_seen
-         FROM agro_triggers`
+                scope_type, greenhouse_scope, fleet_scope, owner_user_id, device_id,
+                distinct_owner_count, distinct_device_count, fleet_eligible, last_seen
+         FROM agro_triggers
+         WHERE scope_type = 'greenhouse' OR fleet_eligible = TRUE`
     );
 }
 
 async function upsertTI(row) {
+    const identity = assertScopedIdentity({
+        scopeType: row.scope_type,
+        ownerUserId: row.owner_user_id,
+        deviceId: row.device_id,
+        greenhouseScope: row.greenhouse_scope,
+        context: 'trigger-intelligence'
+    });
     await query(
         `INSERT INTO agro_trigger_intelligence
             (ti_id, trigger_ref, trigger_type, trigger_class, consequent_event, scope_type, greenhouse_scope, fleet_scope,
+             owner_user_id, device_id, distinct_owner_count, distinct_device_count, fleet_eligible,
              occurrences, trigger_strength, trigger_severity, trigger_stability, recovery_cost_hours, trigger_intelligence_score,
              is_top_dangerous, is_top_frequent, is_top_expensive, is_top_emerging, rank_dangerous,
              importance_factors, confidence_factors, evidence_json, supporting_event_ids, computed_at, rule_version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), NOW(), ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), NOW(), ?)
          ON CONFLICT (ti_id) DO UPDATE SET
              occurrences=EXCLUDED.occurrences, trigger_strength=EXCLUDED.trigger_strength, trigger_severity=EXCLUDED.trigger_severity,
              trigger_stability=EXCLUDED.trigger_stability, recovery_cost_hours=EXCLUDED.recovery_cost_hours,
+             owner_user_id=EXCLUDED.owner_user_id, device_id=EXCLUDED.device_id,
+             distinct_owner_count=EXCLUDED.distinct_owner_count, distinct_device_count=EXCLUDED.distinct_device_count,
+             fleet_eligible=EXCLUDED.fleet_eligible,
              trigger_intelligence_score=EXCLUDED.trigger_intelligence_score, is_top_dangerous=EXCLUDED.is_top_dangerous,
              is_top_frequent=EXCLUDED.is_top_frequent, is_top_expensive=EXCLUDED.is_top_expensive, is_top_emerging=EXCLUDED.is_top_emerging,
              rank_dangerous=EXCLUDED.rank_dangerous, importance_factors=EXCLUDED.importance_factors,
@@ -132,16 +152,18 @@ async function upsertTI(row) {
          RETURNING id`,
         [
             row.ti_id, row.trigger_ref, row.trigger_type, row.trigger_class, row.consequent_event, row.scope_type, row.greenhouse_scope, row.fleet_scope,
+            identity.owner_user_id, identity.device_id, row.distinct_owner_count, row.distinct_device_count, row.fleet_eligible,
             row.occurrences, row.trigger_strength, row.trigger_severity, row.trigger_stability, row.recovery_cost_hours, row.trigger_intelligence_score,
             row.is_top_dangerous, row.is_top_frequent, row.is_top_expensive, row.is_top_emerging, row.rank_dangerous,
-            JSON.stringify(row.importance_factors), JSON.stringify(row.confidence_factors || {}), JSON.stringify(row.evidence_json || {}),
-            JSON.stringify(row.supporting_event_ids || []), RULE_VERSION
+            JSON.stringify(row.importance_factors), JSON.stringify(row.confidence_factors || {}), JSON.stringify(fleetSafeEvidence(row.scope_type, row.evidence_json || {})),
+            JSON.stringify(fleetSafeExamples(row.scope_type, row.supporting_event_ids || [])), RULE_VERSION
         ]
     );
 }
 
 async function runTriggerIntelligence({ now = new Date(), dryRun = false } = {}) {
     const summary = { triggers: 0, top_dangerous: 0, top_frequent: 0, top_expensive: 0, top_emerging: 0, scopes: 0 };
+    if (!dryRun) { await query("DELETE FROM agro_trigger_intelligence WHERE scope_type = 'fleet'"); }
     const triggers = await loadTriggers();
     if (!triggers.length) { return summary; }
     const costFor = await loadRecoveryCosts();
@@ -153,11 +175,14 @@ async function runTriggerIntelligence({ now = new Date(), dryRun = false } = {})
             ti_id: C.deterministicId('ti', t.trigger_id), trigger_ref: t.trigger_id,
             trigger_type: t.trigger_type, trigger_class: t.trigger_class, consequent_event: t.consequent_event,
             scope_type: t.scope_type, greenhouse_scope: t.greenhouse_scope, fleet_scope: !!t.fleet_scope,
+            owner_user_id: t.owner_user_id, device_id: t.device_id,
+            distinct_owner_count: Number(t.distinct_owner_count || 0), distinct_device_count: Number(t.distinct_device_count || 0),
+            fleet_eligible: !!t.fleet_eligible,
             occurrences: Number(t.occurrences),
             trigger_strength: ti.trigger_strength, trigger_severity: ti.trigger_severity, trigger_stability: ti.trigger_stability,
             recovery_cost_hours: ti.recovery_cost_hours, trigger_intelligence_score: ti.trigger_intelligence_score,
             importance_factors: ti.ranking_factors, confidence_factors: C.parseJson(t.confidence_factors, {}),
-            supporting_event_ids: C.parseJson(t.supporting_examples, []),
+            supporting_event_ids: fleetSafeExamples(t.scope_type, C.parseJson(t.supporting_examples, [])),
             evidence_json: { recovery_cost_hours: ti.recovery_cost_hours, false_positive_rate: Number(t.false_positive_rate), confidence: Number(t.confidence) },
             is_top_dangerous: false, is_top_frequent: false, is_top_expensive: false, is_top_emerging: false, rank_dangerous: null,
             // scope key include trigger_type: stress e recovery sono classificati/ranking SEPARATAMENTE

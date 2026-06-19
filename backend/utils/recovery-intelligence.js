@@ -5,6 +5,14 @@
 'use strict';
 const { query } = require('../config/database');
 const C = require('./intelligence-common');
+const {
+    assertLocalIdentity,
+    assertScopedIdentity,
+    ensureScopedTenantSchema,
+    fleetEligibility,
+    fleetSafeEvidence,
+    fleetSafeExamples
+} = require('./intelligence-tenancy');
 
 const RULE_VERSION = 's2.4-recovery';
 
@@ -73,6 +81,54 @@ function classifyLabel(r) {
     return parts.join(' / ');
 }
 
+function groupRecoveryEpisodes(recoveries) {
+    const groups = new Map();
+    const addEpisode = (scopeType, identity, greenhouseScope, stressClass, episode) => {
+        const key = C.deterministicId(scopeType, greenhouseScope == null ? 'FLEET' : greenhouseScope, stressClass);
+        let group = groups.get(key);
+        if (!group) {
+            group = {
+                key, scope_type: scopeType, greenhouse_scope: greenhouseScope, metric: stressClass,
+                owner_user_id: scopeType === 'greenhouse' ? identity.owner_user_id : null,
+                device_id: scopeType === 'greenhouse' ? identity.device_id : null,
+                episodes: [], ids: [], ownerIds: new Set(), deviceIds: new Set()
+            };
+            groups.set(key, group);
+        }
+        if (scopeType === 'greenhouse' && group.owner_user_id !== identity.owner_user_id) {
+            throw new Error('[recovery-intelligence] mixed tenant identities in one device history');
+        }
+        group.episodes.push(episode);
+        group.ownerIds.add(identity.owner_user_id);
+        group.deviceIds.add(identity.device_id);
+        if (group.ids.length < 20) { group.ids.push(episode.id); }
+    };
+
+    for (const row of recoveries || []) {
+        const identity = assertLocalIdentity({
+            ownerUserId: row.owner_user_id,
+            deviceId: row.device_id,
+            context: `recovery event ${row.id}`
+        });
+        const stressClass = metricToClass(row.metric);
+        if (!stressClass) { continue; }
+        const evidence = C.parseJson(row.evidence_json, {}) || {};
+        const durationHours = Number.isFinite(Number(evidence.recovery_duration_minutes))
+            ? Number(evidence.recovery_duration_minutes) / 60
+            : (Number.isFinite(Number(row.duration_seconds)) ? Number(row.duration_seconds) / 3600 : NaN);
+        const quality = Number.isFinite(Number(evidence.recovery_quality)) ? Number(evidence.recovery_quality) : NaN;
+        const episode = {
+            id: row.id,
+            durationHours,
+            qualityVal: quality,
+            startMs: new Date(row.started_at).getTime()
+        };
+        addEpisode('fleet', identity, null, stressClass, episode);
+        addEpisode('greenhouse', identity, identity.device_id, stressClass, episode);
+    }
+    return groups;
+}
+
 async function ensureRecoveryIntelligenceSchema() {
     await query(
         `CREATE TABLE IF NOT EXISTS agro_recovery_intelligence (
@@ -83,6 +139,11 @@ async function ensureRecoveryIntelligenceSchema() {
            scope_type VARCHAR(12) NOT NULL,
            greenhouse_scope INTEGER NULL,
            fleet_scope BOOLEAN NOT NULL DEFAULT FALSE,
+           owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+           device_id INTEGER NULL REFERENCES devices(id) ON DELETE CASCADE,
+           distinct_owner_count INTEGER NOT NULL DEFAULT 0,
+           distinct_device_count INTEGER NOT NULL DEFAULT 0,
+           fleet_eligible BOOLEAN NOT NULL DEFAULT FALSE,
            recovery_count INTEGER NOT NULL DEFAULT 0,
            recovery_speed_hours NUMERIC(10,2) NULL,
            recovery_quality NUMERIC(4,3) NULL,
@@ -106,11 +167,12 @@ async function ensureRecoveryIntelligenceSchema() {
     );
     await query('CREATE INDEX IF NOT EXISTS idx_ri_scope ON agro_recovery_intelligence (scope_type, greenhouse_scope, stress_type)');
     await query('CREATE INDEX IF NOT EXISTS idx_ri_score ON agro_recovery_intelligence (recovery_score DESC)');
+    await ensureScopedTenantSchema('agro_recovery_intelligence');
 }
 
 async function loadRecoveryEvents() {
     return query(
-        `SELECT id, device_id, metric, started_at, duration_seconds, evidence_json
+        `SELECT id, owner_user_id, device_id, metric, started_at, duration_seconds, evidence_json
          FROM agro_actions_detected WHERE event_type = 'recovery'`
     );
 }
@@ -129,16 +191,27 @@ async function loadOutOfRangeCounts() {
 }
 
 async function upsertRI(row) {
+    const identity = assertScopedIdentity({
+        scopeType: row.scope_type,
+        ownerUserId: row.owner_user_id,
+        deviceId: row.device_id,
+        greenhouseScope: row.greenhouse_scope,
+        context: 'recovery-intelligence'
+    });
     await query(
         `INSERT INTO agro_recovery_intelligence
             (recovery_id, stress_type, metric, scope_type, greenhouse_scope, fleet_scope, recovery_count,
+             owner_user_id, device_id, distinct_owner_count, distinct_device_count, fleet_eligible,
              recovery_speed_hours, recovery_quality, recovery_stability, recovery_success_rate, recovery_score, recovery_class,
              is_fast, is_slow, is_stable, is_fragile, is_improving, is_declining,
              ranking_factors, confidence_factors, supporting_event_ids, evidence_json, computed_at, rule_version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), NOW(), ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), NOW(), ?)
          ON CONFLICT (recovery_id) DO UPDATE SET
              recovery_count=EXCLUDED.recovery_count, recovery_speed_hours=EXCLUDED.recovery_speed_hours,
              recovery_quality=EXCLUDED.recovery_quality, recovery_stability=EXCLUDED.recovery_stability,
+             owner_user_id=EXCLUDED.owner_user_id, device_id=EXCLUDED.device_id,
+             distinct_owner_count=EXCLUDED.distinct_owner_count, distinct_device_count=EXCLUDED.distinct_device_count,
+             fleet_eligible=EXCLUDED.fleet_eligible,
              recovery_success_rate=EXCLUDED.recovery_success_rate, recovery_score=EXCLUDED.recovery_score, recovery_class=EXCLUDED.recovery_class,
              is_fast=EXCLUDED.is_fast, is_slow=EXCLUDED.is_slow, is_stable=EXCLUDED.is_stable, is_fragile=EXCLUDED.is_fragile,
              is_improving=EXCLUDED.is_improving, is_declining=EXCLUDED.is_declining, ranking_factors=EXCLUDED.ranking_factors,
@@ -147,10 +220,11 @@ async function upsertRI(row) {
          RETURNING id`,
         [
             row.recovery_id, row.stress_type, row.metric, row.scope_type, row.greenhouse_scope, row.fleet_scope, row.recovery_count,
+            identity.owner_user_id, identity.device_id, row.distinct_owner_count, row.distinct_device_count, row.fleet_eligible,
             row.recovery_speed_hours, row.recovery_quality, row.recovery_stability, row.recovery_success_rate, row.recovery_score, row.recovery_class,
             row.is_fast, row.is_slow, row.is_stable, row.is_fragile, row.is_improving, row.is_declining,
-            JSON.stringify(row.ranking_factors), JSON.stringify(row.ranking_factors), JSON.stringify(row.supporting_event_ids || []),
-            JSON.stringify(row.evidence_json || {}), RULE_VERSION
+            JSON.stringify(row.ranking_factors), JSON.stringify(row.ranking_factors), JSON.stringify(fleetSafeExamples(row.scope_type, row.supporting_event_ids || [])),
+            JSON.stringify(fleetSafeEvidence(row.scope_type, row.evidence_json || {})), RULE_VERSION
         ]
     );
 }
@@ -158,41 +232,33 @@ async function upsertRI(row) {
 async function runRecoveryIntelligence({ now = new Date(), dryRun = false } = {}) {
     const summary = { classes: 0, fast: 0, slow: 0, stable: 0, fragile: 0, improving: 0, declining: 0 };
     const nowMs = now.getTime();
+    if (!dryRun) { await query("DELETE FROM agro_recovery_intelligence WHERE scope_type = 'fleet'"); }
     const recoveries = await loadRecoveryEvents();
     if (!recoveries.length) { return summary; }
     const oor = await loadOutOfRangeCounts();
 
-    // raggruppa episodi per scope x stress_type
-    const groups = new Map();
-    const addEp = (scopeType, gh, cls, ep) => {
-        const key = C.deterministicId(scopeType, gh == null ? 'FLEET' : gh, cls);
-        let g = groups.get(key);
-        if (!g) { g = { key, scope_type: scopeType, greenhouse_scope: gh, metric: cls, episodes: [], ids: [] }; groups.set(key, g); }
-        g.episodes.push(ep); if (g.ids.length < 20) { g.ids.push(ep.id); }
-    };
-    for (const r of recoveries) {
-        const cls = metricToClass(r.metric); if (!cls) { continue; }
-        const ev = C.parseJson(r.evidence_json, {}) || {};
-        const durH = Number.isFinite(Number(ev.recovery_duration_minutes)) ? Number(ev.recovery_duration_minutes) / 60
-            : (Number.isFinite(Number(r.duration_seconds)) ? Number(r.duration_seconds) / 3600 : NaN);
-        const q = Number.isFinite(Number(ev.recovery_quality)) ? Number(ev.recovery_quality) : NaN;
-        const ep = { id: r.id, durationHours: durH, qualityVal: q, startMs: new Date(r.started_at).getTime() };
-        addEp('fleet', null, cls, ep);
-        addEp('greenhouse', r.device_id, cls, ep);
-    }
+    // Raggruppa per device/owner. Mixed ownership fails closed.
+    const groups = groupRecoveryEpisodes(recoveries);
 
     for (const g of groups.values()) {
         if (g.episodes.length < RI.MIN_RECOVERIES) { continue; }
+        const privacy = fleetEligibility([...g.ownerIds], [...g.deviceIds]);
+        if (g.scope_type === 'fleet' && !privacy.fleet_eligible) { continue; }
         const oorCount = g.scope_type === 'fleet' ? (oor.fleet.get(g.metric) || 0) : (oor.gh.get(`${g.greenhouse_scope}|${g.metric}`) || 0);
         const ri = computeRecoveryIntelligence(g.episodes, oorCount, nowMs);
         const row = {
             recovery_id: g.key, stress_type: g.metric, metric: g.metric, scope_type: g.scope_type,
             greenhouse_scope: g.greenhouse_scope, fleet_scope: g.scope_type === 'fleet', recovery_count: g.episodes.length,
+            owner_user_id: g.owner_user_id, device_id: g.device_id,
+            distinct_owner_count: privacy.distinct_owner_count, distinct_device_count: privacy.distinct_device_count,
+            fleet_eligible: g.scope_type === 'fleet' ? privacy.fleet_eligible : false,
             recovery_speed_hours: ri.recovery_speed_hours, recovery_quality: ri.recovery_quality, recovery_stability: ri.recovery_stability,
             recovery_success_rate: ri.recovery_success_rate, recovery_score: ri.recovery_score, recovery_class: classifyLabel(ri),
             is_fast: ri.is_fast, is_slow: ri.is_slow, is_stable: ri.is_stable, is_fragile: ri.is_fragile,
             is_improving: ri.is_improving, is_declining: ri.is_declining, ranking_factors: ri.factors,
-            supporting_event_ids: g.ids, evidence_json: { recovery_count: g.episodes.length, out_of_range_count: oorCount }
+            supporting_event_ids: fleetSafeExamples(g.scope_type, g.ids),
+            evidence_json: { recovery_count: g.episodes.length, out_of_range_count: oorCount,
+                             distinct_owner_count: privacy.distinct_owner_count, distinct_device_count: privacy.distinct_device_count }
         };
         if (!dryRun) { await upsertRI(row); }
         summary.classes += 1;
@@ -203,4 +269,13 @@ async function runRecoveryIntelligence({ now = new Date(), dryRun = false } = {}
     return summary;
 }
 
-module.exports = { ensureRecoveryIntelligenceSchema, runRecoveryIntelligence, computeRecoveryIntelligence, metricToClass, classifyLabel, RULE_VERSION, RI };
+module.exports = {
+    ensureRecoveryIntelligenceSchema,
+    runRecoveryIntelligence,
+    computeRecoveryIntelligence,
+    groupRecoveryEpisodes,
+    metricToClass,
+    classifyLabel,
+    RULE_VERSION,
+    RI
+};

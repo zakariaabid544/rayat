@@ -11,6 +11,7 @@ const {
   getTableIndexes,
   clearSchemaCache
 } = require('../config/database');
+const { ensureActionsTenantSchema } = require('./intelligence-tenancy');
 
 async function tableExists(tableName) {
   const rows = await query(
@@ -426,8 +427,9 @@ async function ensureCoreTables(changes) {
       `CREATE TABLE IF NOT EXISTS agro_actions_detected (
          id BIGSERIAL PRIMARY KEY,
          user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
-         device_id INTEGER NULL REFERENCES devices(id) ON DELETE CASCADE,
-         sensor_id INTEGER NULL REFERENCES sensors(id) ON DELETE CASCADE,
+         owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+         sensor_id INTEGER NOT NULL REFERENCES sensors(id) ON DELETE CASCADE,
          metric VARCHAR(80) NOT NULL,
          event_type VARCHAR(40) NOT NULL,
          status VARCHAR(12) NOT NULL DEFAULT 'open',
@@ -510,6 +512,8 @@ async function ensurePlatformSchema() {
   if (await ensureColumn('users', 'customer_role', "VARCHAR(32) DEFAULT 'owner'")) {
     changes.push('users.customer_role');
   }
+
+  await ensureActionsTenantSchema();
 
   await query(
     `UPDATE users

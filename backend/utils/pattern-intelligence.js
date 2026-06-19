@@ -5,6 +5,7 @@
 'use strict';
 const { query } = require('../config/database');
 const C = require('./intelligence-common');
+const { assertScopedIdentity, ensureScopedTenantSchema } = require('./intelligence-tenancy');
 
 const RULE_VERSION = 's2.2';
 
@@ -68,6 +69,11 @@ async function ensurePatternIntelligenceSchema() {
            scope_type VARCHAR(12) NOT NULL,
            greenhouse_scope INTEGER NULL,
            fleet_scope BOOLEAN NOT NULL DEFAULT FALSE,
+           owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+           device_id INTEGER NULL REFERENCES devices(id) ON DELETE CASCADE,
+           distinct_owner_count INTEGER NOT NULL DEFAULT 0,
+           distinct_device_count INTEGER NOT NULL DEFAULT 0,
+           fleet_eligible BOOLEAN NOT NULL DEFAULT FALSE,
            pattern_type VARCHAR(20) NOT NULL,
            event_sequence TEXT NOT NULL,
            occurrences INTEGER NOT NULL DEFAULT 0,
@@ -93,28 +99,42 @@ async function ensurePatternIntelligenceSchema() {
     await query('CREATE INDEX IF NOT EXISTS idx_api_scope_type ON agro_pattern_intelligence (scope_type, greenhouse_scope, pattern_type)');
     await query('CREATE INDEX IF NOT EXISTS idx_api_importance ON agro_pattern_intelligence (importance_score DESC)');
     await query('CREATE INDEX IF NOT EXISTS idx_api_emerging ON agro_pattern_intelligence (is_emerging, scope_type)');
+    await ensureScopedTenantSchema('agro_pattern_intelligence');
 }
 
 async function loadPatterns() {
     return query(
         `SELECT pattern_id, pattern_type, event_sequence, occurrences, confidence,
                 average_duration_seconds, duration_stddev_seconds, first_seen, last_seen,
-                scope_type, greenhouse_scope, fleet_scope, confidence_factors
-         FROM agro_success_patterns`
+                scope_type, greenhouse_scope, fleet_scope, owner_user_id, device_id,
+                distinct_owner_count, distinct_device_count, fleet_eligible, confidence_factors
+         FROM agro_success_patterns
+         WHERE scope_type = 'greenhouse' OR fleet_eligible = TRUE`
     );
 }
 
 async function upsertIntelligence(row) {
+    const identity = assertScopedIdentity({
+        scopeType: row.scope_type,
+        ownerUserId: row.owner_user_id,
+        deviceId: row.device_id,
+        greenhouseScope: row.greenhouse_scope,
+        context: 'pattern-intelligence'
+    });
     await query(
         `INSERT INTO agro_pattern_intelligence
             (intelligence_id, pattern_ref, scope_type, greenhouse_scope, fleet_scope, pattern_type, event_sequence,
+             owner_user_id, device_id, distinct_owner_count, distinct_device_count, fleet_eligible,
              occurrences, confidence, success_rate, importance_score, trend_direction,
              is_top_success, is_top_failure, is_top_sensor, is_emerging, rank_in_category,
              why_important, ranking_factors, confidence_factors, supporting_event_ids, first_seen, last_seen, computed_at, rule_version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, NOW(), ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, NOW(), ?)
          ON CONFLICT (intelligence_id) DO UPDATE SET
              occurrences=EXCLUDED.occurrences, confidence=EXCLUDED.confidence, success_rate=EXCLUDED.success_rate,
              importance_score=EXCLUDED.importance_score, trend_direction=EXCLUDED.trend_direction,
+             owner_user_id=EXCLUDED.owner_user_id, device_id=EXCLUDED.device_id,
+             distinct_owner_count=EXCLUDED.distinct_owner_count, distinct_device_count=EXCLUDED.distinct_device_count,
+             fleet_eligible=EXCLUDED.fleet_eligible,
              is_top_success=EXCLUDED.is_top_success, is_top_failure=EXCLUDED.is_top_failure,
              is_top_sensor=EXCLUDED.is_top_sensor, is_emerging=EXCLUDED.is_emerging, rank_in_category=EXCLUDED.rank_in_category,
              why_important=EXCLUDED.why_important, ranking_factors=EXCLUDED.ranking_factors,
@@ -123,6 +143,7 @@ async function upsertIntelligence(row) {
          RETURNING id`,
         [
             row.intelligence_id, row.pattern_ref, row.scope_type, row.greenhouse_scope, row.fleet_scope, row.pattern_type, row.event_sequence,
+            identity.owner_user_id, identity.device_id, row.distinct_owner_count, row.distinct_device_count, row.fleet_eligible,
             row.occurrences, row.confidence, row.success_rate, row.importance_score, row.trend_direction,
             row.is_top_success, row.is_top_failure, row.is_top_sensor, row.is_emerging, row.rank_in_category,
             row.why_important, JSON.stringify(row.ranking_factors), JSON.stringify(row.confidence_factors || {}),
@@ -134,6 +155,7 @@ async function upsertIntelligence(row) {
 async function runPatternIntelligence({ now = new Date(), dryRun = false } = {}) {
     const summary = { patterns: 0, top_success: 0, top_failure: 0, top_sensor: 0, emerging: 0, scopes: 0 };
     const nowMs = now.getTime();
+    if (!dryRun) { await query("DELETE FROM agro_pattern_intelligence WHERE scope_type = 'fleet'"); }
     const rows = await loadPatterns();
     if (!rows.length) { return summary; }
     const successRateFor = buildSuccessRates(rows);
@@ -153,6 +175,9 @@ async function runPatternIntelligence({ now = new Date(), dryRun = false } = {})
         return {
             intelligence_id: C.deterministicId(r.scope_type, r.greenhouse_scope == null ? 'FLEET' : r.greenhouse_scope, r.pattern_id),
             pattern_ref: r.pattern_id, scope_type: r.scope_type, greenhouse_scope: r.greenhouse_scope, fleet_scope: !!r.fleet_scope,
+            owner_user_id: r.owner_user_id, device_id: r.device_id,
+            distinct_owner_count: Number(r.distinct_owner_count || 0),
+            distinct_device_count: Number(r.distinct_device_count || 0), fleet_eligible: !!r.fleet_eligible,
             pattern_type: r.pattern_type, event_sequence: r.event_sequence,
             occurrences: Number(r.occurrences), confidence: Number(r.confidence),
             success_rate: C.round3(successRateFor(r)), importance_score: imp.importance_score,

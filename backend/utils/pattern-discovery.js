@@ -4,6 +4,13 @@
 // Deterministico ed esplicabile (no black-box). Idempotente: upsert su pattern_id (ON CONFLICT).
 // Additivo: crea la propria tabella/indici con IF NOT EXISTS, NON tocca i moduli Sprint 1, ingestion o alarm_events.
 const { query } = require('../config/database');
+const {
+    assertLocalIdentity,
+    assertScopedIdentity,
+    ensureScopedTenantSchema,
+    fleetEligibility,
+    minimumDistinctCustomers
+} = require('./intelligence-tenancy');
 
 const RULE_VERSION = 's2.1';
 const DAY_MS = 86400000;
@@ -66,10 +73,19 @@ function mineSensorTimeline(events, { maxGapMs, minLen, maxLen }) {
             }
             if (!ok) { break; } // se la finestra L si rompe, le piu lunghe partono dallo stesso i si romperanno comunque
             const win = events.slice(i, end + 1);
+            if (win.some((event) => event.ownerUserId !== win[0].ownerUserId || event.deviceId !== win[0].deviceId)) {
+                throw new Error('[pattern-discovery] mixed tenant identities in one sensor timeline');
+            }
             const seq = win.map((e) => e.type);
             const firstStart = win[0].startMs;
             const lastEnd = Number.isFinite(win[L - 1].endMs) ? win[L - 1].endMs : win[L - 1].startMs;
-            instances.push({ seq, deviceId: win[0].deviceId, firstStart, durationMs: Math.max(0, lastEnd - firstStart) });
+            instances.push({
+                seq,
+                ownerUserId: win[0].ownerUserId,
+                deviceId: win[0].deviceId,
+                firstStart,
+                durationMs: Math.max(0, lastEnd - firstStart)
+            });
         }
     }
     return instances;
@@ -106,11 +122,16 @@ function aggregatePatterns(instances, nowMs) {
         if (!g) {
             g = {
                 pattern_id: key, scope_type: scopeType, greenhouse_scope: greenhouseScope,
-                seq: inst.seq, seqStr, occurrences: 0, durations: [], first: inst.firstStart, last: inst.firstStart
+                owner_user_id: scopeType === 'greenhouse' ? inst.ownerUserId : null,
+                device_id: scopeType === 'greenhouse' ? inst.deviceId : null,
+                seq: inst.seq, seqStr, occurrences: 0, durations: [], first: inst.firstStart, last: inst.firstStart,
+                ownerIds: new Set(), deviceIds: new Set()
             };
             groups.set(key, g);
         }
         g.occurrences += 1;
+        g.ownerIds.add(inst.ownerUserId);
+        g.deviceIds.add(inst.deviceId);
         g.durations.push(inst.durationMs);
         if (inst.firstStart < g.first) { g.first = inst.firstStart; }
         if (inst.firstStart > g.last) { g.last = inst.firstStart; }
@@ -149,6 +170,11 @@ async function ensurePatternSchema() {
            scope_type VARCHAR(12) NOT NULL,
            greenhouse_scope INTEGER NULL,
            fleet_scope BOOLEAN NOT NULL DEFAULT FALSE,
+           owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+           device_id INTEGER NULL REFERENCES devices(id) ON DELETE CASCADE,
+           distinct_owner_count INTEGER NOT NULL DEFAULT 0,
+           distinct_device_count INTEGER NOT NULL DEFAULT 0,
+           fleet_eligible BOOLEAN NOT NULL DEFAULT FALSE,
            confidence_factors JSONB NULL,
            rule_version VARCHAR(20) NOT NULL DEFAULT 's2.1',
            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -160,11 +186,12 @@ async function ensurePatternSchema() {
     await query('CREATE INDEX IF NOT EXISTS idx_agro_patterns_last_seen ON agro_success_patterns (last_seen DESC)');
     // Indice additivo di supporto alla discovery (lettura per sensore in ordine temporale)
     await query('CREATE INDEX IF NOT EXISTS idx_agro_actions_sensor_started ON agro_actions_detected (sensor_id, started_at)');
+    await ensureScopedTenantSchema('agro_success_patterns');
 }
 
 async function loadEvents(lookbackTs) {
     return query(
-        `SELECT sensor_id, device_id, event_type, started_at, ended_at
+        `SELECT sensor_id, owner_user_id, device_id, event_type, started_at, ended_at
          FROM agro_actions_detected
          WHERE started_at >= ?
            AND event_type IN ('out_of_range','return_to_range','improvement','worsening','stabilization','recovery','anomaly','regime_shift','sensor_drift')
@@ -175,18 +202,32 @@ async function loadEvents(lookbackTs) {
 
 async function upsertPattern(g) {
     const conf = computePatternConfidence({ occurrences: g.occurrences, daysSinceLast: g.daysSinceLast, durationCV: g.durationCV });
+    const identity = assertScopedIdentity({
+        scopeType: g.scope_type,
+        ownerUserId: g.owner_user_id,
+        deviceId: g.device_id,
+        greenhouseScope: g.greenhouse_scope,
+        context: 'pattern-discovery'
+    });
     await query(
         `INSERT INTO agro_success_patterns
             (pattern_id, pattern_type, event_sequence, sequence_length, occurrences, confidence,
              average_duration_seconds, duration_stddev_seconds, first_seen, last_seen,
-             scope_type, greenhouse_scope, fleet_scope, confidence_factors, rule_version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), ?, NOW(), NOW())
+             scope_type, greenhouse_scope, fleet_scope, owner_user_id, device_id,
+             distinct_owner_count, distinct_device_count, fleet_eligible,
+             confidence_factors, rule_version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), ?, NOW(), NOW())
          ON CONFLICT (pattern_id) DO UPDATE SET
              pattern_type = EXCLUDED.pattern_type,
              occurrences = EXCLUDED.occurrences,
              confidence = EXCLUDED.confidence,
              average_duration_seconds = EXCLUDED.average_duration_seconds,
              duration_stddev_seconds = EXCLUDED.duration_stddev_seconds,
+             owner_user_id = EXCLUDED.owner_user_id,
+             device_id = EXCLUDED.device_id,
+             distinct_owner_count = EXCLUDED.distinct_owner_count,
+             distinct_device_count = EXCLUDED.distinct_device_count,
+             fleet_eligible = EXCLUDED.fleet_eligible,
              first_seen = LEAST(agro_success_patterns.first_seen, EXCLUDED.first_seen),
              last_seen = GREATEST(agro_success_patterns.last_seen, EXCLUDED.last_seen),
              confidence_factors = EXCLUDED.confidence_factors,
@@ -195,7 +236,8 @@ async function upsertPattern(g) {
         [
             g.pattern_id, g.pattern_type, g.seqStr, g.seq.length, g.occurrences, conf.confidence,
             g.avgDurationSec, g.stdDurationSec, new Date(g.first).toISOString(), new Date(g.last).toISOString(),
-            g.scope_type, g.scope_type === 'greenhouse' ? g.greenhouse_scope : null, g.scope_type === 'fleet',
+            g.scope_type, identity.greenhouse_scope, g.scope_type === 'fleet', identity.owner_user_id, identity.device_id,
+            g.distinct_owner_count, g.distinct_device_count, g.fleet_eligible,
             JSON.stringify(conf.factors), RULE_VERSION
         ]
     );
@@ -203,12 +245,13 @@ async function upsertPattern(g) {
 }
 
 async function discoverPatterns({ now = new Date(), lookbackDays = DISCOVERY.LOOKBACK_DAYS, dryRun = false } = {}) {
-    const summary = { scanned_events: 0, sensors: 0, candidates: 0, stored: 0, fleet: 0, greenhouse: 0, skipped_rare: 0 };
+    const summary = { scanned_events: 0, sensors: 0, candidates: 0, stored: 0, fleet: 0, greenhouse: 0, skipped_rare: 0, suppressed_fleet_privacy: 0 };
     const nowMs = now.getTime();
     const lookbackTs = new Date(nowMs - lookbackDays * DAY_MS).toISOString();
 
     let rows = [];
     try {
+        if (!dryRun) { await query("DELETE FROM agro_success_patterns WHERE scope_type = 'fleet'"); }
         rows = await loadEvents(lookbackTs);
     } catch (error) {
         console.error('[pattern-discovery] load events failed:', error.message);
@@ -219,11 +262,17 @@ async function discoverPatterns({ now = new Date(), lookbackDays = DISCOVERY.LOO
     // Raggruppa per sensore e costruisci le timeline ordinate
     const bySensor = new Map();
     for (const r of rows) {
+        const identity = assertLocalIdentity({
+            ownerUserId: r.owner_user_id,
+            deviceId: r.device_id,
+            context: `pattern event sensor ${r.sensor_id}`
+        });
         const sid = r.sensor_id;
         if (!bySensor.has(sid)) { bySensor.set(sid, []); }
         bySensor.get(sid).push({
             type: r.event_type,
-            deviceId: r.device_id,
+            ownerUserId: identity.owner_user_id,
+            deviceId: identity.device_id,
             startMs: new Date(r.started_at).getTime(),
             endMs: r.ended_at ? new Date(r.ended_at).getTime() : new Date(r.started_at).getTime()
         });
@@ -243,6 +292,14 @@ async function discoverPatterns({ now = new Date(), lookbackDays = DISCOVERY.LOO
     const discovered = [];
     for (const g of groups.values()) {
         if (g.occurrences < DISCOVERY.MIN_OCCURRENCES) { summary.skipped_rare += 1; continue; }
+        const privacy = fleetEligibility([...g.ownerIds], [...g.deviceIds]);
+        g.distinct_owner_count = privacy.distinct_owner_count;
+        g.distinct_device_count = privacy.distinct_device_count;
+        g.fleet_eligible = g.scope_type === 'fleet' ? privacy.fleet_eligible : false;
+        if (g.scope_type === 'fleet' && !privacy.fleet_eligible) {
+            summary.suppressed_fleet_privacy += 1;
+            continue;
+        }
         const conf = computePatternConfidence({ occurrences: g.occurrences, daysSinceLast: g.daysSinceLast, durationCV: g.durationCV });
         discovered.push({ ...g, confidence: conf.confidence, confidence_factors: conf.factors });
         if (!dryRun) {
@@ -263,6 +320,7 @@ module.exports = {
     aggregatePatterns,
     classifyPatternType,
     computePatternConfidence,
+    minimumDistinctCustomers,
     DISCOVERY,
     RULE_VERSION
 };

@@ -6,6 +6,7 @@
 // NON tocca alarm_events / active_alerts. Idempotente: max 1 anomaly 'open' per (sensor_id, metric).
 const { query } = require('../config/database');
 const { metricKeyForSensor } = require('./range-resolver');
+const { assertLocalIdentity } = require('./intelligence-tenancy');
 
 const RULE_VERSION = 's1.6';
 
@@ -107,6 +108,7 @@ async function findOpenAnomaly(sensorId, metric) {
 
 async function evaluateAnomaly({ userId, sensor, recentReadings, range, quality, now = new Date(), dryRun = false }) {
     const actions = [];
+    const identity = assertLocalIdentity({ ownerUserId: userId, deviceId: sensor.device_id, context: 'anomaly-analyzer' });
     const sensorId = sensor.id;
     const metric = (range && range.metric) || metricKeyForSensor(sensor) || sensor.subtype || sensor.type;
 
@@ -179,13 +181,13 @@ async function evaluateAnomaly({ userId, sensor, recentReadings, range, quality,
             if (!dryRun) {
                 await query(
                     `INSERT INTO agro_actions_detected
-                        (user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
+                        (user_id, owner_user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                          started_at, from_state, to_state, value_snapshot, range_snapshot, evidence_json,
                          linked_alarm_event_id, rule_version)
-                     VALUES (?, ?, ?, ?, 'anomaly', 'open', ?, ?, NOW(), 'NORMAL', 'ANOMALY', ?,
+                     VALUES (?, ?, ?, ?, ?, 'anomaly', 'open', ?, ?, NOW(), 'NORMAL', 'ANOMALY', ?,
                              CAST(? AS JSONB), CAST(? AS JSONB), NULL, ?)`,
                     [
-                        userId || null, sensor.device_id || null, sensorId, metric,
+                        identity.owner_user_id, identity.owner_user_id, identity.device_id, sensorId, metric,
                         severity, confidence, latestValue, rangeSnap, JSON.stringify(evidence), RULE_VERSION
                     ]
                 );

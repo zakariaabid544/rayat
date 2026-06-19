@@ -3,6 +3,7 @@
 // e dalle letture, riusando Quality Gate (Sprint 1.2). NON tocca alarm_events / active_alerts.
 // Parametri statistici tecnici e CONFIGURABILI (non soglie agronomiche): finestra/min campioni/slope/varianza.
 const { query } = require('../config/database');
+const { assertLocalIdentity } = require('./intelligence-tenancy');
 
 const RULE_VERSION = 's1.4';
 
@@ -134,6 +135,7 @@ async function findOpenEventByType(sensorId, metric, eventType) {
 
 async function evaluateTrend({ userId, sensor, recentReadings, range, quality, now = new Date(), dryRun = false }) {
     const actions = [];
+    const identity = assertLocalIdentity({ ownerUserId: userId, deviceId: sensor.device_id, context: 'trend-analyzer' });
     const metric = (range && range.metric) || sensor.subtype || sensor.type;
 
     // Quality gate: durante data gap / offline / dati non freschi NON generiamo eventi
@@ -173,12 +175,12 @@ async function evaluateTrend({ userId, sensor, recentReadings, range, quality, n
                 if (!dryRun) {
                     await query(
                         `INSERT INTO agro_actions_detected
-                            (user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
+                            (user_id, owner_user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                              started_at, from_state, to_state, value_snapshot, range_snapshot, evidence_json,
                              linked_alarm_event_id, rule_version)
-                         VALUES (?, ?, ?, ?, ?, 'open', ?, ?, NOW(), ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), NULL, ?)`,
+                         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, NOW(), ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), NULL, ?)`,
                         [
-                            userId || null, sensor.device_id || null, sensor.id, metric, type,
+                            identity.owner_user_id, identity.owner_user_id, identity.device_id, sensor.id, metric, type,
                             severity, res.confidence || 0.5, res.pos, type, latest,
                             rangeSnap, evidence, RULE_VERSION
                         ]

@@ -7,6 +7,7 @@
 // NON tocca alarm_events / active_alerts. Idempotente: max 1 regime_shift 'open' per (sensor_id, metric).
 const { query } = require('../config/database');
 const { metricKeyForSensor } = require('./range-resolver');
+const { assertLocalIdentity } = require('./intelligence-tenancy');
 
 const RULE_VERSION = 's1.7';
 
@@ -122,6 +123,7 @@ function parseEvidence(raw) {
 
 async function evaluateRegimeShift({ userId, sensor, range, quality, now = new Date(), dryRun = false }) {
     const actions = [];
+    const identity = assertLocalIdentity({ ownerUserId: userId, deviceId: sensor.device_id, context: 'regime-shift-analyzer' });
     const sensorId = sensor.id;
     const metric = (range && range.metric) || metricKeyForSensor(sensor) || sensor.subtype || sensor.type;
 
@@ -217,13 +219,13 @@ async function evaluateRegimeShift({ userId, sensor, range, quality, now = new D
     if (!dryRun) {
         await query(
             `INSERT INTO agro_actions_detected
-                (user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
+                (user_id, owner_user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                  started_at, from_state, to_state, value_snapshot, range_snapshot, evidence_json,
                  linked_alarm_event_id, rule_version)
-             VALUES (?, ?, ?, ?, 'regime_shift', 'open', ?, ?, NOW(), 'BASELINE_OLD', 'BASELINE_NEW', ?,
+             VALUES (?, ?, ?, ?, ?, 'regime_shift', 'open', ?, ?, NOW(), 'BASELINE_OLD', 'BASELINE_NEW', ?,
                      CAST(? AS JSONB), CAST(? AS JSONB), NULL, ?)`,
             [
-                userId || null, sensor.device_id || null, sensorId, metric,
+                identity.owner_user_id, identity.owner_user_id, identity.device_id, sensorId, metric,
                 severity, confidence, round3(dec.newMean), rangeSnap, JSON.stringify(evidence), RULE_VERSION
             ]
         );

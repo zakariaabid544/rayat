@@ -6,6 +6,14 @@
 'use strict';
 const { query } = require('../config/database');
 const C = require('./intelligence-common');
+const {
+    assertLocalIdentity,
+    assertScopedIdentity,
+    ensureScopedTenantSchema,
+    fleetEligibility,
+    fleetSafeEvidence,
+    fleetSafeExamples
+} = require('./intelligence-tenancy');
 
 const RULE_VERSION = 's2.3';
 
@@ -85,6 +93,11 @@ async function ensureTriggerSchema() {
            scope_type VARCHAR(12) NOT NULL,
            greenhouse_scope INTEGER NULL,
            fleet_scope BOOLEAN NOT NULL DEFAULT FALSE,
+           owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+           device_id INTEGER NULL REFERENCES devices(id) ON DELETE CASCADE,
+           distinct_owner_count INTEGER NOT NULL DEFAULT 0,
+           distinct_device_count INTEGER NOT NULL DEFAULT 0,
+           fleet_eligible BOOLEAN NOT NULL DEFAULT FALSE,
            supporting_examples JSONB NULL,
            confidence_factors JSONB NULL,
            evidence_json JSONB NULL,
@@ -97,11 +110,12 @@ async function ensureTriggerSchema() {
     await query('CREATE INDEX IF NOT EXISTS idx_trg_scope ON agro_triggers (scope_type, greenhouse_scope, trigger_type)');
     await query('CREATE INDEX IF NOT EXISTS idx_trg_conf ON agro_triggers (confidence DESC)');
     await query('CREATE INDEX IF NOT EXISTS idx_trg_class ON agro_triggers (trigger_class, trigger_type)');
+    await ensureScopedTenantSchema('agro_triggers');
 }
 
 async function loadEvents(lookbackTs) {
     return query(
-        `SELECT id, device_id, metric, event_type, started_at, ended_at, value_snapshot, to_state, severity
+        `SELECT id, owner_user_id, device_id, metric, event_type, started_at, ended_at, value_snapshot, to_state, severity
          FROM agro_actions_detected
          WHERE started_at >= ?
            AND event_type IN ('out_of_range','return_to_range','improvement','worsening','stabilization','recovery','anomaly','regime_shift','sensor_drift')
@@ -117,14 +131,16 @@ function mineTriggers(eventsByDevice, { horizonMs, now }) {
     const antFollowed = new Map(); // scopeKey|metric|atype|ctype -> count
     const bump = (m, k) => m.set(k, (m.get(k) || 0) + 1);
 
-    const ensure = (scopeType, gh, ttype, tclass, ametric, atype, cond, ctype) => {
+    const ensure = (scopeType, ownerUserId, gh, ttype, tclass, ametric, atype, cond, ctype) => {
         // condition nella chiave: 'below' vs 'above' vs 'event_present' restano trigger semanticamente distinti
         const key = C.deterministicId(scopeType, gh == null ? 'FLEET' : gh, ttype, ametric, atype, cond, ctype);
         let g = cand.get(key);
         if (!g) {
             g = { trigger_id: key, scope_type: scopeType, greenhouse_scope: gh, trigger_type: ttype, trigger_class: tclass,
+                  owner_user_id: scopeType === 'greenhouse' ? ownerUserId : null,
+                  device_id: scopeType === 'greenhouse' ? gh : null,
                   metric: ametric, antecedent_event: atype, condition: cond, consequent_event: ctype,
-                  occurrences: 0, leads: [], values: [], greenhouses: new Set(), days: new Set(), examples: [],
+                  occurrences: 0, leads: [], values: [], ownerIds: new Set(), greenhouses: new Set(), days: new Set(), examples: [],
                   first: Infinity, last: -Infinity };
             cand.set(key, g);
         }
@@ -132,6 +148,11 @@ function mineTriggers(eventsByDevice, { horizonMs, now }) {
     };
 
     for (const [deviceId, events] of eventsByDevice) {
+        const ownerUserId = events[0] && events[0].ownerUserId;
+        assertLocalIdentity({ ownerUserId, deviceId, context: `trigger device ${deviceId}` });
+        if (events.some((event) => event.ownerUserId !== ownerUserId)) {
+            throw new Error('[trigger-discovery] mixed tenant identities in one device timeline');
+        }
         const n = events.length;
         // pass FPR (lato antecedente): per ogni evento A, totale + se seguito entro H da un consequent Ct
         for (let i = 0; i < n; i++) {
@@ -168,8 +189,9 @@ function mineTriggers(eventsByDevice, { horizonMs, now }) {
                 const cond = conditionFrom(A.toState, A.type);
                 const leadH = (Cev.startMs - A.startMs) / C.HOUR_MS;
                 for (const [scopeType, gh] of [['fleet', null], ['greenhouse', deviceId]]) {
-                    const g = ensure(scopeType, gh, ttype, tclass, A.metric, A.type, cond, Cev.type);
+                    const g = ensure(scopeType, scopeType === 'greenhouse' ? ownerUserId : null, gh, ttype, tclass, A.metric, A.type, cond, Cev.type);
                     g.occurrences += 1;
+                    g.ownerIds.add(ownerUserId);
                     g.leads.push(leadH);
                     if (Number.isFinite(A.value)) { g.values.push(A.value); }
                     g.greenhouses.add(deviceId);
@@ -185,18 +207,29 @@ function mineTriggers(eventsByDevice, { horizonMs, now }) {
 }
 
 async function upsertTrigger(t) {
+    const identity = assertScopedIdentity({
+        scopeType: t.scope_type,
+        ownerUserId: t.owner_user_id,
+        deviceId: t.device_id,
+        greenhouseScope: t.greenhouse_scope,
+        context: 'trigger-discovery'
+    });
     await query(
         `INSERT INTO agro_triggers
             (trigger_id, trigger_type, trigger_class, metric, antecedent_event, condition, threshold, threshold_basis,
              observed_min, observed_max, consequent_event, lead_time_avg_hours, lead_time_min_hours, lead_time_max_hours,
              lead_time_variance, occurrences, false_positive_rate, confidence, scope_type, greenhouse_scope, fleet_scope,
+             owner_user_id, device_id, distinct_owner_count, distinct_device_count, fleet_eligible,
              supporting_examples, confidence_factors, evidence_json, first_seen, last_seen, computed_at, rule_version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, NOW(), ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, NOW(), ?)
          ON CONFLICT (trigger_id) DO UPDATE SET
              threshold=EXCLUDED.threshold, observed_min=EXCLUDED.observed_min, observed_max=EXCLUDED.observed_max,
              lead_time_avg_hours=EXCLUDED.lead_time_avg_hours, lead_time_min_hours=EXCLUDED.lead_time_min_hours,
              lead_time_max_hours=EXCLUDED.lead_time_max_hours, lead_time_variance=EXCLUDED.lead_time_variance,
              occurrences=EXCLUDED.occurrences, false_positive_rate=EXCLUDED.false_positive_rate, confidence=EXCLUDED.confidence,
+             owner_user_id=EXCLUDED.owner_user_id, device_id=EXCLUDED.device_id,
+             distinct_owner_count=EXCLUDED.distinct_owner_count, distinct_device_count=EXCLUDED.distinct_device_count,
+             fleet_eligible=EXCLUDED.fleet_eligible,
              supporting_examples=EXCLUDED.supporting_examples, confidence_factors=EXCLUDED.confidence_factors,
              evidence_json=EXCLUDED.evidence_json, first_seen=LEAST(agro_triggers.first_seen, EXCLUDED.first_seen),
              last_seen=GREATEST(agro_triggers.last_seen, EXCLUDED.last_seen), computed_at=NOW()
@@ -205,25 +238,29 @@ async function upsertTrigger(t) {
             t.trigger_id, t.trigger_type, t.trigger_class, t.metric, t.antecedent_event, t.condition, t.threshold, t.threshold_basis,
             t.observed_min, t.observed_max, t.consequent_event, t.lead_avg, t.lead_min, t.lead_max, t.lead_var,
             t.occurrences, t.false_positive_rate, t.confidence, t.scope_type, t.greenhouse_scope, t.fleet_scope,
-            JSON.stringify(t.supporting_examples), JSON.stringify(t.confidence_factors), JSON.stringify(t.evidence_json),
+            identity.owner_user_id, identity.device_id, t.distinct_owner_count, t.distinct_device_count, t.fleet_eligible,
+            JSON.stringify(fleetSafeExamples(t.scope_type, t.supporting_examples)), JSON.stringify(t.confidence_factors), JSON.stringify(fleetSafeEvidence(t.scope_type, t.evidence_json)),
             new Date(t.first).toISOString(), new Date(t.last).toISOString(), RULE_VERSION
         ]
     );
 }
 
 async function runTriggerDiscovery({ now = new Date(), lookbackDays = TD.LOOKBACK_DAYS, dryRun = false } = {}) {
-    const summary = { scanned_events: 0, candidates: 0, stored: 0, stress: 0, recovery: 0, suppressed: 0 };
+    const summary = { scanned_events: 0, candidates: 0, stored: 0, stress: 0, recovery: 0, suppressed: 0, suppressed_fleet_privacy: 0 };
     const nowMs = now.getTime();
     const lookbackTs = new Date(nowMs - lookbackDays * C.DAY_MS).toISOString();
+    if (!dryRun) { await query("DELETE FROM agro_triggers WHERE scope_type = 'fleet'"); }
     const rows = await loadEvents(lookbackTs);
     summary.scanned_events = rows.length;
     if (!rows.length) { return summary; }
 
     const byDevice = new Map();
     for (const r of rows) {
-        if (!byDevice.has(r.device_id)) { byDevice.set(r.device_id, []); }
-        byDevice.get(r.device_id).push({
+        const identity = assertLocalIdentity({ ownerUserId: r.owner_user_id, deviceId: r.device_id, context: `trigger event ${r.id}` });
+        if (!byDevice.has(identity.device_id)) { byDevice.set(identity.device_id, []); }
+        byDevice.get(identity.device_id).push({
             id: r.id, metric: r.metric, type: r.event_type,
+            ownerUserId: identity.owner_user_id,
             startMs: new Date(r.started_at).getTime(),
             value: C.num(r.value_snapshot), toState: r.to_state
         });
@@ -234,7 +271,11 @@ async function runTriggerDiscovery({ now = new Date(), lookbackDays = TD.LOOKBAC
     const discovered = [];
     for (const g of cand.values()) {
         if (g.occurrences < TD.MIN_OCC) { summary.suppressed += 1; continue; }
-        if (g.scope_type === 'fleet' && g.greenhouses.size < TD.MIN_FLEET_GH) { summary.suppressed += 1; continue; }
+        const privacy = fleetEligibility([...g.ownerIds], [...g.greenhouses]);
+        g.distinct_owner_count = privacy.distinct_owner_count;
+        g.distinct_device_count = privacy.distinct_device_count;
+        g.fleet_eligible = g.scope_type === 'fleet' ? privacy.fleet_eligible : false;
+        if (g.scope_type === 'fleet' && !privacy.fleet_eligible) { summary.suppressed_fleet_privacy += 1; continue; }
         const scopeKey = g.scope_type === 'fleet' ? 'fleet|FLEET' : `greenhouse|${g.greenhouse_scope}`;
         const total = antTotal.get(`${scopeKey}|${g.metric}|${g.antecedent_event}`) || g.occurrences;
         const followed = antFollowed.get(`${scopeKey}|${g.metric}|${g.antecedent_event}|${g.consequent_event}`) || 0;
@@ -256,7 +297,7 @@ async function runTriggerDiscovery({ now = new Date(), lookbackDays = TD.LOOKBAC
             lead_max: C.round1(Math.max(...g.leads)), lead_var: C.round3(C.stdev(g.leads) ** 2),
             false_positive_rate: C.round3(fpr), confidence: conf.confidence,
             fleet_scope: g.scope_type === 'fleet',
-            supporting_examples: g.examples, confidence_factors: conf.factors,
+            supporting_examples: fleetSafeExamples(g.scope_type, g.examples), confidence_factors: conf.factors,
             evidence_json: { antecedent_total: total, antecedent_followed: followed, value_count: g.values.length,
                              distinct_greenhouses: g.greenhouses.size, distinct_days: g.days.size, lead_cv: C.round3(leadCV) }
         };

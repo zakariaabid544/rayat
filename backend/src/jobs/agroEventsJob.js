@@ -12,6 +12,7 @@ const { evaluateRecovery } = require('../../utils/recovery-analyzer'); // Sprint
 const { evaluateAnomaly } = require('../../utils/anomaly-analyzer'); // Sprint 1.6 (additivo)
 const { evaluateRegimeShift } = require('../../utils/regime-shift-analyzer'); // Sprint 1.7 (additivo)
 const { evaluateSensorDrift } = require('../../utils/sensor-drift-analyzer'); // Sprint 1.8 (additivo)
+const { assertLocalIdentity } = require('../../utils/intelligence-tenancy');
 
 const CRON_EXPRESSION = process.env.AGRO_EVENTS_CRON || '*/15 * * * *';
 const WINDOW_MINUTES = Number(process.env.AGRO_EVENTS_WINDOW_MIN || 60);
@@ -35,9 +36,12 @@ async function isEnabled() {
 async function loadActiveSensors() {
     return query(
         `SELECT s.id, s.device_id, s.type, s.subtype,
-                d.user_id, d.status AS device_status, d.last_seen
+                d.user_id AS assigned_user_id,
+                COALESCE(du.owner_user_id, du.id) AS owner_user_id,
+                d.status AS device_status, d.last_seen
          FROM sensors s
          INNER JOIN devices d ON d.id = s.device_id
+         LEFT JOIN users du ON du.id = d.user_id
          WHERE s.enabled = TRUE`
     );
 }
@@ -63,13 +67,24 @@ async function runAgroEventsCycle({ dryRun = false } = {}) {
 
     for (const s of sensors) {
         try {
-            const sensor = { id: s.id, device_id: s.device_id, type: s.type, subtype: s.subtype };
+            const identity = assertLocalIdentity({
+                ownerUserId: s.owner_user_id,
+                deviceId: s.device_id,
+                context: `agro-events sensor ${s.id}`
+            });
+            const sensor = {
+                id: s.id,
+                device_id: identity.device_id,
+                owner_user_id: identity.owner_user_id,
+                type: s.type,
+                subtype: s.subtype
+            };
             const device = { status: s.device_status, last_seen: s.last_seen };
             const readings = await loadRecentReadings(s.id);
             const latestReadingAt = readings[0] ? readings[0].timestamp : null;
             const quality = assessDataQuality({ device, latestReadingAt, readingsInWindow: readings.length });
-            const range = quality.ok ? await resolveEffectiveRange({ userId: s.user_id, sensor }) : null;
-            const result = await evaluateSensor({ userId: s.user_id, sensor, recentReadings: readings, range, quality, dryRun });
+            const range = quality.ok ? await resolveEffectiveRange({ userId: identity.owner_user_id, sensor }) : null;
+            const result = await evaluateSensor({ userId: identity.owner_user_id, sensor, recentReadings: readings, range, quality, dryRun });
 
             summary.processed += 1;
             if (result.suppressed) {
@@ -81,7 +96,7 @@ async function runAgroEventsCycle({ dryRun = false } = {}) {
             }
 
             // Sprint 1.4 (additivo): trend improvement / worsening / stabilization, stessi input
-            const trend = await evaluateTrend({ userId: s.user_id, sensor, recentReadings: readings, range, quality, dryRun });
+            const trend = await evaluateTrend({ userId: identity.owner_user_id, sensor, recentReadings: readings, range, quality, dryRun });
             for (const action of (trend.actions || [])) {
                 if (action.type === 'open_improvement') { summary.improvement += 1; }
                 if (action.type === 'open_worsening') { summary.worsening += 1; }
@@ -89,25 +104,25 @@ async function runAgroEventsCycle({ dryRun = false } = {}) {
             }
 
             // Sprint 1.5 (additivo): recovery (episodio chiuso) dagli out_of_range conclusi e rientrati stabili
-            const recovery = await evaluateRecovery({ userId: s.user_id, sensor, range, dryRun });
+            const recovery = await evaluateRecovery({ userId: identity.owner_user_id, sensor, range, dryRun });
             for (const action of (recovery.actions || [])) {
                 if (action.type === 'emit_recovery') { summary.recovery += 1; }
             }
 
             // Sprint 1.6 (additivo): anomaly statistica (z robusto vs storia recente), stessi input gia caricati
-            const anomaly = await evaluateAnomaly({ userId: s.user_id, sensor, recentReadings: readings, range, quality, dryRun });
+            const anomaly = await evaluateAnomaly({ userId: identity.owner_user_id, sensor, recentReadings: readings, range, quality, dryRun });
             for (const action of (anomaly.actions || [])) {
                 if (action.type === 'open_anomaly' || action.type === 'close_anomaly') { summary.anomaly += 1; }
             }
 
             // Sprint 1.7 (additivo): regime_shift (spostamento persistente del baseline, finestra corta vs lunga)
-            const regime = await evaluateRegimeShift({ userId: s.user_id, sensor, range, quality, dryRun });
+            const regime = await evaluateRegimeShift({ userId: identity.owner_user_id, sensor, range, quality, dryRun });
             for (const action of (regime.actions || [])) {
                 if (action.type === 'open_regime_shift' || action.type === 'close_regime_shift') { summary.regime_shift += 1; }
             }
 
             // Sprint 1.8 (additivo): sensor_drift (deriva lenta / sensore piantato) - comportamento sospetto del sensore
-            const drift = await evaluateSensorDrift({ userId: s.user_id, sensor, range, quality, dryRun });
+            const drift = await evaluateSensorDrift({ userId: identity.owner_user_id, sensor, range, quality, dryRun });
             for (const action of (drift.actions || [])) {
                 if (action.type === 'open_sensor_drift' || action.type === 'close_sensor_drift') { summary.sensor_drift += 1; }
             }

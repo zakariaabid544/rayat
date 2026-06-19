@@ -4,6 +4,7 @@
 // NON tocca alarm_events / active_alerts. Nessuna soglia agronomica inventata (range dal resolver).
 const { query } = require('../config/database');
 const { resolveEffectiveRange } = require('./range-resolver');
+const { assertLocalIdentity } = require('./intelligence-tenancy');
 
 const RULE_VERSION = 's1.5';
 
@@ -81,6 +82,7 @@ async function readingsBetween(sensorId, fromTs, toTs) {
 
 async function evaluateRecovery({ userId, sensor, range, now = new Date(), dryRun = false }) {
     const actions = [];
+    const identity = assertLocalIdentity({ ownerUserId: userId, deviceId: sensor.device_id, context: 'recovery-analyzer' });
     const sensorId = sensor.id;
 
     // Recovery analizza episodi PASSATI: il range non dipende dalla freschezza dei dati correnti.
@@ -195,13 +197,13 @@ async function evaluateRecovery({ userId, sensor, range, now = new Date(), dryRu
         if (!dryRun) {
             await query(
                 `INSERT INTO agro_actions_detected
-                    (user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
+                    (user_id, owner_user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                      started_at, ended_at, duration_seconds, from_state, to_state, value_snapshot,
                      range_snapshot, evidence_json, linked_alarm_event_id, linked_out_of_range_id, rule_version)
-                 VALUES (?, ?, ?, ?, 'recovery', 'closed', ?, ?, ?, ?, ?, ?, 'IN_RANGE', ?, CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, ?)
+                 VALUES (?, ?, ?, ?, ?, 'recovery', 'closed', ?, ?, ?, ?, ?, ?, 'IN_RANGE', ?, CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, ?)
                  ON CONFLICT DO NOTHING`,
                 [
-                    userId || null, sensor.device_id || null, sensorId, metric,
+                    identity.owner_user_id, identity.owner_user_id, identity.device_id, sensorId, metric,
                     breach.severity || 'info', confidence,
                     startedAt, confirmEnd, durationMin * 60,
                     breach.to_state || 'OUT', q.finalValue,
