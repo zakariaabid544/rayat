@@ -109,6 +109,7 @@ async function findOpenAnomaly(sensorId, metric) {
 async function evaluateAnomaly({ userId, sensor, recentReadings, range, quality, now = new Date(), dryRun = false }) {
     const actions = [];
     const identity = assertLocalIdentity({ ownerUserId: userId, deviceId: sensor.device_id, context: 'anomaly-analyzer' });
+    const nowTs = (now instanceof Date ? now : new Date(now)).toISOString(); // clock iniettabile (replay storico)
     const sensorId = sensor.id;
     const metric = (range && range.metric) || metricKeyForSensor(sensor) || sensor.subtype || sensor.type;
 
@@ -184,11 +185,11 @@ async function evaluateAnomaly({ userId, sensor, recentReadings, range, quality,
                         (user_id, owner_user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                          started_at, from_state, to_state, value_snapshot, range_snapshot, evidence_json,
                          linked_alarm_event_id, rule_version)
-                     VALUES (?, ?, ?, ?, ?, 'anomaly', 'open', ?, ?, NOW(), 'NORMAL', 'ANOMALY', ?,
+                     VALUES (?, ?, ?, ?, ?, 'anomaly', 'open', ?, ?, ?, 'NORMAL', 'ANOMALY', ?,
                              CAST(? AS JSONB), CAST(? AS JSONB), NULL, ?)`,
                     [
                         identity.owner_user_id, identity.owner_user_id, identity.device_id, sensorId, metric,
-                        severity, confidence, latestValue, rangeSnap, JSON.stringify(evidence), RULE_VERSION
+                        severity, confidence, nowTs, latestValue, rangeSnap, JSON.stringify(evidence), RULE_VERSION
                     ]
                 );
             }
@@ -207,11 +208,11 @@ async function evaluateAnomaly({ userId, sensor, recentReadings, range, quality,
         if (!dryRun) {
             await query(
                 `UPDATE agro_actions_detected
-                 SET status = 'closed', ended_at = NOW(), to_state = 'NORMAL',
-                     duration_seconds = CAST(EXTRACT(EPOCH FROM (NOW() - started_at)) AS INTEGER),
+                 SET status = 'closed', ended_at = CAST(? AS TIMESTAMPTZ), to_state = 'NORMAL',
+                     duration_seconds = CAST(EXTRACT(EPOCH FROM (CAST(? AS TIMESTAMPTZ) - started_at)) AS INTEGER),
                      value_snapshot = ?, updated_at = NOW()
                  WHERE id = ?`,
-                [latestValue, open.id]
+                [nowTs, nowTs, latestValue, open.id]
             );
         }
     }

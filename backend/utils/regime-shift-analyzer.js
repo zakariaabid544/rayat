@@ -133,6 +133,7 @@ async function evaluateRegimeShift({ userId, sensor, range, quality, now = new D
     }
 
     const nowMs = now.getTime();
+    const nowTs = new Date(nowMs).toISOString(); // clock iniettabile (replay storico)
     const shortFrom = new Date(nowMs - REGIME.SHORT_DAYS * DAY_MS);
     const shortRows = await readingsBetween(sensorId, shortFrom, now);
     const shortVals = shortRows.map((r) => Number(r.value)).filter(Number.isFinite);
@@ -156,11 +157,11 @@ async function evaluateRegimeShift({ userId, sensor, range, quality, now = new D
             if (!dryRun) {
                 await query(
                     `UPDATE agro_actions_detected
-                     SET status = 'closed', ended_at = NOW(), to_state = 'BASELINE_BACK',
-                         duration_seconds = CAST(EXTRACT(EPOCH FROM (NOW() - started_at)) AS INTEGER),
+                     SET status = 'closed', ended_at = CAST(? AS TIMESTAMPTZ), to_state = 'BASELINE_BACK',
+                         duration_seconds = CAST(EXTRACT(EPOCH FROM (CAST(? AS TIMESTAMPTZ) - started_at)) AS INTEGER),
                          value_snapshot = ?, updated_at = NOW()
                      WHERE id = ?`,
-                    [median(shortVals), open.id]
+                    [nowTs, nowTs, median(shortVals), open.id]
                 );
             }
         } else if (!dryRun) {
@@ -222,11 +223,11 @@ async function evaluateRegimeShift({ userId, sensor, range, quality, now = new D
                 (user_id, owner_user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                  started_at, from_state, to_state, value_snapshot, range_snapshot, evidence_json,
                  linked_alarm_event_id, rule_version)
-             VALUES (?, ?, ?, ?, ?, 'regime_shift', 'open', ?, ?, NOW(), 'BASELINE_OLD', 'BASELINE_NEW', ?,
+             VALUES (?, ?, ?, ?, ?, 'regime_shift', 'open', ?, ?, ?, 'BASELINE_OLD', 'BASELINE_NEW', ?,
                      CAST(? AS JSONB), CAST(? AS JSONB), NULL, ?)`,
             [
                 identity.owner_user_id, identity.owner_user_id, identity.device_id, sensorId, metric,
-                severity, confidence, round3(dec.newMean), rangeSnap, JSON.stringify(evidence), RULE_VERSION
+                severity, confidence, nowTs, round3(dec.newMean), rangeSnap, JSON.stringify(evidence), RULE_VERSION
             ]
         );
     }

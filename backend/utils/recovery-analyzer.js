@@ -83,6 +83,7 @@ async function readingsBetween(sensorId, fromTs, toTs) {
 async function evaluateRecovery({ userId, sensor, range, now = new Date(), dryRun = false }) {
     const actions = [];
     const identity = assertLocalIdentity({ ownerUserId: userId, deviceId: sensor.device_id, context: 'recovery-analyzer' });
+    const nowTs = (now instanceof Date ? now : new Date(now)).toISOString(); // clock iniettabile (replay storico)
     const sensorId = sensor.id;
 
     // Recovery analizza episodi PASSATI: il range non dipende dalla freschezza dei dati correnti.
@@ -102,10 +103,10 @@ async function evaluateRecovery({ userId, sensor, range, now = new Date(), dryRu
         `SELECT * FROM agro_actions_detected
          WHERE sensor_id = ? AND metric = ? AND event_type = 'out_of_range' AND status = 'closed'
            AND ended_at IS NOT NULL
-           AND ended_at <= NOW() - INTERVAL '${waitMin} minutes'
-           AND ended_at >= NOW() - INTERVAL '${RECOVERY.MAX_EPISODE_AGE_MIN} minutes'
+           AND ended_at <= CAST(? AS TIMESTAMPTZ) - INTERVAL '${waitMin} minutes'
+           AND ended_at >= CAST(? AS TIMESTAMPTZ) - INTERVAL '${RECOVERY.MAX_EPISODE_AGE_MIN} minutes'
          ORDER BY ended_at DESC LIMIT 20`,
-        [sensorId, metric]
+        [sensorId, metric, nowTs, nowTs]
     );
 
     for (const breach of candidates) {

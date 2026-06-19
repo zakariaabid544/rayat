@@ -65,6 +65,8 @@ async function findLinkedAlarmEventId({ userId, sensorId, fullType }) {
 async function evaluateSensor({ userId, sensor, recentReadings, range, quality, now = new Date(), dryRun = false }) {
     const actions = [];
     const identity = assertLocalIdentity({ ownerUserId: userId, deviceId: sensor.device_id, context: 'range-state-machine' });
+    // Clock iniettabile (replay storico): started_at/ended_at usano questo timestamp, default = ora corrente (live invariato).
+    const nowTs = (now instanceof Date ? now : new Date(now)).toISOString();
     const sensorId = sensor.id;
     const fullType = sensor.subtype || sensor.type;
     const metric = (range && range.metric) || sensor.subtype || sensor.type;
@@ -127,11 +129,11 @@ async function evaluateSensor({ userId, sensor, recentReadings, range, quality, 
                         (user_id, owner_user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                          started_at, from_state, to_state, value_snapshot, range_snapshot, evidence_json,
                          linked_alarm_event_id, rule_version)
-                     VALUES (?, ?, ?, ?, ?, 'out_of_range', 'open', ?, ?, NOW(), 'IN_RANGE', ?, ?,
+                     VALUES (?, ?, ?, ?, ?, 'out_of_range', 'open', ?, ?, ?, 'IN_RANGE', ?, ?,
                              CAST(? AS JSONB), CAST(? AS JSONB), ?, ?)`,
                     [
                         identity.owner_user_id, identity.owner_user_id, identity.device_id, sensorId, metric,
-                        severity, range.confidence || 0.7, currentState, value,
+                        severity, range.confidence || 0.7, nowTs, currentState, value,
                         rangeSnap, evidence, linked, RULE_VERSION
                     ]
                 );
@@ -153,11 +155,11 @@ async function evaluateSensor({ userId, sensor, recentReadings, range, quality, 
         if (!dryRun) {
             await query(
                 `UPDATE agro_actions_detected
-                 SET status = 'closed', ended_at = NOW(), to_state = 'IN_RANGE',
-                     duration_seconds = CAST(EXTRACT(EPOCH FROM (NOW() - started_at)) AS INTEGER),
+                 SET status = 'closed', ended_at = CAST(? AS TIMESTAMPTZ), to_state = 'IN_RANGE',
+                     duration_seconds = CAST(EXTRACT(EPOCH FROM (CAST(? AS TIMESTAMPTZ) - started_at)) AS INTEGER),
                      value_snapshot = ?, updated_at = NOW()
                  WHERE id = ?`,
-                [value, open.id]
+                [nowTs, nowTs, value, open.id]
             );
             const evidence = JSON.stringify({ closed_event_id: open.id, latest_value: value });
             await query(
@@ -165,12 +167,12 @@ async function evaluateSensor({ userId, sensor, recentReadings, range, quality, 
                     (user_id, owner_user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                      started_at, ended_at, from_state, to_state, value_snapshot, range_snapshot, evidence_json,
                      linked_alarm_event_id, linked_out_of_range_id, rule_version)
-                 VALUES (?, ?, ?, ?, ?, 'return_to_range', 'closed', 'low', ?, NOW(), NOW(), ?, 'IN_RANGE', ?,
+                 VALUES (?, ?, ?, ?, ?, 'return_to_range', 'closed', 'low', ?, ?, ?, ?, 'IN_RANGE', ?,
                          CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, ?)
                  ON CONFLICT DO NOTHING`,
                 [
                     identity.owner_user_id, identity.owner_user_id, identity.device_id, sensorId, metric,
-                    range.confidence || 0.7, (open.to_state || open.from_state || 'OUT'), value,
+                    range.confidence || 0.7, nowTs, nowTs, (open.to_state || open.from_state || 'OUT'), value,
                     rangeSnap, evidence, linked, open.id, RULE_VERSION
                 ]
             );

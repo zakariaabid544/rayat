@@ -193,6 +193,7 @@ async function evaluateSensorDrift({ userId, sensor, range, quality, now = new D
     }
 
     const nowMs = now.getTime();
+    const nowTs = new Date(nowMs).toISOString(); // clock iniettabile (replay storico)
     const fromTs = new Date(nowMs - DRIFT.WINDOW_HOURS * HOUR_MS);
     const rows = await windowReadings(sensorId, fromTs, now);
     const vals = rows.map((r) => Number(r.value)).filter(Number.isFinite);
@@ -218,11 +219,11 @@ async function evaluateSensorDrift({ userId, sensor, range, quality, now = new D
             if (!dryRun) {
                 await query(
                     `UPDATE agro_actions_detected
-                     SET status = 'closed', ended_at = NOW(), to_state = 'NORMAL',
-                         duration_seconds = CAST(EXTRACT(EPOCH FROM (NOW() - started_at)) AS INTEGER),
+                     SET status = 'closed', ended_at = CAST(? AS TIMESTAMPTZ), to_state = 'NORMAL',
+                         duration_seconds = CAST(EXTRACT(EPOCH FROM (CAST(? AS TIMESTAMPTZ) - started_at)) AS INTEGER),
                          value_snapshot = ?, updated_at = NOW()
                      WHERE id = ?`,
-                    [round3(profile.end), open.id]
+                    [nowTs, nowTs, round3(profile.end), open.id]
                 );
             }
         } else if (!dryRun) {
@@ -284,11 +285,11 @@ async function evaluateSensorDrift({ userId, sensor, range, quality, now = new D
                 (user_id, owner_user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                  started_at, from_state, to_state, value_snapshot, range_snapshot, evidence_json,
                  linked_alarm_event_id, rule_version)
-             VALUES (?, ?, ?, ?, ?, 'sensor_drift', 'open', ?, ?, NOW(), 'NORMAL', 'DRIFT', ?,
+             VALUES (?, ?, ?, ?, ?, 'sensor_drift', 'open', ?, ?, ?, 'NORMAL', 'DRIFT', ?,
                      CAST(? AS JSONB), CAST(? AS JSONB), NULL, ?)`,
             [
                 identity.owner_user_id, identity.owner_user_id, identity.device_id, sensorId, metric,
-                severity, confidence, round3(profile.end), rangeSnap, JSON.stringify(evidence), RULE_VERSION
+                severity, confidence, nowTs, round3(profile.end), rangeSnap, JSON.stringify(evidence), RULE_VERSION
             ]
         );
     }

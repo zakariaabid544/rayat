@@ -136,6 +136,7 @@ async function findOpenEventByType(sensorId, metric, eventType) {
 async function evaluateTrend({ userId, sensor, recentReadings, range, quality, now = new Date(), dryRun = false }) {
     const actions = [];
     const identity = assertLocalIdentity({ ownerUserId: userId, deviceId: sensor.device_id, context: 'trend-analyzer' });
+    const nowTs = (now instanceof Date ? now : new Date(now)).toISOString(); // clock iniettabile (replay storico)
     const metric = (range && range.metric) || sensor.subtype || sensor.type;
 
     // Quality gate: durante data gap / offline / dati non freschi NON generiamo eventi
@@ -178,10 +179,10 @@ async function evaluateTrend({ userId, sensor, recentReadings, range, quality, n
                             (user_id, owner_user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                              started_at, from_state, to_state, value_snapshot, range_snapshot, evidence_json,
                              linked_alarm_event_id, rule_version)
-                         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, NOW(), ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), NULL, ?)`,
+                         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), NULL, ?)`,
                         [
                             identity.owner_user_id, identity.owner_user_id, identity.device_id, sensor.id, metric, type,
-                            severity, res.confidence || 0.5, res.pos, type, latest,
+                            severity, res.confidence || 0.5, nowTs, res.pos, type, latest,
                             rangeSnap, evidence, RULE_VERSION
                         ]
                     );
@@ -200,11 +201,11 @@ async function evaluateTrend({ userId, sensor, recentReadings, range, quality, n
             actions.push({ type: 'close_' + type });
             await query(
                 `UPDATE agro_actions_detected
-                 SET status = 'closed', ended_at = NOW(),
-                     duration_seconds = CAST(EXTRACT(EPOCH FROM (NOW() - started_at)) AS INTEGER),
+                 SET status = 'closed', ended_at = CAST(? AS TIMESTAMPTZ),
+                     duration_seconds = CAST(EXTRACT(EPOCH FROM (CAST(? AS TIMESTAMPTZ) - started_at)) AS INTEGER),
                      value_snapshot = ?, updated_at = NOW()
                  WHERE id = ?`,
-                [latest, open.id]
+                [nowTs, nowTs, latest, open.id]
             );
         }
     }
