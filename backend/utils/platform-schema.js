@@ -663,6 +663,10 @@ async function ensurePlatformSchema() {
   ) {
     changes.push('idx_crop_profiles_ranges_gin');
   }
+  // RAYAT INTELLIGENCE — Sprint 2.6 (additivo): colonna episodica per idempotenza eventi chiusi
+  if (await ensureColumn('agro_actions_detected', 'linked_out_of_range_id', 'INTEGER NULL')) {
+    changes.push('agro_actions_detected.linked_out_of_range_id');
+  }
   // RAYAT INTELLIGENCE — Sprint 1 (additivo): indici per agro_actions_detected
   if (
     await ensureIndex(
@@ -708,6 +712,25 @@ async function ensurePlatformSchema() {
     )
   ) {
     changes.push('idx_agro_actions_type_started');
+  }
+  // RAYAT INTELLIGENCE — Sprint 2.6 (additivo): idempotenza DB episodica per eventi chiusi (un evento per episodio out_of_range)
+  if (
+    await ensureIndex(
+      'agro_actions_detected',
+      'uniq_agro_return_episode',
+      "CREATE UNIQUE INDEX uniq_agro_return_episode ON agro_actions_detected (linked_out_of_range_id) WHERE event_type = 'return_to_range' AND linked_out_of_range_id IS NOT NULL"
+    )
+  ) {
+    changes.push('uniq_agro_return_episode');
+  }
+  if (
+    await ensureIndex(
+      'agro_actions_detected',
+      'uniq_agro_recovery_episode',
+      "CREATE UNIQUE INDEX uniq_agro_recovery_episode ON agro_actions_detected (linked_out_of_range_id) WHERE event_type = 'recovery' AND linked_out_of_range_id IS NOT NULL"
+    )
+  ) {
+    changes.push('uniq_agro_recovery_episode');
   }
   if (
     await ensureIndex(

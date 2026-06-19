@@ -5,8 +5,9 @@
 const { query } = require('../config/database');
 
 const RULE_VERSION = 's1.3';
-const PERSISTENCE_MINUTES = 15;   // anti-rumore: allineato a alerts.js (ATTENTION_PERSISTENCE_MINUTES)
-const HYSTERESIS_RATIO = 0.02;    // isteresi 2% del range per evitare flapping (parametro di rilevazione, non agronomico)
+const PERSISTENCE_MINUTES = Number(process.env.AGRO_PERSISTENCE_MINUTES || 15);   // durata minima reale del breach (anti-rumore)
+const MIN_PERSIST_SAMPLES = Number(process.env.AGRO_PERSIST_MIN_SAMPLES || 2);    // campioni consecutivi minimi in breach (no singolo spike)
+const HYSTERESIS_RATIO = Number(process.env.AGRO_HYSTERESIS_RATIO || 0.02);       // isteresi 2% del range per evitare flapping (parametro di rilevazione, non agronomico)
 
 // Classifica un valore rispetto al range con isteresi
 function classify(value, range) {
@@ -89,12 +90,19 @@ async function evaluateSensor({ userId, sensor, recentReadings, range, quality, 
 
     const currentState = classify(value, range);
 
-    // Persistenza: le letture negli ultimi PERSISTENCE_MINUTES devono confermare lo stato di breach
-    const windowStart = now.getTime() - (PERSISTENCE_MINUTES * 60 * 1000);
-    const persistSet = sorted.filter((r) => new Date(r.timestamp).getTime() >= windowStart);
+    // Persistenza robusta (compatibile con sensori a ~30 min): serve un RUN consecutivo di campioni
+    // nello STESSO stato di breach E una durata reale >= PERSISTENCE_MINUTES. Un singolo spike NON apre.
+    // 'sorted' e' decrescente per timestamp (piu recente in testa).
+    const breachRun = [];
+    for (const r of sorted) {
+        if (classify(Number(r.value), range) === currentState) { breachRun.push(r); } else { break; }
+    }
+    const runSpanMinutes = breachRun.length >= 2
+        ? (new Date(breachRun[0].timestamp).getTime() - new Date(breachRun[breachRun.length - 1].timestamp).getTime()) / 60000
+        : 0;
     const breachConfirmed = currentState !== 'IN_RANGE'
-        && persistSet.length >= 1
-        && persistSet.every((r) => classify(Number(r.value), range) !== 'IN_RANGE');
+        && breachRun.length >= MIN_PERSIST_SAMPLES
+        && runSpanMinutes >= PERSISTENCE_MINUTES;
 
     const open = await findOpenEvent(sensorId, metric, 'out_of_range');
     const rangeSnap = JSON.stringify({ min: range.min, max: range.max, source: range.source });
@@ -104,7 +112,9 @@ async function evaluateSensor({ userId, sensor, recentReadings, range, quality, 
             const linked = await findLinkedAlarmEventId({ userId, sensorId, fullType });
             const severity = severityFor(value, range, currentState);
             const evidence = JSON.stringify({
-                samples: persistSet.length,
+                samples: breachRun.length,
+                run_span_minutes: Math.round(runSpanMinutes),
+                min_persist_samples: MIN_PERSIST_SAMPLES,
                 latest_value: value,
                 persistence_minutes: PERSISTENCE_MINUTES
             });
@@ -152,13 +162,14 @@ async function evaluateSensor({ userId, sensor, recentReadings, range, quality, 
                 `INSERT INTO agro_actions_detected
                     (user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                      started_at, ended_at, from_state, to_state, value_snapshot, range_snapshot, evidence_json,
-                     linked_alarm_event_id, rule_version)
+                     linked_alarm_event_id, linked_out_of_range_id, rule_version)
                  VALUES (?, ?, ?, ?, 'return_to_range', 'closed', 'low', ?, NOW(), NOW(), ?, 'IN_RANGE', ?,
-                         CAST(? AS JSONB), CAST(? AS JSONB), ?, ?)`,
+                         CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, ?)
+                 ON CONFLICT DO NOTHING`,
                 [
                     userId || null, sensor.device_id || null, sensorId, metric,
                     range.confidence || 0.7, (open.to_state || open.from_state || 'OUT'), value,
-                    rangeSnap, evidence, linked, RULE_VERSION
+                    rangeSnap, evidence, linked, open.id, RULE_VERSION
                 ]
             );
         }

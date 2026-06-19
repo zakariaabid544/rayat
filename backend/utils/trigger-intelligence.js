@@ -160,7 +160,8 @@ async function runTriggerIntelligence({ now = new Date(), dryRun = false } = {})
             supporting_event_ids: C.parseJson(t.supporting_examples, []),
             evidence_json: { recovery_cost_hours: ti.recovery_cost_hours, false_positive_rate: Number(t.false_positive_rate), confidence: Number(t.confidence) },
             is_top_dangerous: false, is_top_frequent: false, is_top_expensive: false, is_top_emerging: false, rank_dangerous: null,
-            _recencyDays: ti._recencyDays, _scopeKey: `${t.scope_type}|${t.greenhouse_scope == null ? 'F' : t.greenhouse_scope}`
+            // scope key include trigger_type: stress e recovery sono classificati/ranking SEPARATAMENTE
+            _recencyDays: ti._recencyDays, _scopeKey: `${t.scope_type}|${t.greenhouse_scope == null ? 'F' : t.greenhouse_scope}|${t.trigger_type}`
         };
     });
 

@@ -197,8 +197,9 @@ async function evaluateRecovery({ userId, sensor, range, now = new Date(), dryRu
                 `INSERT INTO agro_actions_detected
                     (user_id, device_id, sensor_id, metric, event_type, status, severity, confidence,
                      started_at, ended_at, duration_seconds, from_state, to_state, value_snapshot,
-                     range_snapshot, evidence_json, linked_alarm_event_id, rule_version)
-                 VALUES (?, ?, ?, ?, 'recovery', 'closed', ?, ?, ?, ?, ?, ?, 'IN_RANGE', ?, CAST(? AS JSONB), CAST(? AS JSONB), ?, ?)`,
+                     range_snapshot, evidence_json, linked_alarm_event_id, linked_out_of_range_id, rule_version)
+                 VALUES (?, ?, ?, ?, 'recovery', 'closed', ?, ?, ?, ?, ?, ?, 'IN_RANGE', ?, CAST(? AS JSONB), CAST(? AS JSONB), ?, ?, ?)
+                 ON CONFLICT DO NOTHING`,
                 [
                     userId || null, sensor.device_id || null, sensorId, metric,
                     breach.severity || 'info', confidence,
@@ -206,7 +207,7 @@ async function evaluateRecovery({ userId, sensor, range, now = new Date(), dryRu
                     breach.to_state || 'OUT', q.finalValue,
                     JSON.stringify({ min: effRange.min, max: effRange.max, source: effRange.source }),
                     JSON.stringify(evidence),
-                    breach.linked_alarm_event_id || null, RULE_VERSION
+                    breach.linked_alarm_event_id || null, breach.id, RULE_VERSION
                 ]
             );
         }

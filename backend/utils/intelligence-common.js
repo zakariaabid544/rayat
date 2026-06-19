@@ -8,7 +8,16 @@ const HOUR_MS = 3600000;
 function clamp01(x) { return Math.max(0, Math.min(1, x)); }
 function round1(x) { return Number.isFinite(x) ? Math.round(x * 10) / 10 : null; }
 function round3(x) { return Number.isFinite(x) ? Math.round(x * 1000) / 1000 : null; }
-function num(x) { const n = Number(x); return Number.isFinite(n) ? n : null; }
+// NULL-safety: NULL / undefined / '' / NaN / Infinity NON devono diventare 0 -> restano "missing" (null).
+function isFiniteNumber(x) { return typeof x === 'number' && Number.isFinite(x); }
+function toFiniteNumber(x) {
+    if (x === null || x === undefined) { return null; }
+    if (typeof x === 'string' && x.trim() === '') { return null; }
+    const n = Number(x);
+    return Number.isFinite(n) ? n : null;
+}
+function safeNumber(x, fallback = null) { const n = toFiniteNumber(x); return n === null ? fallback : n; }
+function num(x) { return toFiniteNumber(x); } // retrocompatibile, ora NULL-safe (mai NULL->0)
 
 function mean(a) { return a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0; }
 function stdev(a) { if (a.length < 2) { return 0; } const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / a.length); }
@@ -53,7 +62,7 @@ function parseJson(raw, fallback) {
 
 module.exports = {
     DAY_MS, HOUR_MS,
-    clamp01, round1, round3, num,
+    clamp01, round1, round3, num, toFiniteNumber, isFiniteNumber, safeNumber,
     mean, stdev, cv, median, percentile,
     normLog, recencyFactor, daysBetween,
     deterministicId, parseJson

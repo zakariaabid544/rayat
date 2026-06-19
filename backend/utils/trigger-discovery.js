@@ -118,7 +118,8 @@ function mineTriggers(eventsByDevice, { horizonMs, now }) {
     const bump = (m, k) => m.set(k, (m.get(k) || 0) + 1);
 
     const ensure = (scopeType, gh, ttype, tclass, ametric, atype, cond, ctype) => {
-        const key = C.deterministicId(scopeType, gh == null ? 'FLEET' : gh, ttype, ametric, atype, ctype);
+        // condition nella chiave: 'below' vs 'above' vs 'event_present' restano trigger semanticamente distinti
+        const key = C.deterministicId(scopeType, gh == null ? 'FLEET' : gh, ttype, ametric, atype, cond, ctype);
         let g = cand.get(key);
         if (!g) {
             g = { trigger_id: key, scope_type: scopeType, greenhouse_scope: gh, trigger_type: ttype, trigger_class: tclass,
