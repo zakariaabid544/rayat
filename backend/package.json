@@ -19,7 +19,9 @@
     "test:intelligence-tenancy:db": "node scripts/audit-intelligence-tenancy-db.js",
     "test:baseline": "node scripts/test-baseline-evolution.js",
     "test:baseline:postgres": "node scripts/test-baseline-evolution-postgres.js",
-    "test": "npm run test:dtu && npm run test:super-admin && npm run test:intelligence-tenancy && npm run test:baseline && npm run test:baseline:postgres && npm run smoke:routes"
+    "test:stress-memory": "node scripts/test-stress-memory.js",
+    "test:stress-memory:postgres": "node scripts/test-stress-memory-postgres.js",
+    "test": "npm run test:dtu && npm run test:super-admin && npm run test:intelligence-tenancy && npm run test:baseline && npm run test:baseline:postgres && npm run test:stress-memory && npm run test:stress-memory:postgres && npm run smoke:routes"
   },
   "keywords": [
     "iot",
