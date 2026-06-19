@@ -43,6 +43,10 @@ const {
     stopBenchmarkingJob
 } = require('./src/jobs/benchmarkingJob'); // RAYAT-FIX agro intelligence (Sprint 4.4 benchmarking, default OFF)
 const {
+    startExplainabilityJob,
+    stopExplainabilityJob
+} = require('./src/jobs/explainabilityJob'); // RAYAT-FIX agro intelligence (Sprint 4.5 explainability, default OFF)
+const {
     startStressMemoryJob,
     stopStressMemoryJob
 } = require('./src/jobs/stressMemoryJob'); // RAYAT-FIX agro intelligence (Sprint 3.2 stress memory, default OFF)
@@ -126,6 +130,7 @@ app.use('/api/sensors', require('./routes/sensors'));
 app.use('/api/iot/upload', iotLimiter);
 app.use('/api/iot', require('./routes/iot'));
 app.use('/api/admin/agro-contexts', require('./routes/agro-contexts')); // RAYAT-FIX agro intelligence (Sprint 2.7C agronomic contexts, super_admin only)
+app.use('/api/intelligence', require('./routes/intelligence')); // RAYAT-FIX agro intelligence (Sprint 4.6 dashboard API, read-only, tenant-safe)
 app.use('/api/admin', require('./routes/admin'));
 
 const webRootPath = path.join(__dirname, '../web');
@@ -328,6 +333,7 @@ async function startServer() {
             startIntelligenceScoreJob();
             startTrendIntelligenceJob();
             startBenchmarkingJob();
+            startExplainabilityJob();
             startStressMemoryJob();
             startRecoveryMemoryJob();
             startBehavioralSignatureJob();
@@ -362,6 +368,7 @@ async function shutdownServer(signal) {
         stopIntelligenceScoreJob();
         stopTrendIntelligenceJob();
         stopBenchmarkingJob();
+        stopExplainabilityJob();
         stopStressMemoryJob();
         stopRecoveryMemoryJob();
         stopBehavioralSignatureJob();

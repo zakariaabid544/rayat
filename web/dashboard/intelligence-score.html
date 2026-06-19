@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<!-- Rayat Intelligence — Sprint 4.6 · Intelligence Score card (UI minimale, additiva, NON modifica la SPA esistente) -->
+<!-- Legge da /api/intelligence/overview. Riusa palette dashboard Rayat. Auth: Bearer token + cookie same-origin. -->
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rayat · Intelligence Score</title>
+<style>
+  :root{
+    --forest:#102e21; --green:#2d6a4f; --leaf:#4a7c59; --soft:#e9f1eb; --gold:#b8960c;
+    --red:#d44735; --crit:#a3322a; --border:#e5e7eb; --muted:#536456; --ink:#1a2e1a; --white:#fff; --cream:#fafaf7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--cream);color:var(--ink);padding:18px}
+  .wrap{max-width:560px;margin:0 auto}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
+  .toolbar label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+  .toolbar input{padding:7px 9px;border:1px solid var(--border);border-radius:8px;font-size:14px;width:120px}
+  .toolbar input.tok{width:100%}
+  .btn{background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer}
+  .card{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 1px 3px rgba(16,46,33,.06)}
+  .head{display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:14px}
+  .score{font-size:46px;font-weight:800;line-height:1;color:var(--forest)}
+  .score small{font-size:16px;font-weight:600;color:var(--muted)}
+  .band{display:inline-block;padding:4px 12px;border-radius:999px;color:#fff;font-size:13px;font-weight:700;margin-top:6px}
+  .title{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .summary{font-size:15px;font-weight:600;margin:2px 0}
+  .sub{margin:6px 0}
+  .sub .row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:13px}
+  .sub .nm{width:150px;color:var(--muted)}
+  .bar{flex:1;height:9px;background:var(--soft);border-radius:6px;overflow:hidden}
+  .bar > i{display:block;height:100%;background:var(--leaf);border-radius:6px}
+  .sub .vl{width:34px;text-align:right;font-weight:700;color:var(--ink)}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+  .chip{font-size:12px;padding:5px 10px;border-radius:8px;background:var(--soft);color:var(--forest);font-weight:600}
+  .sec{margin-top:14px}
+  .sec h4{margin:0 0 4px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .sec p{margin:3px 0;font-size:14px;line-height:1.45}
+  ul.focus{margin:4px 0 0;padding-left:18px}
+  ul.focus li{font-size:14px;margin:2px 0}
+  .lim{font-size:12.5px;color:var(--muted)}
+  .err{color:var(--red);font-weight:600;font-size:14px}
+  .muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="toolbar">
+    <label>Device ID<input id="dev" type="number" min="1" /></label>
+    <label>Context ID<input id="ctx" type="number" min="1" /></label>
+    <button class="btn" id="go">Carica</button>
+    <label style="flex:1 1 100%">Bearer token (se non già in sessione)<input class="tok" id="tok" type="password" placeholder="incolla il JWT…" /></label>
+  </div>
+  <div id="out" class="card"><p class="muted">Inserisci Device ID e Context ID, poi premi «Carica».</p></div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var BAND={excellent:["Eccellente","#2d6a4f"],good:["Buono","#4a7c59"],attention:["Da monitorare","#b8960c"],risk:["A rischio","#d44735"],critical:["Critico","#a3322a"],unknown:["Non determinato","#536456"]};
+  var DIR={improving:["In miglioramento","↗","#2d6a4f"],degrading:["In peggioramento","↘","#d44735"],stable:["Stabile","→","#536456"],volatile:["Instabile","↯","#b8960c"],insufficient_data:["Dati insufficienti","·","#536456"]};
+  var SUB={stability:"Stabilità ambientale",stress:"Gestione dello stress",recovery:"Capacità di recupero",resilience:"Resilienza",data_quality:"Qualità dei dati",maturity:"Maturità dati"};
+  function apiBase(){try{return localStorage.getItem('rayat_api_base_url')||sessionStorage.getItem('rayat_api_base_url')||'';}catch(e){return '';}}
+  function token(){
+    var t=document.getElementById('tok').value.trim();
+    if(t){try{sessionStorage.setItem('rayat_intel_token',t);}catch(e){} return t;}
+    try{return sessionStorage.getItem('rayat_intel_token')||localStorage.getItem('rayat_token')||localStorage.getItem('token')||localStorage.getItem('authToken')||localStorage.getItem('jwt')||'';}catch(e){return '';}
+  }
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function bar(key,val){var v=Math.max(0,Math.min(100,Number(val)||0));return '<div class="row"><span class="nm">'+esc(SUB[key]||key)+'</span><span class="bar"><i style="width:'+v+'%"></i></span><span class="vl">'+Math.round(v)+'</span></div>';}
+  function qp(n){try{return new URLSearchParams(location.search).get(n);}catch(e){return null;}}
+
+  function render(d){
+    var out=document.getElementById('out');
+    if(!d || d.available===false || !d.score){
+      out.innerHTML='<p class="err">Punteggio non ancora disponibile per questo contesto.</p>'+(d&&d.explanation&&d.explanation.score_summary?'<p class="muted">'+esc(d.explanation.score_summary)+'</p>':'');
+      return;
+    }
+    var sc=d.score, ex=d.explanation||{}, b=(BAND[sc.band]||BAND.unknown);
+    var html='';
+    html+='<div class="head"><div><div class="score">'+Math.round(Number(sc.value))+'<small>/100</small></div><span class="band" style="background:'+b[1]+'">'+esc(b[0])+'</span></div>';
+    html+='<div style="flex:1"><div class="title">Rayat Intelligence Score</div><div class="summary">'+esc(ex.score_summary||'')+'</div><div class="lim">'+esc(ex.confidence_explanation||'')+'</div></div></div>';
+    // sub-scores
+    if(d.subscores){var s=d.subscores;html+='<div class="sub">'+bar('stability',s.stability_score)+bar('stress',s.stress_score)+bar('recovery',s.recovery_score)+bar('resilience',s.resilience_score)+bar('data_quality',s.data_quality_score)+bar('maturity',s.maturity_score)+'</div>';}
+    // trend + benchmark chips
+    var tr=(d.trend&&DIR[d.trend.direction])||DIR.insufficient_data;
+    var bm=d.benchmark&&d.benchmark.available?('Benchmark: '+ (d.benchmark.relative_position||'')+' · perc. '+ (d.benchmark.percentile_rank!=null?Math.round(d.benchmark.percentile_rank):'-')):'Benchmark non disponibile';
+    html+='<div class="meta"><span class="chip" style="color:'+tr[2]+'">'+tr[1]+' '+esc(tr[0])+'</span><span class="chip">'+esc(bm)+'</span></div>';
+    // why
+    if(ex.why_score_is_high_or_low){html+='<div class="sec"><h4>Perché</h4><p>'+esc(ex.why_score_is_high_or_low)+'</p></div>';}
+    // trend + benchmark explanations
+    html+='<div class="sec"><h4>Andamento e confronto</h4><p>'+esc(ex.trend_explanation||'')+'</p><p>'+esc(ex.benchmark_explanation||'')+'</p></div>';
+    // recommended focus
+    if(ex.recommended_focus&&ex.recommended_focus.length){html+='<div class="sec"><h4>Su cosa concentrarsi</h4><ul class="focus">'+ex.recommended_focus.map(function(f){return '<li>'+esc(f)+'</li>';}).join('')+'</ul></div>';}
+    // limitations
+    if(ex.data_limitations&&ex.data_limitations.length){html+='<div class="sec"><h4>Limiti dei dati</h4>'+ex.data_limitations.map(function(l){return '<p class="lim">• '+esc(l)+'</p>';}).join('')+'</div>';}
+    out.innerHTML=html;
+  }
+
+  function load(){
+    var dev=document.getElementById('dev').value, ctx=document.getElementById('ctx').value, out=document.getElementById('out');
+    if(!dev||!ctx){out.innerHTML='<p class="err">Device ID e Context ID obbligatori.</p>';return;}
+    out.innerHTML='<p class="muted">Caricamento…</p>';
+    var h={}; var t=token(); if(t){h.Authorization='Bearer '+t;}
+    fetch(apiBase()+'/api/intelligence/overview?device_id='+encodeURIComponent(dev)+'&context_id='+encodeURIComponent(ctx),{method:'GET',credentials:'same-origin',headers:h})
+      .then(function(r){if(r.status===401||r.status===403){return r.json().then(function(j){throw new Error(j.error||'Accesso negato');});}return r.json();})
+      .then(render)
+      .catch(function(e){out.innerHTML='<p class="err">'+esc(e.message||'Errore di caricamento')+'</p>';});
+  }
+  document.getElementById('go').addEventListener('click',load);
+  var qd=qp('device_id'),qc=qp('context_id');
+  if(qd){document.getElementById('dev').value=qd;} if(qc){document.getElementById('ctx').value=qc;}
+  if(qd&&qc){load();}
+})();
+</script>
+</body>
+</html>
