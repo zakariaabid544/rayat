@@ -3,6 +3,7 @@
 node_modules/
 *.log
 logs/
+output/pdf/
 .DS_Store
 ._*
 *.swp

@@ -31,7 +31,9 @@
     "test:health-profile:postgres": "node scripts/test-greenhouse-health-profile-postgres.js",
     "test:weekly-reporting": "node scripts/test-weekly-reporting.js",
     "test:weekly-reporting:postgres": "node scripts/test-weekly-reporting-postgres.js",
-    "test": "npm run test:dtu && npm run test:super-admin && npm run test:intelligence-tenancy && npm run test:baseline && npm run test:baseline:postgres && npm run test:stress-memory && npm run test:stress-memory:postgres && npm run test:recovery-memory && npm run test:recovery-memory:postgres && npm run test:behavioral-signature && npm run test:behavioral-signature:postgres && npm run test:knowledge-consolidation && npm run test:knowledge-consolidation:postgres && npm run test:health-profile && npm run test:health-profile:postgres && npm run test:weekly-reporting && npm run test:weekly-reporting:postgres && npm run smoke:routes"
+    "test:weekly-pdf": "node scripts/test-weekly-pdf-export.js",
+    "test:weekly-pdf:postgres": "node scripts/test-weekly-pdf-export-postgres.js",
+    "test": "npm run test:dtu && npm run test:super-admin && npm run test:intelligence-tenancy && npm run test:baseline && npm run test:baseline:postgres && npm run test:stress-memory && npm run test:stress-memory:postgres && npm run test:recovery-memory && npm run test:recovery-memory:postgres && npm run test:behavioral-signature && npm run test:behavioral-signature:postgres && npm run test:knowledge-consolidation && npm run test:knowledge-consolidation:postgres && npm run test:health-profile && npm run test:health-profile:postgres && npm run test:weekly-reporting && npm run test:weekly-reporting:postgres && npm run test:weekly-pdf && npm run test:weekly-pdf:postgres && npm run smoke:routes"
   },
   "keywords": [
     "iot",
@@ -52,6 +54,7 @@
     "mqtt": "^5.15.1",
     "node-cron": "^4.2.1",
     "nodemailer": "^6.10.1",
+    "pdfkit": "^0.19.1",
     "pg": "^8.20.0"
   },
   "devDependencies": {

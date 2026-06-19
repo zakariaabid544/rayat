@@ -71,6 +71,10 @@ const {
     stopWeeklyReportJob
 } = require('./src/jobs/weeklyReportJob'); // RAYAT-FIX agro intelligence (Sprint 5.1-5.2 weekly reports, default OFF)
 const {
+    startWeeklyPdfJob,
+    stopWeeklyPdfJob
+} = require('./src/jobs/weeklyPdfJob'); // RAYAT-FIX agro intelligence (Sprint 5.3 PDF export, default OFF)
+const {
     extractAdminSessionToken,
     isPrivilegedAdminRole,
     normalizeAdminRole
@@ -344,6 +348,7 @@ async function startServer() {
             startKnowledgeConsolidationJob();
             startHealthProfileJob();
             startWeeklyReportJob();
+            startWeeklyPdfJob();
         } else {
             console.warn('[alert-job] Job notifiche non avviato: database non disponibile.');
             console.warn('[mqtt-direct] Ingest MQTT diretto non avviato: database non disponibile.');
@@ -380,6 +385,7 @@ async function shutdownServer(signal) {
         stopKnowledgeConsolidationJob();
         stopHealthProfileJob();
         stopWeeklyReportJob();
+        stopWeeklyPdfJob();
         if (httpServer) {
             await new Promise((resolve) => httpServer.close(resolve));
         }
