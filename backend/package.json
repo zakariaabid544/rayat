@@ -17,7 +17,9 @@
     "test:alert-email": "node scripts/send-missing-data-test-alert.js",
     "test:intelligence-tenancy": "node scripts/test-intelligence-tenancy.js",
     "test:intelligence-tenancy:db": "node scripts/audit-intelligence-tenancy-db.js",
-    "test": "npm run test:dtu && npm run test:super-admin && npm run test:intelligence-tenancy && npm run smoke:routes"
+    "test:baseline": "node scripts/test-baseline-evolution.js",
+    "test:baseline:postgres": "node scripts/test-baseline-evolution-postgres.js",
+    "test": "npm run test:dtu && npm run test:super-admin && npm run test:intelligence-tenancy && npm run test:baseline && npm run test:baseline:postgres && npm run smoke:routes"
   },
   "keywords": [
     "iot",
@@ -39,5 +41,8 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^6.10.1",
     "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.4.1"
   }
 }
