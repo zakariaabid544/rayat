@@ -25,7 +25,9 @@
     "test:recovery-memory:postgres": "node scripts/test-recovery-memory-postgres.js",
     "test:behavioral-signature": "node scripts/test-behavioral-signature.js",
     "test:behavioral-signature:postgres": "node scripts/test-behavioral-signature-postgres.js",
-    "test": "npm run test:dtu && npm run test:super-admin && npm run test:intelligence-tenancy && npm run test:baseline && npm run test:baseline:postgres && npm run test:stress-memory && npm run test:stress-memory:postgres && npm run test:recovery-memory && npm run test:recovery-memory:postgres && npm run test:behavioral-signature && npm run test:behavioral-signature:postgres && npm run smoke:routes"
+    "test:knowledge-consolidation": "node scripts/test-knowledge-consolidation.js",
+    "test:knowledge-consolidation:postgres": "node scripts/test-knowledge-consolidation-postgres.js",
+    "test": "npm run test:dtu && npm run test:super-admin && npm run test:intelligence-tenancy && npm run test:baseline && npm run test:baseline:postgres && npm run test:stress-memory && npm run test:stress-memory:postgres && npm run test:recovery-memory && npm run test:recovery-memory:postgres && npm run test:behavioral-signature && npm run test:behavioral-signature:postgres && npm run test:knowledge-consolidation && npm run test:knowledge-consolidation:postgres && npm run smoke:routes"
   },
   "keywords": [
     "iot",
