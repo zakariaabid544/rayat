@@ -418,6 +418,38 @@ async function ensureCoreTables(changes) {
   ) {
     changes.push('crop_profiles table');
   }
+
+  // RAYAT INTELLIGENCE — Sprint 1 (additivo): eventi agronomici derivati (proiezione di alarm_events)
+  if (
+    await ensureTable(
+      'agro_actions_detected',
+      `CREATE TABLE IF NOT EXISTS agro_actions_detected (
+         id BIGSERIAL PRIMARY KEY,
+         user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+         device_id INTEGER NULL REFERENCES devices(id) ON DELETE CASCADE,
+         sensor_id INTEGER NULL REFERENCES sensors(id) ON DELETE CASCADE,
+         metric VARCHAR(80) NOT NULL,
+         event_type VARCHAR(40) NOT NULL,
+         status VARCHAR(12) NOT NULL DEFAULT 'open',
+         severity VARCHAR(16) NOT NULL DEFAULT 'info',
+         confidence NUMERIC(4, 3) NOT NULL DEFAULT 0,
+         started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         ended_at TIMESTAMPTZ NULL,
+         duration_seconds INTEGER NULL,
+         from_state VARCHAR(16) NULL,
+         to_state VARCHAR(16) NULL,
+         value_snapshot NUMERIC(12, 3) NULL,
+         range_snapshot JSONB NULL,
+         evidence_json JSONB NULL,
+         linked_alarm_event_id INTEGER NULL REFERENCES alarm_events(id) ON DELETE SET NULL,
+         rule_version VARCHAR(20) NOT NULL DEFAULT 's1.3',
+         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+       )`
+    )
+  ) {
+    changes.push('agro_actions_detected table');
+  }
 }
 
 async function ensurePlatformSchema() {
@@ -630,6 +662,52 @@ async function ensurePlatformSchema() {
     )
   ) {
     changes.push('idx_crop_profiles_ranges_gin');
+  }
+  // RAYAT INTELLIGENCE — Sprint 1 (additivo): indici per agro_actions_detected
+  if (
+    await ensureIndex(
+      'agro_actions_detected',
+      'idx_agro_actions_device_sensor_metric_status',
+      'CREATE INDEX idx_agro_actions_device_sensor_metric_status ON agro_actions_detected (device_id, sensor_id, metric, status)'
+    )
+  ) {
+    changes.push('idx_agro_actions_device_sensor_metric_status');
+  }
+  if (
+    await ensureIndex(
+      'agro_actions_detected',
+      'uniq_agro_actions_open',
+      "CREATE UNIQUE INDEX uniq_agro_actions_open ON agro_actions_detected (sensor_id, metric, event_type) WHERE status = 'open'"
+    )
+  ) {
+    changes.push('uniq_agro_actions_open');
+  }
+  if (
+    await ensureIndex(
+      'agro_actions_detected',
+      'idx_agro_actions_device_started',
+      'CREATE INDEX idx_agro_actions_device_started ON agro_actions_detected (device_id, started_at DESC)'
+    )
+  ) {
+    changes.push('idx_agro_actions_device_started');
+  }
+  if (
+    await ensureIndex(
+      'agro_actions_detected',
+      'idx_agro_actions_linked_alarm',
+      'CREATE INDEX idx_agro_actions_linked_alarm ON agro_actions_detected (linked_alarm_event_id)'
+    )
+  ) {
+    changes.push('idx_agro_actions_linked_alarm');
+  }
+  if (
+    await ensureIndex(
+      'agro_actions_detected',
+      'idx_agro_actions_type_started',
+      'CREATE INDEX idx_agro_actions_type_started ON agro_actions_detected (event_type, started_at)'
+    )
+  ) {
+    changes.push('idx_agro_actions_type_started');
   }
   if (
     await ensureIndex(
