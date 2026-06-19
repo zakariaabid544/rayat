@@ -87,6 +87,14 @@ const {
     stopBreachEtaJob
 } = require('./src/jobs/breachEtaJob'); // RAYAT-FIX agro intelligence (Sprint 6.2 breach ETA, default OFF)
 const {
+    startStressEtaJob,
+    stopStressEtaJob
+} = require('./src/jobs/stressEtaJob'); // RAYAT-FIX agro intelligence (Sprint 6.3 stress ETA, default OFF)
+const {
+    startRiskForecastJob,
+    stopRiskForecastJob
+} = require('./src/jobs/riskForecastJob'); // RAYAT-FIX agro intelligence (Sprint 6.4 risk forecast, default OFF)
+const {
     extractAdminSessionToken,
     isPrivilegedAdminRole,
     normalizeAdminRole
@@ -366,6 +374,8 @@ async function startServer() {
             startWeeklyReportNotificationJob();
             startMetricForecastJob();
             startBreachEtaJob();
+            startStressEtaJob();
+            startRiskForecastJob();
         } else {
             console.warn('[alert-job] Job notifiche non avviato: database non disponibile.');
             console.warn('[mqtt-direct] Ingest MQTT diretto non avviato: database non disponibile.');
@@ -406,6 +416,8 @@ async function shutdownServer(signal) {
         stopWeeklyReportNotificationJob();
         stopMetricForecastJob();
         stopBreachEtaJob();
+        stopStressEtaJob();
+        stopRiskForecastJob();
         if (httpServer) {
             await new Promise((resolve) => httpServer.close(resolve));
         }
