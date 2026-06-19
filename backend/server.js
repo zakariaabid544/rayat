@@ -35,6 +35,10 @@ const {
     stopStressMemoryJob
 } = require('./src/jobs/stressMemoryJob'); // RAYAT-FIX agro intelligence (Sprint 3.2 stress memory, default OFF)
 const {
+    startRecoveryMemoryJob,
+    stopRecoveryMemoryJob
+} = require('./src/jobs/recoveryMemoryJob'); // RAYAT-FIX agro intelligence (Sprint 3.3 recovery memory, default OFF)
+const {
     extractAdminSessionToken,
     isPrivilegedAdminRole,
     normalizeAdminRole
@@ -298,6 +302,7 @@ async function startServer() {
             startIntelligenceChainJob();
             startBaselineEvolutionJob();
             startStressMemoryJob();
+            startRecoveryMemoryJob();
         } else {
             console.warn('[alert-job] Job notifiche non avviato: database non disponibile.');
             console.warn('[mqtt-direct] Ingest MQTT diretto non avviato: database non disponibile.');
@@ -325,6 +330,7 @@ async function shutdownServer(signal) {
         stopIntelligenceChainJob();
         stopBaselineEvolutionJob();
         stopStressMemoryJob();
+        stopRecoveryMemoryJob();
         if (httpServer) {
             await new Promise((resolve) => httpServer.close(resolve));
         }

@@ -21,7 +21,9 @@
     "test:baseline:postgres": "node scripts/test-baseline-evolution-postgres.js",
     "test:stress-memory": "node scripts/test-stress-memory.js",
     "test:stress-memory:postgres": "node scripts/test-stress-memory-postgres.js",
-    "test": "npm run test:dtu && npm run test:super-admin && npm run test:intelligence-tenancy && npm run test:baseline && npm run test:baseline:postgres && npm run test:stress-memory && npm run test:stress-memory:postgres && npm run smoke:routes"
+    "test:recovery-memory": "node scripts/test-recovery-memory.js",
+    "test:recovery-memory:postgres": "node scripts/test-recovery-memory-postgres.js",
+    "test": "npm run test:dtu && npm run test:super-admin && npm run test:intelligence-tenancy && npm run test:baseline && npm run test:baseline:postgres && npm run test:stress-memory && npm run test:stress-memory:postgres && npm run test:recovery-memory && npm run test:recovery-memory:postgres && npm run smoke:routes"
   },
   "keywords": [
     "iot",
