@@ -103,6 +103,14 @@ const {
     stopEarlyWarningJob
 } = require('./src/jobs/earlyWarningJob'); // RAYAT-FIX agro intelligence (Sprint 6.6 early warning, default OFF)
 const {
+    startPredictionBacktestJob,
+    stopPredictionBacktestJob
+} = require('./src/jobs/predictionBacktestJob'); // RAYAT-FIX agro intelligence (Sprint 6.8 backtesting, default OFF)
+const {
+    startPredictionCalibrationJob,
+    stopPredictionCalibrationJob
+} = require('./src/jobs/predictionCalibrationJob'); // RAYAT-FIX agro intelligence (Sprint 6.8 calibration, default OFF)
+const {
     extractAdminSessionToken,
     isPrivilegedAdminRole,
     normalizeAdminRole
@@ -169,6 +177,7 @@ app.use('/api/admin/agro-contexts', require('./routes/agro-contexts')); // RAYAT
 app.use('/api/intelligence', require('./routes/intelligence')); // RAYAT-FIX agro intelligence (Sprint 4.6 dashboard API, read-only, tenant-safe)
 app.use('/api/reports', require('./routes/weekly-reports')); // RAYAT-FIX agro intelligence (Sprint 5.4 report history)
 app.use('/api/notifications', require('./routes/weekly-notifications')); // RAYAT-FIX agro intelligence (Sprint 5.5 notifications)
+app.use('/api/predictions', require('./routes/predictions')); // RAYAT-FIX agro intelligence (Sprint 6.7 prediction dashboard, read-only)
 app.use('/api/admin', require('./routes/admin'));
 
 const webRootPath = path.join(__dirname, '../web');
@@ -386,6 +395,8 @@ async function startServer() {
             startRiskForecastJob();
             startRecoveryForecastJob();
             startEarlyWarningJob();
+            startPredictionBacktestJob();
+            startPredictionCalibrationJob();
         } else {
             console.warn('[alert-job] Job notifiche non avviato: database non disponibile.');
             console.warn('[mqtt-direct] Ingest MQTT diretto non avviato: database non disponibile.');
@@ -430,6 +441,8 @@ async function shutdownServer(signal) {
         stopRiskForecastJob();
         stopRecoveryForecastJob();
         stopEarlyWarningJob();
+        stopPredictionBacktestJob();
+        stopPredictionCalibrationJob();
         if (httpServer) {
             await new Promise((resolve) => httpServer.close(resolve));
         }

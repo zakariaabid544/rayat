@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#102e21">
+  <title>Rayat · Prediction Intelligence</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/dashboard/predictions.css">
+  <script src="/config.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Torna alla dashboard Rayat">
+      <img src="/icons/logo-silver.svg" alt="Rayat">
+      <span><strong>Rayat Intelligence</strong><small>Prediction Dashboard</small></span>
+    </a>
+    <a class="back-link" href="/">Dashboard principale</a>
+  </header>
+
+  <main class="page-shell">
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Previsione locale della serra</p>
+        <h1 id="page-title">Cosa potrebbe accadere nelle prossime ore</h1>
+        <p class="hero-copy">Forecast, tempi stimati e warning operativi calcolati sul contesto selezionato.</p>
+      </div>
+      <div class="freshness" aria-live="polite">
+        <span>Ultimo calcolo</span>
+        <strong id="latest-time">Non disponibile</strong>
+      </div>
+    </section>
+
+    <section class="control-panel" aria-label="Selezione serra">
+      <label id="owner-field" class="field is-hidden">Owner ID
+        <input id="owner-id" type="number" min="1" inputmode="numeric" placeholder="ID cliente">
+      </label>
+      <label class="field field-grow">Serra e contesto
+        <select id="context-select" disabled>
+          <option value="">Caricamento contesti...</option>
+        </select>
+      </label>
+      <button id="refresh-button" type="button">Aggiorna previsioni</button>
+    </section>
+
+    <div id="page-message" class="page-message" role="status" aria-live="polite">Caricamento...</div>
+
+    <section id="dashboard" class="dashboard is-hidden" aria-label="Previsioni Rayat">
+      <article class="panel panel-wide">
+        <div class="panel-heading">
+          <div><p class="kicker">Traiettoria</p><h2>Metric Forecasts</h2></div>
+          <span class="count" id="metric-count">0</span>
+        </div>
+        <div id="metric-content" class="table-wrap"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading"><div><p class="kicker">Soglie</p><h2>Breach ETA</h2></div></div>
+        <div id="breach-content" class="stack"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading"><div><p class="kicker">Pressione</p><h2>Stress ETA</h2></div></div>
+        <div id="stress-content" class="stack"></div>
+      </article>
+
+      <article class="panel panel-wide">
+        <div class="panel-heading"><div><p class="kicker">Scenario consolidato</p><h2>Risk Forecast</h2></div></div>
+        <div id="risk-content" class="risk-grid"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading"><div><p class="kicker">Dopo lo stress</p><h2>Recovery Forecast</h2></div></div>
+        <div id="recovery-content"></div>
+      </article>
+
+      <article class="panel warnings-panel">
+        <div class="panel-heading">
+          <div><p class="kicker">Azioni preventive</p><h2>Early Warnings</h2></div>
+          <span class="count" id="warning-count">0</span>
+        </div>
+        <div id="warning-content" class="stack"></div>
+      </article>
+    </section>
+  </main>
+  <script src="/dashboard/predictions.js"></script>
+</body>
+</html>
