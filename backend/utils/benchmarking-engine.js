@@ -146,13 +146,15 @@ async function ensureBenchmarkSchema() {
     await query('CREATE INDEX IF NOT EXISTS idx_is_bench_status ON agro_intelligence_benchmark (benchmark_status)');
 }
 
-// Solo contesti production con score e attributi coorte completi (crop+medium+cultivation noto).
-async function loadScoredProductionContexts() {
+// Contesti con score e attributi coorte completi (crop+medium+cultivation noto).
+// Default SOLO production; includeNonProduction abilita demo/test (la soglia anonimato MIN_OWNERS resta sempre applicata).
+async function loadScoredProductionContexts({ includeNonProduction = false } = {}) {
+    const prodClause = includeNonProduction ? '' : "AND c.is_production = TRUE AND c.usage_type = 'production'";
     return query(
         `SELECT s.owner_user_id, s.device_id, s.context_id, s.intelligence_score AS score,
                 c.crop_key, c.medium, c.cultivation_type
          FROM agro_intelligence_score s
-         JOIN agro_context_segments c ON c.id = s.context_id AND c.is_production = TRUE AND c.usage_type = 'production'
+         JOIN agro_context_segments c ON c.id = s.context_id ${prodClause}
          WHERE c.crop_key IS NOT NULL AND btrim(c.crop_key) <> ''
            AND c.medium IS NOT NULL AND btrim(c.medium) <> ''
            AND c.cultivation_type IS NOT NULL AND c.cultivation_type <> 'unknown'`
@@ -181,9 +183,9 @@ async function upsertBenchmark(r) {
     );
 }
 
-async function runBenchmarking({ dryRun = false } = {}) {
-    const summary = { cohorts: 0, members: 0, benchmarked: 0, suppressed: 0, by_status: {}, dry_run: dryRun };
-    const rows = await loadScoredProductionContexts();
+async function runBenchmarking({ dryRun = false, includeNonProduction = false } = {}) {
+    const summary = { cohorts: 0, members: 0, benchmarked: 0, suppressed: 0, by_status: {}, dry_run: dryRun, include_non_production: includeNonProduction };
+    const rows = await loadScoredProductionContexts({ includeNonProduction });
     const cohorts = new Map();
     for (const r of rows) {
         const ck = `${r.crop_key}|${r.medium}|${r.cultivation_type}`;

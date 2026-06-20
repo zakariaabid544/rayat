@@ -21,12 +21,17 @@ async function isEnabled() {
     } catch (error) { return false; }
 }
 
-async function runExplainabilityCycle({ dryRun = false } = {}) {
+function includeNonProductionEnv() {
+    return String(process.env.AGRO_EXPLAIN_INCLUDE_NON_PRODUCTION || '').trim().toLowerCase() === 'true';
+}
+
+async function runExplainabilityCycle({ dryRun = false, includeNonProduction = null } = {}) {
     if (cycleRunning) { return { skipped_concurrent: true, contexts: 0, stored: 0, dry_run: dryRun }; }
     cycleRunning = true;
     try {
         if (!schemaReady && !dryRun) { await ensureExplanationSchema(); schemaReady = true; }
-        const summary = await runExplainability({ dryRun });
+        const includeNP = includeNonProduction === null ? includeNonProductionEnv() : Boolean(includeNonProduction);
+        const summary = await runExplainability({ dryRun, includeNonProduction: includeNP });
         console.log(`[explainability] cycle done${dryRun ? ' (dry-run)' : ''}:`, 'stored=' + summary.stored, 'contexts=' + summary.contexts);
         return summary;
     } finally { cycleRunning = false; }

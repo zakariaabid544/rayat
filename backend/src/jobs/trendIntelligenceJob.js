@@ -21,12 +21,17 @@ async function isEnabled() {
     } catch (error) { return false; }
 }
 
-async function runTrendIntelligenceCycle({ dryRun = false } = {}) {
+function includeNonProductionEnv() {
+    return String(process.env.AGRO_TREND_INCLUDE_NON_PRODUCTION || '').trim().toLowerCase() === 'true';
+}
+
+async function runTrendIntelligenceCycle({ dryRun = false, includeNonProduction = null } = {}) {
     if (cycleRunning) { return { skipped_concurrent: true, contexts: 0, trends_stored: 0, dry_run: dryRun }; }
     cycleRunning = true;
     try {
         if (!schemaReady && !dryRun) { await ensureTrendSchema(); schemaReady = true; }
-        const summary = await runTrendIntelligence({ dryRun });
+        const includeNP = includeNonProduction === null ? includeNonProductionEnv() : Boolean(includeNonProduction);
+        const summary = await runTrendIntelligence({ dryRun, includeNonProduction: includeNP });
         console.log(`[trend-intelligence] cycle done${dryRun ? ' (dry-run)' : ''}:`, JSON.stringify(summary.by_direction || {}), 'trends=' + summary.trends_stored);
         return summary;
     } finally { cycleRunning = false; }

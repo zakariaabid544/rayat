@@ -21,12 +21,17 @@ async function isEnabled() {
     } catch (error) { return false; }
 }
 
-async function runBenchmarkingCycle({ dryRun = false } = {}) {
+function includeNonProductionEnv() {
+    return String(process.env.AGRO_BENCHMARK_INCLUDE_NON_PRODUCTION || '').trim().toLowerCase() === 'true';
+}
+
+async function runBenchmarkingCycle({ dryRun = false, includeNonProduction = null } = {}) {
     if (cycleRunning) { return { skipped_concurrent: true, cohorts: 0, benchmarked: 0, dry_run: dryRun }; }
     cycleRunning = true;
     try {
         if (!schemaReady && !dryRun) { await ensureBenchmarkSchema(); schemaReady = true; }
-        const summary = await runBenchmarking({ dryRun });
+        const includeNP = includeNonProduction === null ? includeNonProductionEnv() : Boolean(includeNonProduction);
+        const summary = await runBenchmarking({ dryRun, includeNonProduction: includeNP });
         console.log(`[benchmarking] cycle done${dryRun ? ' (dry-run)' : ''}:`, JSON.stringify(summary.by_status || {}), 'benchmarked=' + summary.benchmarked);
         return summary;
     } finally { cycleRunning = false; }

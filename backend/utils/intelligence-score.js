@@ -135,8 +135,9 @@ async function ensureScoreSchema() {
     await query('CREATE INDEX IF NOT EXISTS idx_is_score_band ON agro_intelligence_score (intelligence_band)');
 }
 
-// Aggregati per (owner,device,context) SOLO da contesti production (fail-closed: niente contesti invalidi/non-production).
-async function loadSourceAggregates() {
+// Aggregati per (owner,device,context). Default SOLO production (fail-closed); includeNonProduction abilita demo/test per validazione.
+async function loadSourceAggregates({ includeNonProduction = false } = {}) {
+    const prodClause = includeNonProduction ? '' : 'AND c.is_production = TRUE';
     const baseline = await query(
         `SELECT b.owner_user_id, b.device_id, b.context_id,
                 avg(b.data_quality_score) AS avg_dq, avg(b.confidence) AS avg_conf,
@@ -144,14 +145,14 @@ async function loadSourceAggregates() {
                          ELSE GREATEST(0, 1 - LEAST(1, abs(b.stddev_value) / abs(b.mean_value))) END) AS avg_stability,
                 avg(CASE b.maturity_level WHEN 'mature' THEN 100 WHEN 'stable' THEN 75 WHEN 'learning' THEN 50 ELSE 25 END) AS avg_maturity_pts
          FROM agro_greenhouse_baselines b
-         JOIN agro_context_segments c ON c.id = b.context_id AND c.is_production = TRUE
+         JOIN agro_context_segments c ON c.id = b.context_id ${prodClause}
          GROUP BY b.owner_user_id, b.device_id, b.context_id`
     );
     const stress = await query(
         `SELECT sm.owner_user_id, sm.device_id, sm.context_id, sum(sm.stress_count) AS total_stress,
                 avg(sm.stress_load_score) AS avg_load, avg(sm.confidence) AS avg_conf
          FROM agro_stress_memory sm
-         JOIN agro_context_segments c ON c.id = sm.context_id AND c.is_production = TRUE
+         JOIN agro_context_segments c ON c.id = sm.context_id ${prodClause}
          GROUP BY sm.owner_user_id, sm.device_id, sm.context_id`
     );
     const recovery = await query(
@@ -159,7 +160,7 @@ async function loadSourceAggregates() {
                 avg(rm.recovery_quality_score) AS q, avg(rm.recovery_stability_score) AS st,
                 avg(rm.fast_recovery_rate) AS fast, avg(rm.relapse_rate) AS rel, avg(rm.confidence) AS avg_conf
          FROM agro_recovery_memory rm
-         JOIN agro_context_segments c ON c.id = rm.context_id AND c.is_production = TRUE
+         JOIN agro_context_segments c ON c.id = rm.context_id ${prodClause}
          GROUP BY rm.owner_user_id, rm.device_id, rm.context_id`
     );
     const key = (r) => `${r.owner_user_id}|${r.device_id}|${r.context_id}`;
@@ -203,9 +204,9 @@ async function upsertScore(g, sub, agg) {
     );
 }
 
-async function runIntelligenceScore({ dryRun = false } = {}) {
-    const summary = { contexts: 0, subscores_stored: 0, scores_stored: 0, by_band: {}, dry_run: dryRun };
-    const groups = await loadSourceAggregates();
+async function runIntelligenceScore({ dryRun = false, includeNonProduction = false } = {}) {
+    const summary = { contexts: 0, subscores_stored: 0, scores_stored: 0, by_band: {}, dry_run: dryRun, include_non_production: includeNonProduction };
+    const groups = await loadSourceAggregates({ includeNonProduction });
     summary.contexts = groups.length;
     const rows = [];
     for (const g of groups) {

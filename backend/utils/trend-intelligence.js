@@ -141,8 +141,9 @@ async function ensureTrendSchema() {
     await query('CREATE INDEX IF NOT EXISTS idx_is_trends_dir ON agro_intelligence_trends (trend_direction)');
 }
 
-// Snapshot append-only (1 riga/giorno) SOLO dalle sorgenti score, SOLO contesti production. Idempotente per (partizione, giorno).
-async function snapshotScores(capturedOn = null) {
+// Snapshot append-only (1 riga/giorno) dalle sorgenti score. Default SOLO production; includeNonProduction abilita demo/test. Idempotente per (partizione, giorno).
+async function snapshotScores(capturedOn = null, includeNonProduction = false) {
+    const prodClause = includeNonProduction ? '' : 'AND c.is_production = TRUE';
     const res = await query(
         `INSERT INTO agro_intelligence_score_history
             (owner_user_id, device_id, context_id, captured_on, intelligence_score, stability_score, stress_score, recovery_score, resilience_score, maturity_score, created_at)
@@ -150,7 +151,7 @@ async function snapshotScores(capturedOn = null) {
                 s.intelligence_score, sub.stability_score, sub.stress_score, sub.recovery_score, sub.resilience_score, sub.maturity_score, NOW()
          FROM agro_intelligence_score s
          JOIN agro_intelligence_subscores sub ON sub.owner_user_id = s.owner_user_id AND sub.device_id = s.device_id AND sub.context_id = s.context_id
-         JOIN agro_context_segments c ON c.id = s.context_id AND c.is_production = TRUE
+         JOIN agro_context_segments c ON c.id = s.context_id ${prodClause}
          ON CONFLICT (owner_user_id, device_id, context_id, captured_on) DO UPDATE SET
             intelligence_score = EXCLUDED.intelligence_score, stability_score = EXCLUDED.stability_score, stress_score = EXCLUDED.stress_score,
             recovery_score = EXCLUDED.recovery_score, resilience_score = EXCLUDED.resilience_score, maturity_score = EXCLUDED.maturity_score`,
@@ -159,13 +160,14 @@ async function snapshotScores(capturedOn = null) {
     return res.affectedRows || 0;
 }
 
-// Carica le serie storiche per partizione, entro la finestra, SOLO contesti production.
-async function loadHistorySeries(windowDays) {
+// Carica le serie storiche per partizione, entro la finestra. Default SOLO production; includeNonProduction abilita demo/test.
+async function loadHistorySeries(windowDays, includeNonProduction = false) {
+    const prodClause = includeNonProduction ? '' : 'AND c.is_production = TRUE';
     const rows = await query(
         `SELECT h.owner_user_id, h.device_id, h.context_id, h.captured_on,
                 h.intelligence_score, h.stability_score, h.stress_score, h.recovery_score, h.resilience_score, h.maturity_score
          FROM agro_intelligence_score_history h
-         JOIN agro_context_segments c ON c.id = h.context_id AND c.is_production = TRUE
+         JOIN agro_context_segments c ON c.id = h.context_id ${prodClause}
          WHERE h.captured_on >= (CURRENT_DATE - CAST(? AS INTEGER))
          ORDER BY h.owner_user_id, h.device_id, h.context_id, h.captured_on`,
         [windowDays]
@@ -203,10 +205,10 @@ async function upsertTrend(g, metric, t) {
     );
 }
 
-async function runTrendIntelligence({ dryRun = false, windowDays = WINDOW_DAYS, capturedOn = null } = {}) {
-    const summary = { contexts: 0, trends_stored: 0, snapshots: 0, by_direction: {}, dry_run: dryRun };
-    if (!dryRun) { summary.snapshots = await snapshotScores(capturedOn); }
-    const groups = await loadHistorySeries(windowDays);
+async function runTrendIntelligence({ dryRun = false, windowDays = WINDOW_DAYS, capturedOn = null, includeNonProduction = false } = {}) {
+    const summary = { contexts: 0, trends_stored: 0, snapshots: 0, by_direction: {}, dry_run: dryRun, include_non_production: includeNonProduction };
+    if (!dryRun) { summary.snapshots = await snapshotScores(capturedOn, includeNonProduction); }
+    const groups = await loadHistorySeries(windowDays, includeNonProduction);
     summary.contexts = groups.length;
     const rows = [];
     for (const g of groups) {

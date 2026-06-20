@@ -21,12 +21,17 @@ async function isEnabled() {
     } catch (error) { return false; }
 }
 
-async function runIntelligenceScoreCycle({ dryRun = false } = {}) {
+function includeNonProductionEnv() {
+    return String(process.env.AGRO_INTELLIGENCE_SCORE_INCLUDE_NON_PRODUCTION || '').trim().toLowerCase() === 'true';
+}
+
+async function runIntelligenceScoreCycle({ dryRun = false, includeNonProduction = null } = {}) {
     if (cycleRunning) { return { skipped_concurrent: true, contexts: 0, scores_stored: 0, dry_run: dryRun }; }
     cycleRunning = true;
     try {
         if (!schemaReady && !dryRun) { await ensureScoreSchema(); schemaReady = true; }
-        const summary = await runIntelligenceScore({ dryRun });
+        const includeNP = includeNonProduction === null ? includeNonProductionEnv() : Boolean(includeNonProduction);
+        const summary = await runIntelligenceScore({ dryRun, includeNonProduction: includeNP });
         console.log(`[intelligence-score] cycle done${dryRun ? ' (dry-run)' : ''}:`, JSON.stringify(summary.by_band || {}), 'scores=' + summary.scores_stored);
         return summary;
     } finally { cycleRunning = false; }

@@ -255,13 +255,14 @@ async function upsertExplanation(owner, device, context, ex) {
     );
 }
 
-// Batch (job): genera/persiste spiegazioni per tutti i contesti production con uno score.
-async function runExplainability({ dryRun = false } = {}) {
-    const summary = { contexts: 0, stored: 0, dry_run: dryRun };
+// Batch (job): genera/persiste spiegazioni per i contesti con uno score. Default SOLO production; includeNonProduction abilita demo/test.
+async function runExplainability({ dryRun = false, includeNonProduction = false } = {}) {
+    const summary = { contexts: 0, stored: 0, dry_run: dryRun, include_non_production: includeNonProduction };
+    const prodClause = includeNonProduction ? '' : 'AND c.is_production = TRUE';
     const groups = await query(
         `SELECT s.owner_user_id, s.device_id, s.context_id
          FROM agro_intelligence_score s
-         JOIN agro_context_segments c ON c.id = s.context_id AND c.is_production = TRUE`
+         JOIN agro_context_segments c ON c.id = s.context_id ${prodClause}`
     );
     summary.contexts = groups.length;
     const rows = [];
