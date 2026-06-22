@@ -11,6 +11,10 @@ const {
     startMissingDataAlertJob
 } = require('./src/jobs/alertJob'); // RAYAT-FIX
 const {
+    startGatewayMonitorJob,
+    stopGatewayMonitorJob
+} = require('./src/jobs/gatewayMonitorJob'); // RAYAT-FIX per-device gateway connectivity monitor (default OFF)
+const {
     startMqttDirectJob,
     stopMqttDirectJob
 } = require('./src/jobs/mqttDirectJob'); // RAYAT-FIX
@@ -372,6 +376,7 @@ async function startServer() {
 
         if (dbConnected) {
             startMissingDataAlertJob();
+            startGatewayMonitorJob();
             startMqttDirectJob();
             startAgroEventsJob();
             startPatternDiscoveryJob();
@@ -418,6 +423,7 @@ async function shutdownServer(signal) {
     console.log(`${signal} ricevuto, chiusura server...`);
 
     try {
+        stopGatewayMonitorJob();
         await stopMqttDirectJob();
         stopAgroEventsJob();
         stopPatternDiscoveryJob();
