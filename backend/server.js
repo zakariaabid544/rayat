@@ -11,6 +11,10 @@ const {
     startMissingDataAlertJob
 } = require('./src/jobs/alertJob'); // RAYAT-FIX
 const {
+    startGatewayMonitorJob,
+    stopGatewayMonitorJob
+} = require('./src/jobs/gatewayMonitorJob'); // RAYAT-FIX per-device gateway connectivity monitor (default OFF)
+const {
     startMqttDirectJob,
     stopMqttDirectJob
 } = require('./src/jobs/mqttDirectJob'); // RAYAT-FIX
@@ -274,6 +278,7 @@ async function startServer() {
 
         if (dbConnected) {
             startMissingDataAlertJob();
+            startGatewayMonitorJob();
             startMqttDirectJob();
         } else {
             console.warn('[alert-job] Job notifiche non avviato: database non disponibile.');
@@ -296,6 +301,7 @@ async function shutdownServer(signal) {
     console.log(`${signal} ricevuto, chiusura server...`);
 
     try {
+        stopGatewayMonitorJob();
         await stopMqttDirectJob();
         if (httpServer) {
             await new Promise((resolve) => httpServer.close(resolve));
