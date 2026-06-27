@@ -270,6 +270,26 @@
         /* ─── Misc ───────────────────── */
         .page-title { font-size: 1.5rem; font-weight: 900; color: #064e3b; letter-spacing: -0.02em; }
         .section-card { background: white; border-radius: 1rem; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .device-manager-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr); gap: 1rem; align-items: start; }
+        .device-manager-detail { min-height: 420px; }
+        .device-manager-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+        .device-manager-kv { border: 1px solid #e5e7eb; border-radius: 0.85rem; padding: 0.8rem 0.9rem; background: #f8fafc; }
+        .device-manager-label { color: #64748b; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.25rem; }
+        .device-manager-value { color: #111827; font-size: 0.9rem; font-weight: 800; word-break: break-word; }
+        .device-manager-code {
+            background: #0f172a;
+            color: #d1fae5;
+            border-radius: 0.9rem;
+            padding: 0.9rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 0.72rem;
+            line-height: 1.5;
+            max-height: 260px;
+            overflow: auto;
+        }
+        .device-manager-param-list { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .device-manager-empty { color: #94a3b8; font-size: 0.875rem; padding: 2rem; text-align: center; }
         .alert-box { padding: 0.875rem 1rem; border-radius: 0.75rem; font-size: 0.875rem; font-weight: 600; margin-bottom: 1rem; }
         .alert-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
         .alert-success { background: #f0fdf4; color: #065f46; border: 1px solid #bbf7d0; }
@@ -504,6 +524,14 @@
             #tab-analytics .grid.grid-cols-2.xl\:grid-cols-3 {
                 grid-template-columns: 1fr;
             }
+
+            .device-manager-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .device-manager-grid {
+                grid-template-columns: 1fr;
+            }
             .data-table {
                 min-width: 660px;
             }
@@ -593,8 +621,11 @@
             <a class="nav-item" data-tab="devices" onclick="showTab('devices')">
                 <span class="nav-icon">📱</span> <span id="nav-devices-label">Dispositivi</span>
             </a>
+            <a class="nav-item super-admin-only hidden" data-tab="device-manager" onclick="showTab('device-manager')">
+                <span class="nav-icon">🧭</span> <span id="nav-device-manager-label">Device Manager</span>
+            </a>
             <a class="nav-item super-admin-only hidden" data-tab="device-monitoring" onclick="showTab('device-monitoring')">
-                <span class="nav-icon">🛰️</span> <span>Monitoraggio device</span>
+                <span class="nav-icon">🚦</span> <span id="nav-device-monitoring-label">Monitoraggio device</span>
             </a>
             <a class="nav-item phase2-catalog-only hidden" data-tab="sensor-models" onclick="showTab('sensor-models')">
                 <span class="nav-icon">▦</span> <span id="nav-sensor-models-label">Catalogo Sensori</span>
@@ -847,107 +878,145 @@
                 </div>
             </div>
 
-            <!-- ── DEVICE MONITORING (super_admin only) ───────────────── -->
-            <div id="tab-device-monitoring" class="hidden fade-in super-admin-only">
+            <!-- ── DEVICE MANAGER (super_admin only) ─────────────────── -->
+            <div id="tab-device-manager" class="hidden fade-in super-admin-only">
                 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
                     <div>
-                        <div class="page-title mb-0">Monitoraggio device / Alert offline</div>
-                        <p class="text-sm text-gray-400">Configurazione per gateway/data logger senza modifiche al codice</p>
+                        <div class="page-title mb-0" id="device-manager-page-title">Device Manager</div>
+                        <p class="text-sm text-gray-400" id="device-manager-page-subtitle">Vista reale gateway, topic, cliente e ultimi dati ricevuti</p>
                     </div>
-                    <button onclick="loadDeviceMonitoring(true)" class="btn btn-outline">↻ Aggiorna</button>
+                    <button onclick="loadDeviceManager()" class="btn btn-outline" id="device-manager-refresh-btn">↻ Aggiorna</button>
                 </div>
 
-                <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                    <div class="section-card overflow-x-auto xl:col-span-1">
-                        <div class="px-5 py-4 border-b border-gray-100">
-                            <div class="font-black text-gray-700">Gateway / device</div>
-                            <div class="text-xs text-gray-400 mt-1">Seleziona un device per modificare soglie e destinatari</div>
-                        </div>
-                        <table class="data-table">
+                <div class="device-manager-layout">
+                    <div class="section-card overflow-x-auto">
+                        <table class="data-table" id="device-manager-table">
                             <thead>
                                 <tr>
-                                    <th>Device</th>
-                                    <th>Stato</th>
-                                    <th>Ultimo dato</th>
+                                    <th id="device-manager-th-device">Device ID</th>
+                                    <th id="device-manager-th-name">Nome</th>
+                                    <th id="device-manager-th-client">Cliente</th>
+                                    <th id="device-manager-th-visibility">Tipo</th>
+                                    <th id="device-manager-th-topic">Topic MQTT</th>
+                                    <th id="device-manager-th-status">Stato</th>
+                                    <th id="device-manager-th-updated">Ultimo aggiornamento</th>
+                                    <th id="device-manager-th-params">Parametri</th>
+                                    <th id="device-manager-th-dashboard">Dashboard</th>
                                 </tr>
                             </thead>
-                            <tbody id="device-monitoring-list">
-                                <tr><td colspan="3" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                            <tbody id="device-manager-body">
+                                <tr><td colspan="9" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
                             </tbody>
                         </table>
                     </div>
 
-                    <div class="section-card xl:col-span-2">
-                        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-wrap gap-3">
-                            <div>
-                                <div class="font-black text-gray-700" id="device-monitoring-selected-title">Seleziona un device</div>
-                                <div class="text-xs text-gray-400" id="device-monitoring-selected-subtitle">Ultimo dato ricevuto: —</div>
+                    <div class="section-card device-manager-detail" id="device-manager-detail">
+                        <div class="device-manager-empty" id="device-manager-detail-empty">Seleziona un gateway per vedere il dettaglio reale.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── DEVICE MONITORING (super_admin only) ───────────────── -->
+            <div id="tab-device-monitoring" class="hidden fade-in super-admin-only">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                    <div>
+                        <div class="page-title mb-0" id="device-monitoring-page-title">Monitoraggio device / Alert offline</div>
+                        <p class="text-sm text-gray-400" id="device-monitoring-page-subtitle">Configurazione gateway e data logger per stato dashboard, email e cooldown.</p>
+                    </div>
+                    <button onclick="loadDeviceMonitoring()" class="btn btn-outline" id="device-monitoring-refresh-btn">↻ Aggiorna</button>
+                </div>
+
+                <div id="device-monitoring-error" class="alert-box alert-error hidden"></div>
+                <div id="device-monitoring-success" class="alert-box alert-success hidden"></div>
+
+                <div class="device-manager-layout">
+                    <div class="section-card overflow-x-auto">
+                        <table class="data-table" id="device-monitoring-table">
+                            <thead>
+                                <tr>
+                                    <th>Gateway</th>
+                                    <th>Cliente</th>
+                                    <th>Stato</th>
+                                    <th>Ultimo heartbeat</th>
+                                    <th>Ultimo alert</th>
+                                    <th>Alert</th>
+                                </tr>
+                            </thead>
+                            <tbody id="device-monitoring-body">
+                                <tr><td colspan="6" class="text-center text-gray-400 py-8">Caricamento…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="section-card device-manager-detail">
+                        <form id="device-monitoring-form" onsubmit="saveDeviceMonitoring(event)">
+                            <div class="px-5 py-4 border-b border-gray-100">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div>
+                                        <div class="text-xs text-gray-400 font-black uppercase tracking-wide">Gateway selezionato</div>
+                                        <select id="dm-device-select" class="form-input mt-2" onchange="selectDeviceMonitoringGateway(this.value)">
+                                            <option value="">Seleziona gateway</option>
+                                        </select>
+                                    </div>
+                                    <div id="dm-status-badge" class="pt-1"></div>
+                                </div>
                             </div>
-                            <div id="device-monitoring-selected-status"><span class="badge badge-gray">—</span></div>
-                        </div>
 
-                        <form id="device-monitoring-form" class="p-5" onsubmit="saveDeviceMonitoringConfig(event)">
-                            <div id="device-monitoring-error" class="alert-box alert-error hidden mb-4"></div>
-                            <div id="device-monitoring-success" class="alert-box alert-success hidden mb-4"></div>
+                            <div class="p-5 space-y-5">
+                                <div class="device-manager-grid">
+                                    <div class="device-manager-kv">
+                                        <div class="device-manager-label">Ultimo heartbeat</div>
+                                        <div class="device-manager-value" id="dm-last-heartbeat">—</div>
+                                    </div>
+                                    <div class="device-manager-kv">
+                                        <div class="device-manager-label">Ultimo alert</div>
+                                        <div class="device-manager-value" id="dm-last-alert">—</div>
+                                    </div>
+                                    <div class="device-manager-kv">
+                                        <div class="device-manager-label">Minuti senza dati</div>
+                                        <div class="device-manager-value" id="dm-minutes-without-data">—</div>
+                                    </div>
+                                    <div class="device-manager-kv">
+                                        <div class="device-manager-label">Ultimo rientro online</div>
+                                        <div class="device-manager-value" id="dm-last-recovery">—</div>
+                                    </div>
+                                </div>
 
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div class="form-field md:col-span-2">
-                                    <label class="form-label flex items-center gap-2">
-                                        <input id="dm-alerts-enabled" type="checkbox" style="width:18px;height:18px;">
-                                        Alert gateway/data logger attivi
-                                    </label>
-                                    <p class="text-xs text-gray-400 mt-1">Disattivando questo switch, il job ignora il device per dashboard offline ed email.</p>
+                                <label class="flex items-center gap-3 text-sm font-black text-gray-700">
+                                    <input id="dm-alerts-enabled" type="checkbox" class="w-5 h-5">
+                                    <span>Alert abilitati</span>
+                                </label>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div class="form-field">
+                                        <label class="form-label" for="dm-expected-interval">Intervallo previsto invio dati (min)</label>
+                                        <input id="dm-expected-interval" type="number" min="1" step="1" class="form-input" required>
+                                    </div>
+                                    <div class="form-field">
+                                        <label class="form-label" for="dm-dashboard-offline">Dashboard offline dopo (min)</label>
+                                        <input id="dm-dashboard-offline" type="number" min="1" step="1" class="form-input" required>
+                                    </div>
+                                    <div class="form-field">
+                                        <label class="form-label" for="dm-email-alert">Email alert dopo (min)</label>
+                                        <input id="dm-email-alert" type="number" min="1" step="1" class="form-input" required>
+                                    </div>
+                                    <div class="form-field">
+                                        <label class="form-label" for="dm-cooldown">Cooldown email (min)</label>
+                                        <input id="dm-cooldown" type="number" min="1" step="1" class="form-input" required>
+                                    </div>
                                 </div>
 
                                 <div class="form-field">
-                                    <label class="form-label" for="dm-expected-interval">Intervallo previsto invio dati (min)</label>
-                                    <input id="dm-expected-interval" type="number" min="1" step="1" class="form-input" required>
-                                </div>
-
-                                <div class="form-field">
-                                    <label class="form-label" for="dm-dashboard-offline-after">Dashboard offline dopo (min)</label>
-                                    <input id="dm-dashboard-offline-after" type="number" min="1" step="1" class="form-input" required>
-                                </div>
-
-                                <div class="form-field">
-                                    <label class="form-label" for="dm-email-alert-after">Email alert dopo (min)</label>
-                                    <input id="dm-email-alert-after" type="number" min="1" step="1" class="form-input" required>
-                                </div>
-
-                                <div class="form-field">
-                                    <label class="form-label" for="dm-cooldown">Cooldown email (min)</label>
-                                    <input id="dm-cooldown" type="number" min="1" step="1" class="form-input" required>
-                                </div>
-
-                                <div class="form-field md:col-span-2">
                                     <label class="form-label" for="dm-recipients">Destinatari email</label>
-                                    <input id="dm-recipients" type="text" class="form-input" placeholder="email1@azienda.com, email2@azienda.com">
-                                    <p class="text-xs text-gray-400 mt-1">Separare più email con virgole, punti e virgola o a capo.</p>
+                                    <textarea id="dm-recipients" class="form-input" rows="2" placeholder="email1@rayat.ma, email2@rayat.ma"></textarea>
                                 </div>
 
-                                <div class="form-field md:col-span-2">
+                                <div class="form-field">
                                     <label class="form-label" for="dm-custom-message">Messaggio personalizzato offline</label>
-                                    <textarea id="dm-custom-message" class="form-input" rows="8" placeholder="Messaggio opzionale per l'email offline"></textarea>
+                                    <textarea id="dm-custom-message" class="form-input" rows="8" placeholder="Messaggio opzionale per questo gateway"></textarea>
                                 </div>
-                            </div>
 
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
-                                <div class="stat-card">
-                                    <div class="text-xs text-gray-400 font-bold uppercase tracking-wide">Ultimo dato ricevuto</div>
-                                    <div class="text-sm font-black text-gray-800 mt-2" id="dm-last-data">—</div>
-                                </div>
-                                <div class="stat-card">
-                                    <div class="text-xs text-gray-400 font-bold uppercase tracking-wide">Stato attuale</div>
-                                    <div class="text-sm font-black text-gray-800 mt-2" id="dm-current-status">—</div>
-                                </div>
-                                <div class="stat-card">
-                                    <div class="text-xs text-gray-400 font-bold uppercase tracking-wide">Ultima email alert</div>
-                                    <div class="text-sm font-black text-gray-800 mt-2" id="dm-last-alert-email">—</div>
-                                </div>
-                            </div>
-
-                            <div class="flex justify-end mt-5">
-                                <button id="dm-save-btn" type="submit" class="btn btn-primary">Salva monitoraggio</button>
+                                <button type="submit" id="dm-save-btn" class="btn btn-primary w-full justify-center">Salva monitoraggio</button>
                             </div>
                         </form>
                     </div>
@@ -1907,7 +1976,10 @@
     const registrationListState = { page: 1, pageSize: 20, total: 0, totalPages: 1, query: '', status: '' };
     const deviceListState = { page: 1, pageSize: 50, total: 0, totalPages: 1, query: '', clientId: '', type: '' };
     const deviceRegistryState = { page: 1, pageSize: 25, total: 0, totalPages: 1, status: '' };
-    const deviceMonitoringState = { devices: [], selectedId: null, loading: false };
+    let deviceManagerGateways = [];
+    let selectedDeviceManagerGatewayId = null;
+    let deviceMonitoringDevices = [];
+    let selectedDeviceMonitoringDeviceId = null;
     const sensorModelsState = { page: 1, pageSize: 25, total: 0, totalPages: 1 };
     const cropProfilesState = { page: 1, pageSize: 25, total: 0, totalPages: 1 };
     const adminFeatures = { deviceManagerPhase2: false };
@@ -1989,6 +2061,7 @@
             navRegistrations: 'Registrazioni Recenti',
             navSensors: 'Sensori IoT',
             navDevices: 'Dispositivi',
+            navDeviceManager: 'Device Manager',
             navSensorModels: 'Catalogo Sensori',
             navCropProfiles: 'Catalogo Colture',
             navAnalytics: 'Analytics',
@@ -2110,6 +2183,27 @@
             sensorsSubtitle: 'Aggiungi, modifica e monitora i sensori collegati ai clienti',
             devicesPageTitle: 'Dispositivi',
             devicesSubtitle: 'Panoramica dei dispositivi assegnati ai clienti',
+            deviceManager: 'Device Manager',
+            deviceManagerSubtitle: 'Vista reale gateway, topic, cliente e ultimi dati ricevuti',
+            deviceId: 'Device ID',
+            gatewayName: 'Nome',
+            gatewayVisibility: 'Tipo',
+            mqttTopic: 'Topic MQTT',
+            latestUpdate: 'Ultimo aggiornamento',
+            parameters: 'Parametri',
+            dashboardLink: 'Dashboard',
+            publicGateway: 'Pubblico',
+            privateGateway: 'Privato',
+            openDashboard: 'Apri',
+            gatewayDetails: 'Dettaglio Gateway',
+            gatewayInfo: 'Informazioni device',
+            latestData: 'Latest data',
+            latestRaw: 'Ultimo payload/raw',
+            recentHistory: 'Storico recente',
+            selectGateway: 'Seleziona un gateway per vedere il dettaglio reale.',
+            noLatestData: 'Nessun dato latest disponibile.',
+            noRecentHistory: 'Nessuno storico recente disponibile.',
+            rawUnavailable: 'Raw payload non disponibile nello schema attuale.',
             addSensor: '+ Aggiungi Sensore',
             allRouterDevices: 'Tutti i Router/Device',
             unassignedRouters: 'Router non assegnati',
@@ -2233,6 +2327,7 @@
             navRegistrations: 'Recent Registrations',
             navSensors: 'IoT Sensors',
             navDevices: 'Devices',
+            navDeviceManager: 'Device Manager',
             navAnalytics: 'Analytics',
             navUsers: 'Admin Users',
             logout: 'Logout',
@@ -2348,6 +2443,27 @@
             sensorsSubtitle: 'Add, edit and monitor sensors assigned to clients',
             devicesPageTitle: 'Devices',
             devicesSubtitle: 'Overview of devices assigned to clients',
+            deviceManager: 'Device Manager',
+            deviceManagerSubtitle: 'Real gateway view with topic, client and latest received data',
+            deviceId: 'Device ID',
+            gatewayName: 'Name',
+            gatewayVisibility: 'Type',
+            mqttTopic: 'MQTT Topic',
+            latestUpdate: 'Latest update',
+            parameters: 'Parameters',
+            dashboardLink: 'Dashboard',
+            publicGateway: 'Public',
+            privateGateway: 'Private',
+            openDashboard: 'Open',
+            gatewayDetails: 'Gateway Detail',
+            gatewayInfo: 'Device information',
+            latestData: 'Latest data',
+            latestRaw: 'Latest payload/raw',
+            recentHistory: 'Recent history',
+            selectGateway: 'Select a gateway to view the real detail.',
+            noLatestData: 'No latest data available.',
+            noRecentHistory: 'No recent history available.',
+            rawUnavailable: 'Raw payload is not available in the current schema.',
             addSensor: '+ Add Sensor',
             allRouterDevices: 'All Router/Devices',
             unassignedRouters: 'Unassigned Routers',
@@ -2471,6 +2587,7 @@
             navRegistrations: 'Inscriptions Récentes',
             navSensors: 'Capteurs IoT',
             navDevices: 'Appareils',
+            navDeviceManager: 'Device Manager',
             navAnalytics: 'Analytics',
             navUsers: 'Utilisateurs Admin',
             logout: 'Déconnexion',
@@ -2586,6 +2703,27 @@
             sensorsSubtitle: 'Ajouter, modifier et surveiller les capteurs liés aux clients',
             devicesPageTitle: 'Appareils',
             devicesSubtitle: 'Vue d’ensemble des appareils attribués aux clients',
+            deviceManager: 'Device Manager',
+            deviceManagerSubtitle: 'Vue réelle des gateways, topics, client et dernières données reçues',
+            deviceId: 'Device ID',
+            gatewayName: 'Nom',
+            gatewayVisibility: 'Type',
+            mqttTopic: 'Topic MQTT',
+            latestUpdate: 'Dernière mise à jour',
+            parameters: 'Paramètres',
+            dashboardLink: 'Dashboard',
+            publicGateway: 'Public',
+            privateGateway: 'Privé',
+            openDashboard: 'Ouvrir',
+            gatewayDetails: 'Détail Gateway',
+            gatewayInfo: 'Informations device',
+            latestData: 'Dernières données',
+            latestRaw: 'Dernier payload/raw',
+            recentHistory: 'Historique récent',
+            selectGateway: 'Sélectionnez un gateway pour voir le détail réel.',
+            noLatestData: 'Aucune donnée latest disponible.',
+            noRecentHistory: 'Aucun historique récent disponible.',
+            rawUnavailable: 'Payload raw indisponible dans le schéma actuel.',
             addSensor: '+ Ajouter Capteur',
             allRouterDevices: 'Tous les routeurs/appareils',
             unassignedRouters: 'Routeurs non attribués',
@@ -2709,6 +2847,7 @@
             navRegistrations: 'التسجيلات الحديثة',
             navSensors: 'حساسات إنترنت الأشياء',
             navDevices: 'الأجهزة',
+            navDeviceManager: 'Device Manager',
             navAnalytics: 'التحليلات',
             navUsers: 'مستخدمو الإدارة',
             logout: 'تسجيل الخروج',
@@ -2824,6 +2963,27 @@
             sensorsSubtitle: 'إضافة وتعديل ومتابعة الحساسات المرتبطة بالعملاء',
             devicesPageTitle: 'الأجهزة',
             devicesSubtitle: 'نظرة عامة على الأجهزة المرتبطة بالعملاء',
+            deviceManager: 'Device Manager',
+            deviceManagerSubtitle: 'عرض حقيقي للبوابات والمواضيع والعميل وآخر البيانات',
+            deviceId: 'معرف الجهاز',
+            gatewayName: 'الاسم',
+            gatewayVisibility: 'النوع',
+            mqttTopic: 'موضوع MQTT',
+            latestUpdate: 'آخر تحديث',
+            parameters: 'المعاملات',
+            dashboardLink: 'لوحة البيانات',
+            publicGateway: 'عام',
+            privateGateway: 'خاص',
+            openDashboard: 'فتح',
+            gatewayDetails: 'تفاصيل البوابة',
+            gatewayInfo: 'معلومات الجهاز',
+            latestData: 'آخر البيانات',
+            latestRaw: 'آخر payload/raw',
+            recentHistory: 'السجل الحديث',
+            selectGateway: 'اختر بوابة لعرض التفاصيل الحقيقية.',
+            noLatestData: 'لا توجد بيانات حديثة.',
+            noRecentHistory: 'لا يوجد سجل حديث.',
+            rawUnavailable: 'البيانات الخام غير متاحة في المخطط الحالي.',
             addSensor: '+ إضافة حساس',
             allRouterDevices: 'كل الراوترات/الأجهزة',
             unassignedRouters: 'راوترات غير مخصصة',
@@ -2939,6 +3099,7 @@
         ['#nav-registrations-label', 'navRegistrations'],
         ['#nav-sensors-label', 'navSensors'],
         ['#nav-devices-label', 'navDevices'],
+        ['#nav-device-manager-label', 'navDeviceManager'],
         ['#nav-sensor-models-label', 'navSensorModels'],
         ['#nav-crop-profiles-label', 'navCropProfiles'],
         ['#nav-analytics-label', 'navAnalytics'],
@@ -2997,6 +3158,19 @@
         ['#devices-th-actions', 'actions'],
         ['#devices-prev', 'previous'],
         ['#devices-next', 'next'],
+        ['#device-manager-page-title', 'deviceManager'],
+        ['#device-manager-page-subtitle', 'deviceManagerSubtitle'],
+        ['#device-manager-refresh-btn', 'refresh'],
+        ['#device-manager-th-device', 'deviceId'],
+        ['#device-manager-th-name', 'gatewayName'],
+        ['#device-manager-th-client', 'client'],
+        ['#device-manager-th-visibility', 'gatewayVisibility'],
+        ['#device-manager-th-topic', 'mqttTopic'],
+        ['#device-manager-th-status', 'status'],
+        ['#device-manager-th-updated', 'latestUpdate'],
+        ['#device-manager-th-params', 'parameters'],
+        ['#device-manager-th-dashboard', 'dashboardLink'],
+        ['#device-manager-detail-empty', 'selectGateway'],
         ['#sensor-models-page-title', 'sensorModelsTitleNav'],
         ['#sensor-models-page-subtitle', 'sensorModelsSubtitle'],
         ['#sensor-models-refresh-btn', 'refresh'],
@@ -3467,8 +3641,9 @@
         if (path.includes('/admin/sensor-models')) return 'sensor-models';
         if (path.includes('/admin/crop-profiles')) return 'crop-profiles';
         if (path.includes('/admin/sensors')) return 'sensors';
-        if (path.includes('/admin/devices')) return 'devices';
+        if (path.includes('/admin/device-manager')) return 'device-manager';
         if (path.includes('/admin/device-monitoring')) return 'device-monitoring';
+        if (path.includes('/admin/devices')) return 'devices';
         if (path.includes('/admin/analytics')) return 'analytics';
         return 'dashboard';
     }
@@ -3480,6 +3655,7 @@
             registrations: '/admin/recent-clients',
             sensors: '/admin/sensors',
             devices: '/admin/devices',
+            'device-manager': '/admin/device-manager',
             'device-monitoring': '/admin/device-monitoring',
             'sensor-models': '/admin/sensor-models',
             'crop-profiles': '/admin/crop-profiles',
@@ -3864,7 +4040,7 @@
             return;
         }
 
-        if ((tab === 'analytics' || tab === 'users' || tab === 'device-monitoring') && currentAdmin?.role !== 'super_admin') {
+        if ((tab === 'analytics' || tab === 'users' || tab === 'device-manager' || tab === 'device-monitoring') && currentAdmin?.role !== 'super_admin') {
             tab = 'dashboard';
             window.history.replaceState({ tab }, '', pathForTab('dashboard'));
         }
@@ -3873,7 +4049,7 @@
             window.history.replaceState({ tab }, '', pathForTab('dashboard'));
         }
 
-        ['dashboard', 'clients', 'registrations', 'devices', 'device-monitoring', 'sensor-models', 'crop-profiles', 'sensors', 'analytics', 'users'].forEach(t => {
+        ['dashboard', 'clients', 'registrations', 'devices', 'device-manager', 'device-monitoring', 'sensor-models', 'crop-profiles', 'sensors', 'analytics', 'users'].forEach(t => {
             document.getElementById('tab-' + t).classList.add('hidden');
         });
         document.querySelectorAll('.nav-item').forEach(el => {
@@ -3896,7 +4072,8 @@
             clients: t('clients'),
             registrations: t('recentRegistrations'),
             devices: t('devicesTitleNav'),
-            'device-monitoring': 'Monitoraggio device',
+            'device-manager': t('deviceManager'),
+            'device-monitoring': 'Monitoraggio device / Alert offline',
             'sensor-models': t('sensorModelsTitleNav'),
             'crop-profiles': t('cropProfilesTitleNav'),
             sensors: t('sensorsTitleNav'),
@@ -3909,6 +4086,7 @@
         else if (tab === 'clients') loadClients();
         else if (tab === 'registrations') loadRegistrations();
         else if (tab === 'devices') loadDeviceRegistry();
+        else if (tab === 'device-manager') loadDeviceManager();
         else if (tab === 'device-monitoring') loadDeviceMonitoring();
         else if (tab === 'sensor-models') loadSensorModelsCatalog();
         else if (tab === 'crop-profiles') loadCropProfilesCatalog();
@@ -5055,6 +5233,444 @@
         }
     }
 
+    function getDeviceMonitoringConfig(device = {}) {
+        return device.config || {};
+    }
+
+    function getDeviceMonitoringHeartbeat(device = {}) {
+        return device.last_data_at || device.last_seen || null;
+    }
+
+    function deviceMonitoringStatusBadge(device = {}) {
+        const status = String(device.dashboard_status || '').toLowerCase();
+        if (status === 'online') {
+            return '<span class="badge badge-green">Online</span>';
+        }
+        if (status === 'late') {
+            return '<span class="badge badge-orange">In ritardo</span>';
+        }
+        if (status === 'offline' && device.last_email_alert_sent_at) {
+            return '<span class="badge badge-blue">Alert inviato</span>';
+        }
+        if (status === 'offline') {
+            return '<span class="badge badge-gray">Offline</span>';
+        }
+        return '<span class="badge badge-orange">Sconosciuto</span>';
+    }
+
+    function setDeviceMonitoringMessage(type, message = '') {
+        const errorEl = document.getElementById('device-monitoring-error');
+        const successEl = document.getElementById('device-monitoring-success');
+        if (errorEl) errorEl.classList.add('hidden');
+        if (successEl) successEl.classList.add('hidden');
+        if (!message) return;
+
+        const target = type === 'success' ? successEl : errorEl;
+        if (!target) return;
+        target.textContent = message;
+        target.classList.remove('hidden');
+        setTimeout(() => target.classList.add('hidden'), 6000);
+    }
+
+    function setDeviceMonitoringFormEnabled(enabled) {
+        document.querySelectorAll('#device-monitoring-form input, #device-monitoring-form textarea, #device-monitoring-form button')
+            .forEach(el => { el.disabled = !enabled; });
+        const select = document.getElementById('dm-device-select');
+        if (select) select.disabled = !deviceMonitoringDevices.length;
+    }
+
+    function renderDeviceMonitoringTable() {
+        const body = document.getElementById('device-monitoring-body');
+        if (!body) return;
+
+        body.innerHTML = deviceMonitoringDevices.length ? deviceMonitoringDevices.map((device) => {
+            const cfg = getDeviceMonitoringConfig(device);
+            const selected = String(device.device_pk) === String(selectedDeviceMonitoringDeviceId);
+            return `
+                <tr>
+                    <td>
+                        <button type="button" onclick="selectDeviceMonitoringGateway('${esc(device.device_pk)}')" class="font-black text-green-700 bg-transparent border-0 p-0 cursor-pointer">
+                            ${esc(device.device_id || '—')}
+                        </button>
+                        <div class="text-xs text-gray-400 mt-1">${esc(device.device_name || '')}</div>
+                    </td>
+                    <td>
+                        <div class="font-semibold text-gray-800">${esc(device.customer_name || '—')}</div>
+                        <div class="text-xs text-gray-400">${esc(device.customer_email || '—')}</div>
+                    </td>
+                    <td>${deviceMonitoringStatusBadge(device)}</td>
+                    <td class="text-xs text-gray-500">${fmtDate(getDeviceMonitoringHeartbeat(device))}</td>
+                    <td class="text-xs text-gray-500">${fmtDate(device.last_email_alert_sent_at)}</td>
+                    <td>
+                        <span class="badge ${cfg.alerts_enabled ? 'badge-green' : 'badge-gray'}">${cfg.alerts_enabled ? 'ON' : 'OFF'}</span>
+                        ${selected ? '<div class="text-[11px] text-green-700 font-bold mt-1">Selezionato</div>' : ''}
+                    </td>
+                </tr>
+            `;
+        }).join('') : '<tr><td colspan="6" class="text-center text-gray-400 py-8">Nessun gateway disponibile.</td></tr>';
+    }
+
+    function renderDeviceMonitoringSelect() {
+        const select = document.getElementById('dm-device-select');
+        if (!select) return;
+
+        select.innerHTML = '<option value="">Seleziona gateway</option>' + deviceMonitoringDevices.map((device) => (
+            `<option value="${esc(device.device_pk)}">${esc(device.device_id || '—')} ${device.device_name ? '- ' + esc(device.device_name) : ''}</option>`
+        )).join('');
+        select.value = selectedDeviceMonitoringDeviceId ? String(selectedDeviceMonitoringDeviceId) : '';
+    }
+
+    function populateDeviceMonitoringForm(device) {
+        const hasDevice = Boolean(device);
+        const cfg = getDeviceMonitoringConfig(device || {});
+        document.getElementById('dm-status-badge').innerHTML = hasDevice ? deviceMonitoringStatusBadge(device) : '';
+        document.getElementById('dm-last-heartbeat').textContent = hasDevice ? fmtDate(getDeviceMonitoringHeartbeat(device)) : '—';
+        document.getElementById('dm-last-alert').textContent = hasDevice ? fmtDate(device.last_email_alert_sent_at) : '—';
+        document.getElementById('dm-last-recovery').textContent = hasDevice ? fmtDate(device.last_recovery_sent_at) : '—';
+        document.getElementById('dm-minutes-without-data').textContent = hasDevice && Number.isFinite(Number(device.minutes_without_data))
+            ? `${Math.round(Number(device.minutes_without_data))} min`
+            : '—';
+        document.getElementById('dm-alerts-enabled').checked = Boolean(cfg.alerts_enabled);
+        document.getElementById('dm-expected-interval').value = cfg.expected_interval_min || '';
+        document.getElementById('dm-dashboard-offline').value = cfg.dashboard_offline_after_min || '';
+        document.getElementById('dm-email-alert').value = cfg.email_alert_after_min || '';
+        document.getElementById('dm-cooldown').value = cfg.cooldown_min || '';
+        document.getElementById('dm-recipients').value = cfg.recipients || '';
+        document.getElementById('dm-custom-message').value = cfg.custom_offline_message || '';
+        setDeviceMonitoringFormEnabled(hasDevice);
+    }
+
+    async function loadDeviceMonitoring() {
+        if (!currentAdmin || currentAdmin.role !== 'super_admin') {
+            return;
+        }
+
+        const body = document.getElementById('device-monitoring-body');
+        if (body) {
+            body.innerHTML = '<tr><td colspan="6" class="text-center text-gray-400 py-8">Caricamento…</td></tr>';
+        }
+        setDeviceMonitoringMessage();
+
+        try {
+            const response = await api('/device-monitoring');
+            if (!response) return;
+
+            deviceMonitoringDevices = response.data || [];
+            const selected = deviceMonitoringDevices.find((device) => String(device.device_pk) === String(selectedDeviceMonitoringDeviceId))
+                || deviceMonitoringDevices[0]
+                || null;
+            selectedDeviceMonitoringDeviceId = selected ? selected.device_pk : null;
+            renderDeviceMonitoringTable();
+            renderDeviceMonitoringSelect();
+            populateDeviceMonitoringForm(selected);
+        } catch (err) {
+            deviceMonitoringDevices = [];
+            selectedDeviceMonitoringDeviceId = null;
+            renderDeviceMonitoringTable();
+            renderDeviceMonitoringSelect();
+            populateDeviceMonitoringForm(null);
+            setDeviceMonitoringMessage('error', err.message);
+        }
+    }
+
+    function selectDeviceMonitoringGateway(id) {
+        selectedDeviceMonitoringDeviceId = id || null;
+        const selected = deviceMonitoringDevices.find((device) => String(device.device_pk) === String(selectedDeviceMonitoringDeviceId)) || null;
+        renderDeviceMonitoringTable();
+        renderDeviceMonitoringSelect();
+        populateDeviceMonitoringForm(selected);
+    }
+
+    function getMonitoringInteger(id) {
+        const value = Number(document.getElementById(id).value);
+        if (!Number.isInteger(value) || value < 1) {
+            throw new Error('I timer devono essere numeri interi maggiori di zero.');
+        }
+        return value;
+    }
+
+    async function saveDeviceMonitoring(event) {
+        event.preventDefault();
+        const selected = deviceMonitoringDevices.find((device) => String(device.device_pk) === String(selectedDeviceMonitoringDeviceId));
+        if (!selected) {
+            setDeviceMonitoringMessage('error', 'Seleziona un gateway prima di salvare.');
+            return;
+        }
+
+        const saveBtn = document.getElementById('dm-save-btn');
+        saveBtn.disabled = true;
+        setDeviceMonitoringMessage();
+
+        try {
+            const payload = {
+                alerts_enabled: document.getElementById('dm-alerts-enabled').checked,
+                expected_interval_min: getMonitoringInteger('dm-expected-interval'),
+                dashboard_offline_after_min: getMonitoringInteger('dm-dashboard-offline'),
+                email_alert_after_min: getMonitoringInteger('dm-email-alert'),
+                cooldown_min: getMonitoringInteger('dm-cooldown'),
+                recipients: document.getElementById('dm-recipients').value.trim(),
+                custom_offline_message: document.getElementById('dm-custom-message').value.trim()
+            };
+
+            if (payload.dashboard_offline_after_min <= payload.expected_interval_min) {
+                throw new Error('Dashboard offline dopo deve essere maggiore dell’intervallo previsto.');
+            }
+            if (payload.email_alert_after_min < payload.dashboard_offline_after_min) {
+                throw new Error('Email alert dopo deve essere maggiore o uguale a dashboard offline dopo.');
+            }
+
+            const response = await api('/device-monitoring/' + encodeURIComponent(selected.device_pk), {
+                method: 'PUT',
+                body: JSON.stringify(payload)
+            });
+            if (!response) return;
+
+            deviceMonitoringDevices = response.data || [];
+            selectedDeviceMonitoringDeviceId = selected.device_pk;
+            renderDeviceMonitoringTable();
+            renderDeviceMonitoringSelect();
+            populateDeviceMonitoringForm(deviceMonitoringDevices.find((device) => String(device.device_pk) === String(selectedDeviceMonitoringDeviceId)) || null);
+            setDeviceMonitoringMessage('success', 'Configurazione monitoraggio salvata.');
+        } catch (err) {
+            setDeviceMonitoringMessage('error', err.message);
+        } finally {
+            saveBtn.disabled = false;
+        }
+    }
+
+    function formatDeviceManagerDate(value) {
+        return value ? fmtDate(value) : '—';
+    }
+
+    function formatDeviceManagerNumber(value) {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? Number(numeric.toFixed(3)).toLocaleString(getCurrentLocale()) : '—';
+    }
+
+    function deviceManagerVisibilityBadge(visibility) {
+        return visibility === 'public'
+            ? `<span class="badge badge-blue">${t('publicGateway')}</span>`
+            : `<span class="badge badge-silver">${t('privateGateway')}</span>`;
+    }
+
+    function renderDeviceManagerParameters(parameters = []) {
+        if (!parameters.length) {
+            return '<span class="text-gray-300">—</span>';
+        }
+
+        return `<div class="device-manager-param-list">${parameters.map((parameter) =>
+            `<span class="badge badge-silver">${esc(parameter)}</span>`
+        ).join('')}</div>`;
+    }
+
+    async function loadDeviceManager() {
+        if (!currentAdmin || currentAdmin.role !== 'super_admin') {
+            return;
+        }
+
+        const body = document.getElementById('device-manager-body');
+        const detail = document.getElementById('device-manager-detail');
+        if (body) {
+            body.innerHTML = `<tr><td colspan="9" class="text-center text-gray-400 py-8">${t('loading')}</td></tr>`;
+        }
+
+        try {
+            const response = await api('/device-manager/gateways');
+            if (!response) return;
+
+            deviceManagerGateways = response.data || [];
+            renderDeviceManagerTable();
+
+            if (deviceManagerGateways.length) {
+                const selected = deviceManagerGateways.find((gateway) => String(gateway.id) === String(selectedDeviceManagerGatewayId))
+                    || deviceManagerGateways[0];
+                openDeviceManagerGateway(selected.id);
+            } else if (detail) {
+                selectedDeviceManagerGatewayId = null;
+                detail.innerHTML = `<div class="device-manager-empty">${t('noDevices')}</div>`;
+            }
+        } catch (err) {
+            if (body) {
+                body.innerHTML = `<tr><td colspan="9" class="text-center text-red-400 py-8">${esc(err.message)}</td></tr>`;
+            }
+            if (detail) {
+                detail.innerHTML = `<div class="device-manager-empty text-red-500">${esc(err.message)}</div>`;
+            }
+        }
+    }
+
+    function renderDeviceManagerTable() {
+        const body = document.getElementById('device-manager-body');
+        if (!body) return;
+
+        body.innerHTML = deviceManagerGateways.length ? deviceManagerGateways.map((gateway) => `
+            <tr>
+                <td>
+                    <button type="button" onclick="openDeviceManagerGateway(${gateway.id})" class="font-black text-green-700 bg-transparent border-0 p-0 cursor-pointer">
+                        ${esc(gateway.device_id)}
+                    </button>
+                </td>
+                <td>
+                    <div class="font-semibold text-gray-800">${esc(gateway.name || gateway.device_id)}</div>
+                    <div class="text-xs text-gray-400">${esc(gateway.device_status || '—')}</div>
+                </td>
+                <td>
+                    <div class="font-semibold text-gray-800">${esc(gateway.client_name || '—')}</div>
+                    <div class="text-xs text-gray-400">${esc(gateway.client_email || gateway.client_code || '—')}</div>
+                </td>
+                <td>${deviceManagerVisibilityBadge(gateway.visibility)}</td>
+                <td><code class="text-xs text-gray-500">${esc(gateway.mqtt_topic || '—')}</code></td>
+                <td>${statusBadge(gateway.status)}</td>
+                <td class="text-xs text-gray-500">${formatDeviceManagerDate(gateway.latest_activity)}</td>
+                <td><span class="badge badge-silver">${gateway.sensor_count || 0} / ${gateway.parameter_count || 0}</span></td>
+                <td>
+                    <a href="${esc(gateway.dashboard_path || '/')}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">${t('openDashboard')}</a>
+                </td>
+            </tr>
+        `).join('') : `<tr><td colspan="9" class="text-center text-gray-400 py-8">${t('noDevices')}</td></tr>`;
+    }
+
+    async function openDeviceManagerGateway(id) {
+        selectedDeviceManagerGatewayId = id;
+        const detail = document.getElementById('device-manager-detail');
+        if (!detail) return;
+
+        detail.innerHTML = `<div class="device-manager-empty">${t('loading')}</div>`;
+
+        try {
+            const response = await api('/device-manager/gateways/' + encodeURIComponent(id));
+            if (!response) return;
+            renderDeviceManagerDetail(response.data);
+        } catch (err) {
+            detail.innerHTML = `<div class="device-manager-empty text-red-500">${esc(err.message)}</div>`;
+        }
+    }
+
+    function renderDeviceManagerLatestRows(rows = []) {
+        if (!rows.length) {
+            return `<tr><td colspan="4" class="text-center text-gray-400 py-4">${t('noLatestData')}</td></tr>`;
+        }
+
+        return rows.map((row) => `
+            <tr>
+                <td><span class="badge badge-silver">${esc(row.type || '—')}</span></td>
+                <td>
+                    <div class="font-semibold text-gray-800">${esc(row.name || row.subtype || '—')}</div>
+                    <div class="text-xs text-gray-400">${esc(row.subtype || '—')}</div>
+                </td>
+                <td><span class="font-black text-gray-800">${formatDeviceManagerNumber(row.value)}</span> <span class="text-xs text-gray-400">${esc(row.unit || '')}</span></td>
+                <td class="text-xs text-gray-500">${formatDeviceManagerDate(row.timestamp)}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderDeviceManagerHistoryRows(rows = []) {
+        if (!rows.length) {
+            return `<tr><td colspan="4" class="text-center text-gray-400 py-4">${t('noRecentHistory')}</td></tr>`;
+        }
+
+        return rows.slice(0, 12).map((row) => `
+            <tr>
+                <td class="text-xs text-gray-500">${formatDeviceManagerDate(row.timestamp)}</td>
+                <td><span class="badge badge-silver">${esc(row.subtype || row.type || '—')}</span></td>
+                <td><span class="font-black text-gray-800">${formatDeviceManagerNumber(row.value)}</span> <span class="text-xs text-gray-400">${esc(row.unit || '')}</span></td>
+                <td class="text-xs text-gray-400">${row.metadata ? esc(JSON.stringify(row.metadata).slice(0, 80)) : '—'}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderDeviceManagerDetail(data = {}) {
+        const detail = document.getElementById('device-manager-detail');
+        const gateway = data.gateway || {};
+        const latestData = data.latest_data || [];
+        const recentHistory = data.recent_history || [];
+        const latestRaw = data.latest_raw || {};
+        const rawText = latestRaw.available
+            ? JSON.stringify(latestRaw.metadata || latestRaw, null, 2)
+            : (latestRaw.message || t('rawUnavailable'));
+
+        detail.innerHTML = `
+            <div class="px-5 py-4 border-b border-gray-100">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs text-gray-400 font-black uppercase tracking-wide">${t('gatewayDetails')}</div>
+                        <h3 class="text-xl font-black text-gray-900 mt-1">${esc(gateway.device_id || '—')}</h3>
+                        <p class="text-sm text-gray-500">${esc(gateway.name || '')}</p>
+                    </div>
+                    <div class="flex flex-col items-end gap-2">
+                        ${statusBadge(gateway.status)}
+                        ${deviceManagerVisibilityBadge(gateway.visibility)}
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-5 space-y-5">
+                <div>
+                    <h4 class="font-black text-gray-800 mb-3">${t('gatewayInfo')}</h4>
+                    <div class="device-manager-grid">
+                        <div class="device-manager-kv">
+                            <div class="device-manager-label">${t('client')}</div>
+                            <div class="device-manager-value">${esc(gateway.client_name || '—')}</div>
+                            <div class="text-xs text-gray-400 mt-1">${esc(gateway.client_email || gateway.client_code || '—')}</div>
+                        </div>
+                        <div class="device-manager-kv">
+                            <div class="device-manager-label">${t('mqttTopic')}</div>
+                            <div class="device-manager-value">${esc(gateway.mqtt_topic || '—')}</div>
+                        </div>
+                        <div class="device-manager-kv">
+                            <div class="device-manager-label">${t('latestUpdate')}</div>
+                            <div class="device-manager-value">${formatDeviceManagerDate(gateway.latest_activity)}</div>
+                        </div>
+                        <div class="device-manager-kv">
+                            <div class="device-manager-label">${t('parameters')}</div>
+                            <div class="device-manager-value">${gateway.sensor_count || 0} / ${gateway.parameter_count || 0}</div>
+                        </div>
+                    </div>
+                    <div class="mt-3">${renderDeviceManagerParameters(gateway.parameters || [])}</div>
+                </div>
+
+                <div>
+                    <h4 class="font-black text-gray-800 mb-3">${t('latestData')}</h4>
+                    <div class="overflow-x-auto border border-gray-100 rounded-xl">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>${t('sensorType')}</th>
+                                    <th>${t('parameters')}</th>
+                                    <th>${t('valueLabel')}</th>
+                                    <th>${t('updatedAtLabel')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>${renderDeviceManagerLatestRows(latestData)}</tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="font-black text-gray-800 mb-3">${t('latestRaw')}</h4>
+                    <pre class="device-manager-code">${esc(rawText)}</pre>
+                </div>
+
+                <div>
+                    <h4 class="font-black text-gray-800 mb-3">${t('recentHistory')}</h4>
+                    <div class="overflow-x-auto border border-gray-100 rounded-xl">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>${t('registeredAt')}</th>
+                                    <th>${t('parameters')}</th>
+                                    <th>${t('valueLabel')}</th>
+                                    <th>Metadata</th>
+                                </tr>
+                            </thead>
+                            <tbody>${renderDeviceManagerHistoryRows(recentHistory)}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     // ── Sensors ───────────────────────────────────────────────────────────
     async function loadSensors() {
         document.getElementById('sensors-body').innerHTML = '<tr><td colspan="7" class="text-center text-gray-400 py-8">Caricamento…</td></tr>';
@@ -6080,186 +6696,6 @@
                     target.innerHTML = `<tr><td colspan="2" class="text-center text-red-400 py-8">${esc(err.message)}</td></tr>`;
                 }
             });
-        }
-    }
-
-    // ── Device Monitoring / Offline Alerts ───────────────────────────────
-    function deviceMonitoringStatusBadge(status) {
-        const normalized = status || 'never';
-        const labels = {
-            online: 'Online',
-            delayed: 'In ritardo',
-            offline: 'Offline',
-            alert_sent: 'Alert inviato',
-            never: 'Mai ricevuto'
-        };
-        if (normalized === 'online') return `<span class="badge badge-green">${labels[normalized]}</span>`;
-        if (normalized === 'delayed') return `<span class="badge badge-orange">${labels[normalized]}</span>`;
-        if (normalized === 'offline' || normalized === 'alert_sent') {
-            return `<span class="badge" style="background:#fee2e2;color:#991b1b;">${labels[normalized]}</span>`;
-        }
-        return `<span class="badge badge-gray">${labels[normalized] || normalized}</span>`;
-    }
-
-    function getSelectedDeviceMonitoring() {
-        return deviceMonitoringState.devices.find((device) => Number(device.device_pk) === Number(deviceMonitoringState.selectedId)) || null;
-    }
-
-    function setDeviceMonitoringFormEnabled(enabled) {
-        document.querySelectorAll('#device-monitoring-form input, #device-monitoring-form textarea, #device-monitoring-form button')
-            .forEach((el) => { el.disabled = !enabled; });
-    }
-
-    function formatMonitoringDelay(minutes) {
-        if (minutes === null || minutes === undefined || Number.isNaN(Number(minutes))) return '—';
-        return `${Math.round(Number(minutes))} min fa`;
-    }
-
-    function renderDeviceMonitoringList() {
-        const body = document.getElementById('device-monitoring-list');
-        if (!body) return;
-
-        const devices = deviceMonitoringState.devices || [];
-        if (!devices.length) {
-            body.innerHTML = `<tr><td colspan="3" class="text-center text-gray-400 py-8">Nessun device attivo trovato</td></tr>`;
-            return;
-        }
-
-        body.innerHTML = devices.map((device) => {
-            const selected = Number(device.device_pk) === Number(deviceMonitoringState.selectedId);
-            const owner = device.customer_name ? `<div class="text-xs text-gray-400">${esc(device.customer_name)}</div>` : '';
-            return `
-                <tr onclick="selectDeviceMonitoring(${Number(device.device_pk)})" style="cursor:pointer;${selected ? 'background:#f0fdf4;' : ''}">
-                    <td>
-                        <div class="font-bold text-gray-800">${esc(device.device_id || '—')}</div>
-                        ${owner}
-                    </td>
-                    <td>${deviceMonitoringStatusBadge(device.dashboard_status)}</td>
-                    <td class="text-xs text-gray-500">${fmtDate(device.last_data_at)}<br>${formatMonitoringDelay(device.minutes_without_data)}</td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    function renderSelectedDeviceMonitoring() {
-        const device = getSelectedDeviceMonitoring();
-        const title = document.getElementById('device-monitoring-selected-title');
-        const subtitle = document.getElementById('device-monitoring-selected-subtitle');
-        const selectedStatus = document.getElementById('device-monitoring-selected-status');
-
-        if (!device) {
-            if (title) title.textContent = 'Seleziona un device';
-            if (subtitle) subtitle.textContent = 'Ultimo dato ricevuto: —';
-            if (selectedStatus) selectedStatus.innerHTML = '<span class="badge badge-gray">—</span>';
-            ['dm-expected-interval', 'dm-dashboard-offline-after', 'dm-email-alert-after', 'dm-cooldown', 'dm-recipients', 'dm-custom-message']
-                .forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
-            const alertsEnabled = document.getElementById('dm-alerts-enabled');
-            if (alertsEnabled) alertsEnabled.checked = false;
-            document.getElementById('dm-last-data').textContent = '—';
-            document.getElementById('dm-current-status').textContent = '—';
-            document.getElementById('dm-last-alert-email').textContent = '—';
-            setDeviceMonitoringFormEnabled(false);
-            return;
-        }
-
-        const cfg = device.config || {};
-        setDeviceMonitoringFormEnabled(true);
-        document.getElementById('dm-alerts-enabled').checked = cfg.alerts_enabled !== false;
-        document.getElementById('dm-expected-interval').value = cfg.expected_interval_min ?? '';
-        document.getElementById('dm-dashboard-offline-after').value = cfg.dashboard_offline_after_min ?? '';
-        document.getElementById('dm-email-alert-after').value = cfg.email_alert_after_min ?? '';
-        document.getElementById('dm-cooldown').value = cfg.cooldown_min ?? '';
-        document.getElementById('dm-recipients').value = cfg.recipients || '';
-        document.getElementById('dm-custom-message').value = cfg.custom_offline_message || '';
-
-        title.textContent = `${device.device_id || 'Device'}${device.device_name ? ' · ' + device.device_name : ''}`;
-        subtitle.textContent = `Ultimo dato ricevuto: ${fmtDate(device.last_data_at)} (${formatMonitoringDelay(device.minutes_without_data)})`;
-        selectedStatus.innerHTML = deviceMonitoringStatusBadge(device.dashboard_status);
-        document.getElementById('dm-last-data').textContent = fmtDate(device.last_data_at);
-        document.getElementById('dm-current-status').innerHTML = deviceMonitoringStatusBadge(device.dashboard_status);
-        document.getElementById('dm-last-alert-email').textContent = fmtDate(device.last_email_alert_sent_at);
-    }
-
-    function selectDeviceMonitoring(devicePk) {
-        deviceMonitoringState.selectedId = Number(devicePk);
-        renderDeviceMonitoringList();
-        renderSelectedDeviceMonitoring();
-    }
-
-    async function loadDeviceMonitoring(force = false) {
-        if (!currentAdmin || currentAdmin.role !== 'super_admin' || deviceMonitoringState.loading) {
-            return;
-        }
-
-        const body = document.getElementById('device-monitoring-list');
-        if (force && body) {
-            body.innerHTML = `<tr><td colspan="3" class="text-center text-gray-400 py-8">${t('loading')}</td></tr>`;
-        }
-
-        deviceMonitoringState.loading = true;
-        try {
-            const response = await api('/device-monitoring');
-            const devices = response?.data || [];
-            deviceMonitoringState.devices = devices;
-            if (!devices.some((device) => Number(device.device_pk) === Number(deviceMonitoringState.selectedId))) {
-                deviceMonitoringState.selectedId = devices[0]?.device_pk || null;
-            }
-            renderDeviceMonitoringList();
-            renderSelectedDeviceMonitoring();
-        } catch (err) {
-            if (body) {
-                body.innerHTML = `<tr><td colspan="3" class="text-center text-red-400 py-8">${esc(err.message)}</td></tr>`;
-            }
-            setDeviceMonitoringFormEnabled(false);
-        } finally {
-            deviceMonitoringState.loading = false;
-        }
-    }
-
-    function getDeviceMonitoringPayload() {
-        return {
-            alerts_enabled: document.getElementById('dm-alerts-enabled').checked,
-            expected_interval_min: Number(document.getElementById('dm-expected-interval').value),
-            dashboard_offline_after_min: Number(document.getElementById('dm-dashboard-offline-after').value),
-            email_alert_after_min: Number(document.getElementById('dm-email-alert-after').value),
-            cooldown_min: Number(document.getElementById('dm-cooldown').value),
-            recipients: document.getElementById('dm-recipients').value.trim(),
-            custom_offline_message: document.getElementById('dm-custom-message').value.trim()
-        };
-    }
-
-    async function saveDeviceMonitoringConfig(event) {
-        event.preventDefault();
-        const device = getSelectedDeviceMonitoring();
-        if (!device) {
-            showError('device-monitoring-error', 'Seleziona prima un device.');
-            return;
-        }
-
-        const btn = document.getElementById('dm-save-btn');
-        const success = document.getElementById('device-monitoring-success');
-        const payload = getDeviceMonitoringPayload();
-        btn.disabled = true;
-        btn.textContent = 'Salvataggio...';
-        success.classList.add('hidden');
-
-        try {
-            const response = await api(`/device-monitoring/${Number(device.device_pk)}`, {
-                method: 'PUT',
-                body: JSON.stringify(payload)
-            });
-            deviceMonitoringState.devices = response?.data || deviceMonitoringState.devices;
-            deviceMonitoringState.selectedId = device.device_pk;
-            renderDeviceMonitoringList();
-            renderSelectedDeviceMonitoring();
-            success.textContent = 'Configurazione salvata nel database.';
-            success.classList.remove('hidden');
-            setTimeout(() => success.classList.add('hidden'), 5000);
-        } catch (err) {
-            showError('device-monitoring-error', err.message);
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Salva monitoraggio';
         }
     }
 
