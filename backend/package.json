@@ -13,6 +13,8 @@
     "sync:live-mail-config": "node scripts/save-live-mail-config.js",
     "smoke:routes": "node scripts/smoke-test-mock.js",
     "test:dtu": "node scripts/test-dtu-decoder.js",
+    "test:alert-offline-dedupe": "node scripts/test-alert-offline-dedupe.js",
+    "test:gateway-monitor": "node scripts/test-gateway-monitor.js",
     "test:super-admin": "node scripts/test-super-admin-bootstrap.js",
     "test:alert-email": "node scripts/send-missing-data-test-alert.js",
     "test:intelligence-tenancy": "node scripts/test-intelligence-tenancy.js",
@@ -45,7 +47,7 @@
     "test:prediction-backtest": "node scripts/test-prediction-backtest-calibration.js",
     "test:prediction-backtest:postgres": "node scripts/test-prediction-backtest-calibration-postgres.js",
     "test:prediction-dashboard-api": "node scripts/test-prediction-dashboard-api.js",
-    "test": "npm run test:dtu && npm run test:super-admin && npm run test:intelligence-tenancy && npm run test:baseline && npm run test:baseline:postgres && npm run test:stress-memory && npm run test:stress-memory:postgres && npm run test:recovery-memory && npm run test:recovery-memory:postgres && npm run test:behavioral-signature && npm run test:behavioral-signature:postgres && npm run test:knowledge-consolidation && npm run test:knowledge-consolidation:postgres && npm run test:health-profile && npm run test:health-profile:postgres && npm run test:weekly-reporting && npm run test:weekly-reporting:postgres && npm run test:weekly-pdf && npm run test:weekly-pdf:postgres && npm run test:weekly-history-notifications && npm run test:weekly-notifications:postgres && npm run test:weekly-report-apis && npm run test:metric-forecast-breach && npm run test:metric-forecast-breach:postgres && npm run test:stress-eta-risk && npm run test:stress-eta-risk:postgres && npm run test:recovery-forecast-warning && npm run test:recovery-forecast-warning:postgres && npm run test:prediction-backtest && npm run test:prediction-backtest:postgres && npm run test:prediction-dashboard-api && npm run smoke:routes"
+    "test": "npm run test:dtu && npm run test:alert-offline-dedupe && npm run test:gateway-monitor && npm run test:super-admin && npm run test:intelligence-tenancy && npm run test:baseline && npm run test:baseline:postgres && npm run test:stress-memory && npm run test:stress-memory:postgres && npm run test:recovery-memory && npm run test:recovery-memory:postgres && npm run test:behavioral-signature && npm run test:behavioral-signature:postgres && npm run test:knowledge-consolidation && npm run test:knowledge-consolidation:postgres && npm run test:health-profile && npm run test:health-profile:postgres && npm run test:weekly-reporting && npm run test:weekly-reporting:postgres && npm run test:weekly-pdf && npm run test:weekly-pdf:postgres && npm run test:weekly-history-notifications && npm run test:weekly-notifications:postgres && npm run test:weekly-report-apis && npm run test:metric-forecast-breach && npm run test:metric-forecast-breach:postgres && npm run test:stress-eta-risk && npm run test:stress-eta-risk:postgres && npm run test:recovery-forecast-warning && npm run test:recovery-forecast-warning:postgres && npm run test:prediction-backtest && npm run test:prediction-backtest:postgres && npm run test:prediction-dashboard-api && npm run smoke:routes"
   },
   "keywords": [
     "iot",

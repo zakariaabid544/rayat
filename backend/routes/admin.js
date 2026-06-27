@@ -38,6 +38,12 @@ const {
 const { buildDatabaseUnavailableResponse } = require('../utils/database-http');
 const { attachPasswordResetRoutes } = require('../utils/password-reset');
 const { buildAnalyticsSummary } = require('../utils/analytics');
+const {
+    ensureGatewayMonitorSchema,
+    listDeviceMonitoringConfigs,
+    seedDefaultGatewayConfigs,
+    updateDeviceMonitoringConfig
+} = require('../utils/gateway-monitor');
 
 const router = express.Router();
 
@@ -1916,6 +1922,45 @@ router.get('/analytics/summary', isAdminRole, isSuperAdmin, async (req, res) => 
         return sendAdminOperationalError(res, error, {
             fallbackMessage: 'Errore nel recupero analytics',
             databaseMessage: 'Analytics amministrazione temporaneamente non disponibili'
+        });
+    }
+});
+
+// ─── DEVICE MONITORING / OFFLINE ALERTS ─────────────────────────────────────
+
+router.get('/device-monitoring', isAdminRole, isSuperAdmin, async (_req, res) => {
+    try {
+        await ensureGatewayMonitorSchema();
+        await seedDefaultGatewayConfigs();
+        const data = await listDeviceMonitoringConfigs();
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error('Get device monitoring error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore nel recupero monitoraggio device',
+            databaseMessage: 'Monitoraggio device temporaneamente non disponibile'
+        });
+    }
+});
+
+router.put('/device-monitoring/:id', isAdminRole, isSuperAdmin, async (req, res) => {
+    try {
+        await ensureGatewayMonitorSchema();
+        const deviceId = parseRequiredPositiveInteger(req.params.id, 'device_id');
+        const config = await updateDeviceMonitoringConfig(deviceId, req.body || {});
+        const data = await listDeviceMonitoringConfigs();
+        res.json({ success: true, config, data });
+    } catch (error) {
+        if (error.statusCode) {
+            return sendAdminError(res, error.statusCode, error.message);
+        }
+        if (/non valido|deve essere|Device non trovato/i.test(error.message || '')) {
+            return sendAdminError(res, 400, error.message);
+        }
+        console.error('Update device monitoring error:', error);
+        return sendAdminOperationalError(res, error, {
+            fallbackMessage: 'Errore nel salvataggio monitoraggio device',
+            databaseMessage: 'Monitoraggio device temporaneamente non disponibile'
         });
     }
 });

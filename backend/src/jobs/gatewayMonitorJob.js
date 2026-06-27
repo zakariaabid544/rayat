@@ -23,16 +23,25 @@ async function isEnabled() {
     } catch (error) { return false; }
 }
 
-function alertRecipients(customerEmail) {
+function alertRecipients(customerEmail, configuredRecipients = []) {
+    const deviceRecipients = Array.isArray(configuredRecipients)
+        ? configuredRecipients
+        : String(configuredRecipients || '').split(',');
     const list = String(process.env.ALERT_EMAILS || '').split(',').map((v) => v.trim()).filter(Boolean);
     const primary = String(process.env.ALERT_PRIMARY_EMAIL || '').trim();
     const fallback = String(process.env.ALERT_FALLBACK_EMAIL || '').trim();
-    return Array.from(new Set([customerEmail, ...list, primary, fallback].filter(Boolean)));
+    return Array.from(new Set([
+        ...deviceRecipients.map((v) => String(v || '').trim()).filter(Boolean),
+        customerEmail,
+        ...list,
+        primary,
+        fallback
+    ].filter(Boolean)));
 }
 
 // Sender reale: in sviluppo logga; in produzione invia via SMTP (env) se configurato. Non blocca lo stato.
 async function defaultSendEmail(alert) {
-    const recipients = alertRecipients(alert.customer_email);
+    const recipients = alertRecipients(alert.customer_email, alert.recipients);
     if (process.env.NODE_ENV !== 'production' || !process.env.SMTP_HOST) {
         console.log(`[gateway-monitor] [${alert.alert_type.toUpperCase()}] ${alert.subject} -> ${recipients.join(', ') || 'nessun destinatario'}`);
         return;
@@ -63,7 +72,7 @@ async function runGatewayMonitorCycle({ dryRun = false, sendEmail = defaultSendE
         if (!schemaReady && !dryRun) { await ensureGatewayMonitorSchema(); await seedDefaultGatewayConfigs(); schemaReady = true; }
         const summary = await runGatewayMonitor({ dryRun, sendEmail });
         const s = summary.sent || {};
-        if ((s.warning + s.offline + s.critical + s.recovery) > 0) {
+        if (((s.offline || 0) + (s.recovery || 0)) > 0) {
             console.log('[gateway-monitor] cycle:', JSON.stringify(summary.sent), 'evaluated=' + summary.evaluated);
         }
         return summary;

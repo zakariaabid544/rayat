@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const nodemailer = require('nodemailer');
 
-const { query } = require('../../config/database');
+const { query, withTransaction } = require('../../config/database');
 const {
   getMonitoringConfig,
   getMissingDataThresholdMinutes,
@@ -57,6 +57,7 @@ let isSyncingSchedule = false;
 let hasLegacySensorDataTable = null;
 let hasRuntimeConfigTable = null;
 const activeRecoveryNotifications = new Map();
+const LEGACY_GATEWAY_OFFLINE_EMAIL_FLAG = 'ALERT_LEGACY_GATEWAY_OFFLINE_EMAIL_ENABLED';
 
 const mailConfigCache = {
   loadedAt: 0,
@@ -92,6 +93,62 @@ function getAlertRecipients() {
     primary,
     fallback,
     recipients
+  };
+}
+
+function parseOptionalBoolean(value) {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return null;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+  return null;
+}
+
+async function isGatewayMonitorEnabledForLegacySuppression() {
+  const explicit = parseOptionalBoolean(process.env.GATEWAY_MONITOR_ENABLED);
+  if (explicit !== null) {
+    return explicit;
+  }
+
+  try {
+    const rows = await query("SELECT config_value FROM runtime_config WHERE config_key = 'gateway_monitor_enabled' LIMIT 1");
+    return rows.length > 0 && String(rows[0].config_value).trim().toLowerCase() === 'true';
+  } catch (error) {
+    return false;
+  }
+}
+
+async function getLegacyGatewayOfflineEmailStatus() {
+  const explicitLegacyFlag = parseOptionalBoolean(process.env[LEGACY_GATEWAY_OFFLINE_EMAIL_FLAG]);
+  const gatewayMonitorEnabled = await isGatewayMonitorEnabledForLegacySuppression();
+
+  if (gatewayMonitorEnabled) {
+    return {
+      enabled: false,
+      reason: 'gateway_monitor_enabled',
+      flag: explicitLegacyFlag
+    };
+  }
+
+  if (explicitLegacyFlag === false) {
+    return {
+      enabled: false,
+      reason: 'legacy_flag_disabled',
+      flag: explicitLegacyFlag
+    };
+  }
+
+  return {
+    enabled: true,
+    reason: explicitLegacyFlag === true ? 'legacy_flag_enabled' : 'default_enabled',
+    flag: explicitLegacyFlag
   };
 }
 
@@ -131,6 +188,48 @@ function toIsoOrNull(value) {
 
 function getRecoveryNotificationKey(alertLastUpdate) {
   return toIsoOrNull(alertLastUpdate);
+}
+
+function getOfflineNotificationKey(lastUpdate) {
+  return toIsoOrNull(lastUpdate);
+}
+
+function createTransactionExecutor(connection) {
+  return async (sql, params = []) => {
+    const [result] = await connection.execute(sql, params);
+    return result;
+  };
+}
+
+async function withOfflineNotificationLock(lastUpdate, work) {
+  const lockKey = getOfflineNotificationKey(lastUpdate);
+  if (!lockKey) {
+    return { acquired: false, result: null };
+  }
+
+  try {
+    return await withTransaction(async (connection) => {
+      const executor = createTransactionExecutor(connection);
+      const rows = await executor(
+        'SELECT pg_try_advisory_xact_lock(hashtext(?)) AS acquired',
+        [`rayat:missing-data:${lockKey}`]
+      );
+      const acquired = Boolean(rows?.[0]?.acquired);
+      if (!acquired) {
+        return { acquired: false, result: null };
+      }
+
+      const result = await work(executor);
+      return { acquired: true, result };
+    });
+  } catch (error) {
+    console.warn('[alert-job] lock offline DB non disponibile, uso fallback senza lock cross-process:', error.message);
+    return {
+      acquired: true,
+      fallback: true,
+      result: await work(query)
+    };
+  }
 }
 
 async function tryAcquireRecoveryNotificationLock(alertLastUpdate) {
@@ -274,12 +373,12 @@ async function getLastUpdateTimestamp() {
   }
 }
 
-async function getLastNotificationTimestamp(lastUpdate) {
+async function getLastNotificationTimestamp(lastUpdate, executor = query) {
   const lastUpdateIso = toIsoOrNull(lastUpdate);
 
   try {
     const rows = lastUpdateIso
-      ? await query(
+      ? await executor(
         `SELECT created_at
          FROM notification_log
          WHERE notification_type = ?
@@ -289,7 +388,7 @@ async function getLastNotificationTimestamp(lastUpdate) {
          LIMIT 1`,
         [ALERT_TYPE, lastUpdateIso]
       )
-      : await query(
+      : await executor(
         `SELECT created_at
          FROM notification_log
          WHERE notification_type = ?
@@ -435,7 +534,7 @@ async function getPendingRecoveryAlert(recoveredAt) {
   };
 }
 
-async function rememberNotification(notificationType, recipient, metadata = {}) {
+async function rememberNotification(notificationType, recipient, metadata = {}, executor = query) {
   const now = new Date();
   inMemoryNotificationState[notificationType] = {
     createdAt: now.toISOString(),
@@ -445,15 +544,19 @@ async function rememberNotification(notificationType, recipient, metadata = {}) 
   };
 
   try {
-    await query(
+    const result = await executor(
       `INSERT INTO notification_log (notification_type, channel, recipient, metadata, created_at)
        VALUES (?, 'email', ?, ?, ?)`,
       [notificationType, recipient, JSON.stringify(metadata), now.toISOString()]
     );
-  } catch (error) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('[alert-job] impossibile salvare notification_log, continuo con anti-spam in memoria:', error.message);
+    const persisted = Boolean(result?.affectedRows || result?.insertId || result?.rows?.length);
+    if (!persisted) {
+      console.warn('[alert-job] notification_log insert non confermato: nessuna riga affected/returning.');
     }
+    return persisted;
+  } catch (error) {
+    console.warn('[alert-job] impossibile salvare notification_log, continuo con anti-spam in memoria:', error.message);
+    return false;
   }
 }
 
@@ -680,6 +783,7 @@ async function hasConfiguredSmtp(options = {}) {
 
 async function deliverNotificationEmail(notificationType, subject, body, metadata = {}, options = {}) {
   const recipients = getAlertRecipients();
+  const notificationExecutor = options.executor || query;
 
   if (!options.forceSmtp && process.env.NODE_ENV !== 'production') {
     console.log(`[alert-job] [DEV] ${subject}`);
@@ -691,7 +795,7 @@ async function deliverNotificationEmail(notificationType, subject, body, metadat
         mode: options.isTest ? 'development_test' : 'development',
         isTest: Boolean(options.isTest),
         trigger: options.trigger || 'development'
-      });
+      }, notificationExecutor);
     }
     return;
   }
@@ -716,7 +820,7 @@ async function deliverNotificationEmail(notificationType, subject, body, metadat
       mode: options.isTest ? 'smtp_test' : 'smtp',
       isTest: Boolean(options.isTest),
       trigger: options.trigger || 'smtp'
-    });
+    }, notificationExecutor);
   };
 
   if (!recipients.recipients.length) {
@@ -927,6 +1031,7 @@ async function notifyMissingDataHeartbeat(timestamp) {
 async function getMissingDataAlertRuntimeStatus(options = {}) {
   const mailConfig = await resolveAlertMailConfig(options);
   const monitoringConfig = getMonitoringConfig();
+  const legacyGatewayOfflineEmail = await getLegacyGatewayOfflineEmailStatus();
 
   return {
     mode: 'exact_timer_plus_minute_sync',
@@ -940,6 +1045,9 @@ async function getMissingDataAlertRuntimeStatus(options = {}) {
     emailAfterMinutes: monitoringConfig.emailAfterMinutes,
     missingDataThresholdMinutes: monitoringConfig.missingDataThresholdMinutes,
     notificationCooldownMinutes: getNotificationCooldownMinutes(),
+    legacyGatewayOfflineEmailEnabled: legacyGatewayOfflineEmail.enabled,
+    legacyGatewayOfflineEmailReason: legacyGatewayOfflineEmail.reason,
+    legacyGatewayOfflineEmailFlag: LEGACY_GATEWAY_OFFLINE_EMAIL_FLAG,
     smtpConfigured: Boolean(
       mailConfig.user
       && mailConfig.pass
@@ -992,6 +1100,13 @@ async function runMissingDataAlertCheck(options = {}) {
       getMissingDataThresholdMinutes(),
       Math.floor(elapsedMs / 60000)
     );
+
+    const legacyGatewayOfflineEmail = await getLegacyGatewayOfflineEmailStatus();
+    if (!legacyGatewayOfflineEmail.enabled) {
+      runtimeState.lastAlertCheckTrigger = `${options.trigger || 'manual'}:${legacyGatewayOfflineEmail.reason}`;
+      return;
+    }
+
     const lastNotification = await getLastNotificationTimestamp(lastUpdate);
     if (lastNotification && (Date.now() - lastNotification.getTime()) < getNotificationCooldownMs()) {
       if (process.env.NODE_ENV !== 'production') {
@@ -1000,9 +1115,23 @@ async function runMissingDataAlertCheck(options = {}) {
       return;
     }
 
-    await deliverAlertEmail(lastUpdate, minutesSinceLastData, {
-      trigger: options.trigger || 'monitor'
+    const locked = await withOfflineNotificationLock(lastUpdate, async (executor) => {
+      const lockedLastNotification = await getLastNotificationTimestamp(lastUpdate, executor);
+      if (lockedLastNotification && (Date.now() - lockedLastNotification.getTime()) < getNotificationCooldownMs()) {
+        return { sent: false, reason: 'cooldown_after_lock' };
+      }
+
+      await deliverAlertEmail(lastUpdate, minutesSinceLastData, {
+        trigger: options.trigger || 'monitor',
+        executor
+      });
+
+      return { sent: true };
     });
+
+    if (!locked.acquired && process.env.NODE_ENV !== 'production') {
+      console.log('[alert-job] Alert offline saltato: lock DB gia acquisito da un altro processo.');
+    }
   } catch (error) {
     console.error('[alert-job] Errore durante il controllo dati mancanti:', error);
   } finally {
